@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hachi quiz</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
+<link href="../shared/neu.css" rel="stylesheet">
+<style>
+/* ── LAYOUT ───────────────────────────────────────────── */
+main{max-width:1020px;margin:0 auto;padding:28px 18px}
+.screen{display:none}.screen.active{display:block}
+
+/* ── HOME SCREEN ──────────────────────────────────────── */
+.home-hero{text-align:center;padding:32px 0 24px}
+.home-hero h2{font-size:1.6rem;font-weight:800;margin-bottom:8px}
+.home-hero p{color:var(--m);font-size:.9rem;max-width:500px;margin:0 auto}
+.topic-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin-top:24px}
+.topic-card{
+  background:var(--card);border:1px solid var(--brd);border-radius:14px;
+  padding:22px;cursor:pointer;transition:all .2s;box-shadow:var(--sh);position:relative
+}
+.topic-card:hover{transform:translateY(-2px);box-shadow:var(--sh-lg);border-color:var(--acc)}
+.tc-icon{font-size:2rem;margin-bottom:10px}
+.tc-title{font-size:1rem;font-weight:700;margin-bottom:4px}
+.tc-desc{font-size:.8rem;color:var(--m);margin-bottom:14px;line-height:1.5}
+.tc-meta{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.tc-badge{font-size:.7rem;padding:3px 8px;border-radius:10px;font-weight:600;
+  background:var(--bg);border:1px solid var(--brd);color:var(--m)}
+.tc-wiki{font-size:.7rem;color:var(--m2);margin-bottom:14px}
+.tc-wiki summary{cursor:pointer;user-select:none}
+.tc-wiki li{margin-left:14px;margin-top:2px;font-size:.68rem;list-style:none}
+.tc-wiki li a{color:var(--m2);text-decoration:underline;text-underline-offset:2px;
+  font-family:monospace;word-break:break-all}
+.tc-wiki li a:hover{color:var(--acc)}
+.home-toolbar{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
+.home-toolbar .spacer{flex:1}
+.home-toolbar .ht-note{font-size:.74rem;color:var(--m2)}
+.topic-card.manage{cursor:default}
+.topic-card.is-hidden{opacity:.5}
+.tc-hide{
+  position:absolute;top:10px;right:10px;z-index:2;
+  padding:4px 9px;border-radius:7px;border:1px solid var(--brd);
+  background:var(--surf);color:var(--m);cursor:pointer;font-size:.72rem;font-weight:600;
+  transition:all .15s
+}
+.tc-hide:hover{border-color:var(--acc);color:var(--acc)}
+.tc-hide.unhide{border-color:var(--grn);color:var(--grn)}
+
+/* ── BUTTONS ──────────────────────────────────────────── */
+.btn{padding:9px 18px;border-radius:12px;border:none;cursor:pointer;font-size:.86rem;
+  font-weight:600;transition:all .2s;display:inline-block;min-height:44px}
+/* neu-btn (from shared) handles pattern; these set sizing + color token */
+.btn-acc{--tc:var(--acc);width:100%;text-align:center;font-weight:800}
+.btn-sec{background:var(--surf);color:var(--m)}.btn-sec:hover{color:var(--txt)}
+.btn-grn{--tc:var(--grn);font-weight:800}
+.btn:disabled{opacity:.38;cursor:default}
+
+/* ── TOPIC SCREEN ─────────────────────────────────────── */
+.topic-topbar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.topic-topbar-title{font-weight:700;font-size:1rem;flex:1}
+.mode-tabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--div);
+  border-radius:9px;padding:3px}
+.mbttn{padding:8px 16px;border-radius:6px;border:none;background:none;
+  color:var(--m);cursor:pointer;font-size:.8rem;font-weight:500;
+  transition:all .15s;min-height:40px}
+.mbttn.active{
+  background:var(--surf);color:var(--acc);font-weight:700;
+  box-shadow:var(--sh-press);
+  border:1px solid color-mix(in srgb,var(--acc) 22%,transparent)
+}
+
+/* ── SLIDE CHROME ─────────────────────────────────────── */
+.slide-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.sdots{display:flex;flex-wrap:wrap;gap:8px}
+.sdot{
+  width:38px;height:38px;border-radius:50%;border:none;background:var(--surf);
+  color:var(--m);cursor:pointer;font-size:.85rem;font-weight:700;
+  box-shadow:var(--sh-sm);transition:box-shadow .18s cubic-bezier(.22,1,.36,1),color .15s
+}
+.sdot.active{
+  background:color-mix(in srgb,var(--acc) 12%,var(--surf));
+  color:var(--acc);font-weight:800;
+  box-shadow:var(--sh-press);
+  border:1px solid color-mix(in srgb,var(--acc) 24%,transparent)
+}
+.sdot:active{box-shadow:var(--sh-press)}
+.slbl{font-size:.78rem;color:var(--m);margin-left:4px}
+.slide{display:none}.slide.active{display:block}
+.s2{display:grid;grid-template-columns:1fr 1.05fr;gap:18px;align-items:start}
+@media(max-width:700px){.s2{grid-template-columns:1fr}}
+
+.s-num{font-size:.6rem;font-weight:800;letter-spacing:.1em;color:var(--acc);
+  text-transform:uppercase;margin-bottom:5px}
+.s-ttl{font-size:1.1rem;font-weight:700;margin-bottom:10px;line-height:1.35}
+.s-body{font-size:.84rem;color:var(--m);line-height:1.7;margin-bottom:12px}
+.fml{
+  background:var(--bg);border:1px solid var(--div);border-radius:8px;
+  padding:10px 14px;font-family:monospace;font-size:.88rem;
+  color:var(--pur);text-align:center;margin:10px 0
+}
+[data-theme="dark"] .fml{background:var(--surf)}
+.kp{
+  margin:7px 0;padding:10px 14px;border-left:3px solid var(--brd);
+  border-radius:0 6px 6px 0;font-size:.8rem;color:var(--m);
+  background:var(--bg);line-height:1.55
+}
+[data-theme="dark"] .kp{background:var(--surf)}
+.kp.blue{border-left-color:var(--acc);background:rgba(88,101,242,.06)}
+.kp.green{border-left-color:var(--grn);background:rgba(16,185,129,.06)}
+.kp.yellow{border-left-color:var(--yel);background:rgba(245,158,11,.06)}
+.kp.red{border-left-color:var(--red);background:rgba(239,68,68,.06)}
+.st{width:100%;border-collapse:collapse;font-size:.78rem;margin:10px 0}
+.st th{background:var(--bg);padding:7px 10px;text-align:left;
+  color:var(--m);font-weight:600;border-bottom:2px solid var(--div)}
+[data-theme="dark"] .st th{background:var(--surf)}
+.st td{padding:7px 10px;border-bottom:1px solid var(--div)}
+.rg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+@media(max-width:480px){.rg{grid-template-columns:1fr}}
+.rcat{background:var(--bg);border:1px solid var(--div);border-radius:9px;padding:12px}
+[data-theme="dark"] .rcat{background:var(--surf)}
+.rcat h4{font-size:.76rem;font-weight:700;margin-bottom:8px}
+.ri{display:flex;align-items:flex-start;gap:7px;padding:5px 0;font-size:.78rem;color:var(--m)}
+.ri:not(:last-child){border-bottom:1px solid var(--div)}
+.ri .ico{font-size:.9rem;margin-top:1px;flex-shrink:0}
+.s-calc{
+  background:var(--card);border:1px solid var(--brd);border-radius:12px;
+  padding:18px;box-shadow:var(--sh)
+}
+.s-calc h4{font-size:.82rem;font-weight:700;color:var(--acc);margin-bottom:12px}
+.ig{margin-bottom:9px}
+.ig label{display:block;font-size:.7rem;color:var(--m);margin-bottom:4px;font-weight:500}
+.ig input,.ig select{
+  width:100%;background:var(--bg);border:1px solid var(--div);
+  border-radius:6px;padding:6px 10px;color:var(--txt);font-size:.84rem
+}
+[data-theme="dark"] .ig input,[data-theme="dark"] .ig select{background:var(--surf)}
+.ig input[type=range]{padding:5px 0;accent-color:var(--acc)}
+.ig input:focus,.ig select:focus{outline:none;border-color:var(--acc)}
+.ig select option{background:var(--surf)}
+.ig2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rbox{
+  background:rgba(88,101,242,.07);border:1px solid rgba(88,101,242,.18);
+  border-radius:8px;padding:10px;text-align:center;margin:10px 0
+}
+.rl{font-size:.65rem;color:var(--m);text-transform:uppercase;letter-spacing:.05em}
+.rv{font-size:1.45rem;font-weight:800;color:var(--acc);margin:2px 0}
+.rs{font-size:.68rem;color:var(--m)}
+.cw{height:165px;margin-top:10px}
+.cw-note{font-size:.64rem;color:var(--m2);text-align:center;margin-top:4px}
+.wiki-src{font-size:.68rem;color:var(--m2);margin-top:14px;padding-top:10px;border-top:1px dashed var(--div)}
+.wiki-src a{color:var(--m2);text-decoration:underline;text-underline-offset:2px}
+.wiki-src a:hover{color:var(--acc)}
+.sl-foot{display:flex;align-items:center;justify-content:space-between;margin-top:18px;gap:12px}
+.sl-ctr{flex:1;font-size:.8rem;color:var(--m);text-align:center}
+.sl-foot .btn{width:auto;flex:0 0 auto;min-width:64px}
+
+/* ── QUIZ ─────────────────────────────────────────────── */
+.qhdr{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.qlb{font-size:.78rem;color:var(--m);white-space:nowrap}
+.prog{flex:1;height:4px;background:var(--div);border-radius:2px;overflow:hidden}
+.pfill{height:100%;background:var(--acc);border-radius:2px;transition:width .4s}
+.scb{font-size:.78rem;font-weight:700;color:var(--grn);white-space:nowrap}
+.qcard{
+  background:var(--card);border:1px solid var(--brd);border-radius:12px;
+  padding:24px;box-shadow:var(--sh)
+}
+.qcat{
+  display:inline-block;padding:2px 8px;border-radius:20px;font-size:.68rem;
+  font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:rgba(88,101,242,.1);color:var(--acc);margin-bottom:11px
+}
+.qtxt{font-size:1rem;font-weight:600;line-height:1.6;margin-bottom:5px}
+.qhnt{font-size:.76rem;color:var(--m);margin-bottom:18px}
+.opts{display:grid;gap:8px}
+.opt{
+  display:flex;align-items:center;gap:11px;background:var(--surf);
+  border:none;border-radius:12px;padding:13px 16px;min-height:48px;
+  color:var(--txt);text-align:left;cursor:pointer;font-size:.84rem;
+  box-shadow:var(--sh-sm);
+  transition:box-shadow .18s cubic-bezier(.22,1,.36,1),transform .12s,color .15s
+}
+.opt:hover:not(:disabled){box-shadow:var(--sh)}
+.opt:active:not(:disabled){box-shadow:var(--sh-press);transform:scale(.985)}
+.opt.correct{box-shadow:var(--sh-press);background:rgba(16,185,129,.12);color:#0f7a5a}
+[data-theme="dark"] .opt.correct{color:#6ee7b7}
+.opt.wrong{box-shadow:var(--sh-press);background:rgba(239,68,68,.12);color:#b3261e}
+[data-theme="dark"] .opt.wrong{color:#fca5a5}
+.opt:disabled:not(.correct):not(.wrong){opacity:.5;box-shadow:none}
+.opt:disabled{cursor:default}
+.olbl{
+  width:24px;height:24px;border-radius:50%;background:var(--div);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.68rem;font-weight:700;flex-shrink:0;color:var(--m)
+}
+.opt.correct .olbl{background:var(--grn);color:#fff}
+.opt.wrong .olbl{background:var(--red);color:#fff}
+.exp{
+  margin-top:14px;padding:11px 14px;border-left:3px solid var(--acc);
+  border-radius:0 7px 7px 0;font-size:.82rem;line-height:1.65;
+  color:var(--m);background:rgba(88,101,242,.05);animation:riseIn .3s ease
+}
+.exp strong{color:var(--txt)}
+.exp-src{margin-top:12px;padding-top:11px;border-top:1px solid var(--div);
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.72rem;color:var(--m);font-weight:700}
+.exp-src .esl{
+  display:inline-block;padding:4px 11px;border-radius:99px;background:var(--surf);
+  box-shadow:var(--sh-sm);color:var(--m);text-decoration:none;font-weight:600;
+  transition:box-shadow .14s,color .15s
+}
+.exp-src .esl:hover{color:var(--acc)}
+.exp-src .esl:active{box-shadow:var(--sh-press)}
+.qnav{display:flex;justify-content:flex-end;margin-top:14px}
+.results{text-align:center;padding:24px 0}
+.sring{
+  width:110px;height:110px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18px;
+  box-shadow:var(--sh)
+}
+.sinn{
+  width:86px;height:86px;border-radius:50%;background:var(--card);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  box-shadow:var(--sh-in)
+}
+.sn{font-size:1.7rem;font-weight:800;color:var(--acc)}
+.sd{font-size:.7rem;color:var(--m)}
+.smsg{font-size:1.15rem;font-weight:700;margin-bottom:6px}
+.ssub{color:var(--m);margin-bottom:20px;font-size:.84rem;max-width:360px;margin-left:auto;margin-right:auto}
+.btn-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+/* ── NEW REQUEST FORM ─────────────────────────────────── */
+.nr-form{background:var(--card);border-radius:14px;padding:18px;box-shadow:var(--sh);
+  margin-bottom:18px;animation:riseIn .3s cubic-bezier(.22,1,.36,1)}
+.nr-form label{display:block;font-size:.72rem;color:var(--m);font-weight:700;margin:10px 0 4px}
+.nr-form label:first-child{margin-top:0}
+.nr-form input,.nr-form textarea{
+  width:100%;font-family:inherit;font-size:.84rem;color:var(--txt);
+  background:var(--surf);border:1px solid var(--div);border-radius:10px;
+  padding:9px 12px;outline:none;box-sizing:border-box
+}
+.nr-form input:focus,.nr-form textarea:focus{border-color:var(--acc)}
+.nr-form textarea{resize:vertical;min-height:52px;line-height:1.5}
+.nr-srcpick{position:relative}
+.nr-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;
+  background:var(--bg);border-radius:12px;box-shadow:var(--sh-lg);
+  max-height:200px;overflow-y:auto;padding:6px;display:none}
+.nr-drop.show{display:block}
+.nr-item{padding:8px 10px;border-radius:8px;font-size:.76rem;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--m);cursor:pointer}
+.nr-item:hover{color:var(--txt);background:var(--surf)}
+.nr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.nr-chip{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;
+  color:var(--m);background:var(--surf);box-shadow:var(--sh-sm);
+  border-radius:99px;padding:5px 7px 5px 11px}
+.nr-chip button{border:none;background:none;color:var(--m2);cursor:pointer;font-size:.8rem;line-height:1;padding:0}
+.nr-chip button:hover{color:var(--red)}
+
+/* ── Fluid entrances ──────────────────────────────────── */
+.screen.active .qcard{animation:popIn .42s cubic-bezier(.22,1,.36,1)}
+.topic-card{animation:riseIn .5s cubic-bezier(.22,1,.36,1) backwards}
+.topic-card:nth-child(2){animation-delay:.05s}.topic-card:nth-child(3){animation-delay:.1s}
+.topic-card:nth-child(4){animation-delay:.15s}.topic-card:nth-child(5){animation-delay:.2s}
+.topic-card:nth-child(6){animation-delay:.25s}.topic-card:nth-child(n+7){animation-delay:.3s}
+.slide.active{animation:riseIn .4s cubic-bezier(.22,1,.36,1)}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="../" class="logo" style="text-decoration:none"><span class="logo-gem">🧠</span> Gem<span class="logo-dash">Brain</span></a>
+  <a class="ni ni-sources" href="../vocab/" title="Vocabulary dictionary" aria-label="Vocabulary dictionary" style="text-decoration:none"></a>
+  <a class="ni ni-inbox" href="requests.html" title="Learning requests" aria-label="Learning requests" style="text-decoration:none"></a>
+  <button class="hbtn pill" id="quiz-user-btn" title="GitHub account" style="font-size:11px;font-weight:700;gap:4px"></button>
+  <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark" aria-label="Toggle light/dark">🌙</button>
+</header>
+
+<main>
+
+<!-- ══ HOME ══════════════════════════════════════════════ -->
+<div id="screen-home" class="screen active">
+  <div class="home-hero">
+    <h2>Learn from the Wiki</h2>
+    <p>Slides with interactive calculators, then quiz yourself. Topics are driven by the <code>/wiki/</code> knowledge base.</p>
+  </div>
+  <div id="nr-wrap" hidden>
+    <div class="nr-form">
+      <label for="nr-topic">Topic *</label>
+      <input id="nr-topic" type="text" placeholder="e.g. Algorithmic Trading" autocomplete="off">
+      <label>Wiki source files</label>
+      <div class="nr-srcpick">
+        <input id="nr-src" type="text" placeholder="🔍 search obsidian wiki pages…" autocomplete="off">
+        <div class="nr-drop" id="nr-drop"></div>
+      </div>
+      <div class="nr-chips" id="nr-chips"></div>
+      <label for="nr-note">Notes (optional)</label>
+      <textarea id="nr-note" placeholder="e.g. focus on VWAP/TWAP, ~10 questions"></textarea>
+      <button class="btn btn-acc neu-btn" style="width:100%;margin-top:12px" onclick="nrSave()">+ Save quiz request</button>
+    </div>
+  </div>
+  <div class="topic-grid" id="topic-grid"></div>
+</div>
+
+<!-- ══ TOPIC (slides + quiz) ════════════════════════════ -->
+<div id="screen-topic" class="screen">
+  <div class="topic-topbar">
+    <button class="hbtn" onclick="goHome()" title="All topics" aria-label="All topics">←</button>
+    <div class="topic-topbar-title" id="topic-title"></div>
+    <div class="mode-tabs">
+      <button class="mbttn active" id="btn-slides" onclick="setMode('slides')">📖 Slides</button>
+      <button class="mbttn" id="btn-quiz" onclick="setMode('quiz')">📝 Quiz</button>
+    </div>
+  </div>
+
+  <!-- Slides view -->
+  <div id="view-slides">
+    <div class="slide-bar">
+      <div class="sdots" id="sdots"></div>
+      <div class="slbl" id="slbl"></div>
+    </div>
+    <div id="slides-container"></div>
+    <div class="sl-foot">
+      <button class="btn btn-sec" id="pb" onclick="prevS()" title="Previous slide" aria-label="Previous slide">←</button>
+      <div class="sl-ctr"><div id="sctr"></div></div>
+      <button class="btn btn-acc neu-btn" id="nb" onclick="nextS()">Next →</button>
+    </div>
+  </div>
+
+  <!-- Quiz view -->
+  <div id="view-quiz" style="display:none">
+    <div class="qhdr">
+      <span class="qlb" id="qctr">Q 1 / ?</span>
+      <div class="prog"><div class="pfill" id="pf" style="width:0%"></div></div>
+      <span class="scb" id="qsc">✓ 0</span>
+    </div>
+    <div class="qcard" id="qcard"></div>
+    <div class="qnav" id="qnav" style="display:none">
+      <button class="btn btn-acc neu-btn" id="nxt" onclick="nextQ()">Next →</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  Based on the <a href="https://github.com/hachi-admin/hachi-wiki" target="_blank">knowledge wiki</a> ·
+  Add topics via <a href="topics.js" target="_blank">topics.js</a> ·
+  See <a href="https://github.com/hachi-admin/hachi-public/blob/main/quiz/CLAUDE.md" target="_blank">CLAUDE.md</a> for instructions
+</footer>
+
+<script src="topics.js"></script>
+<script src="../shared/wiki-tree.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

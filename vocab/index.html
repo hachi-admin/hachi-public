@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hachi vocab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="../shared/neu.css" rel="stylesheet">
+<style>
+em{color:var(--pur);font-style:normal;font-family:monospace;font-size:.95em}
+
+/* ── LAYOUT ───────────────────────────────────────────── */
+main{max-width:1020px;margin:0 auto;padding:28px 18px 100px}
+.hero{text-align:center;padding:24px 0 16px}
+.hero h2{font-size:1.6rem;font-weight:800;margin-bottom:8px}
+.hero p{color:var(--m);font-size:.9rem;max-width:560px;margin:0 auto}
+
+/* ── CONTROLS ─────────────────────────────────────────── */
+.controls{position:sticky;top:70px;background:var(--bg);padding:14px 0 10px;z-index:50}
+.searchbox{
+  width:100%;background:var(--card);border:1px solid var(--div);border-radius:10px;
+  padding:11px 14px;color:var(--txt);font-size:.92rem
+}
+.searchbox:focus{outline:none;border-color:var(--acc)}
+.ndrop{margin-top:11px}
+.count{font-size:.74rem;color:var(--m2);margin-top:9px}
+
+/* ── VOCAB ENTRIES ────────────────────────────────────── */
+.group{margin-top:26px}
+.group-h{font-size:.82rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--acc);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--div)}
+.vlist{display:grid;gap:18px}
+.vcard{background:var(--card);border:none;border-radius:16px;padding:16px 18px;box-shadow:var(--sh)}
+.vtop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+.vterm{font-size:1rem;font-weight:700}
+.vfull{font-size:.78rem;color:var(--m2)}
+.vbadge{margin-left:auto;font-size:.64rem;padding:2px 8px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--brd);color:var(--m);font-weight:600;
+  white-space:nowrap;box-shadow:var(--sh-sm)}
+[data-theme="dark"] .vbadge{background:var(--surf)}
+.vdef{font-size:.84rem;color:var(--m);line-height:1.6}
+.vwiki{display:inline-block;margin-top:8px;font-size:.7rem;color:var(--m2);
+  text-decoration:underline;text-underline-offset:2px}
+.vwiki:hover{color:var(--acc)}
+.empty{text-align:center;color:var(--m2);font-size:.9rem;padding:40px 0}
+mark{background:rgba(245,158,11,.35);color:inherit;border-radius:3px;padding:0 1px}
+
+/* ── QUIZ FAB ─────────────────────────────────────────── */
+.quiz-fab{
+  position:fixed;bottom:24px;right:20px;z-index:100;
+  --tc:var(--acc);
+  display:flex;align-items:center;gap:8px;
+  padding:0 22px;height:52px;border-radius:99px;
+  font-size:.88rem;font-weight:800;font-family:inherit;
+  white-space:nowrap;
+  transition:box-shadow .18s cubic-bezier(.22,1,.36,1),transform .12s
+}
+.quiz-fab:disabled{opacity:.45;cursor:default;transform:none !important}
+@media(max-width:480px){.quiz-fab{bottom:16px;right:14px;padding:0 18px;height:48px;font-size:.82rem}}
+
+/* ── VOCAB QUIZ MODE ──────────────────────────────────── */
+.vq-hint{font-size:.72rem;color:var(--m2)}
+.vq-card{background:var(--card);border:1px solid var(--brd);border-radius:14px;
+  padding:24px;box-shadow:var(--sh-lg);margin-top:8px;animation:popIn .4s cubic-bezier(.22,1,.36,1)}
+.vq-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:.78rem;color:var(--m)}
+.vq-prog{flex:1;height:4px;background:var(--div);border-radius:2px;overflow:hidden}
+.vq-pf{height:100%;background:var(--acc);border-radius:2px;transition:width .4s}
+.vq-term{font-size:1.45rem;font-weight:800;margin-bottom:3px}
+.vq-full{font-size:.8rem;color:var(--m2);margin-bottom:16px;font-family:monospace}
+.vq-q{font-size:.8rem;color:var(--m);margin-bottom:14px}
+.vq-opts{display:grid;gap:8px}
+.vq-opt{
+  text-align:left;background:var(--bg);border:1px solid var(--div);border-radius:9px;
+  padding:11px 14px;color:var(--txt);cursor:pointer;font-size:.82rem;line-height:1.55;
+  min-height:48px;box-shadow:var(--sh-sm);
+  transition:box-shadow .18s cubic-bezier(.22,1,.36,1),transform .12s,color .15s
+}
+[data-theme="dark"] .vq-opt{background:var(--surf)}
+.vq-opt:hover:not(:disabled){box-shadow:var(--sh);border-color:var(--acc)}
+.vq-opt:active:not(:disabled){box-shadow:var(--sh-press);transform:scale(.985)}
+.vq-opt.correct{box-shadow:var(--sh-press);background:rgba(16,185,129,.12);color:#0f7a5a;border-color:transparent}
+.vq-opt.wrong{box-shadow:var(--sh-press);background:rgba(239,68,68,.12);color:#b3261e;border-color:transparent}
+[data-theme="dark"] .vq-opt.correct{color:#6ee7b7}
+[data-theme="dark"] .vq-opt.wrong{color:#fca5a5}
+.vq-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:10px}
+/* neu-btn handles pattern; these set sizing */
+.vq-btn{--tc:var(--acc);padding:9px 18px;border-radius:12px;font-size:.84rem;
+  min-height:44px;font-family:inherit}
+.vq-btn.sec{--tc:transparent;border-color:var(--div) !important;color:var(--m)}
+.vq-btn.sec::after{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">hachi <span>Vocabulary</span></div>
+  <a class="hbtn" href="../quiz/" title="Back to quiz" aria-label="Back to quiz">←</a>
+  <a class="hbtn" href="flashcards.html" title="Flashcards (spaced repetition)" aria-label="Flashcards">🃏</a>
+  <a class="hbtn" href="../quiz/requests.html" title="Learning requests" aria-label="Learning requests">📥</a>
+  <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark" aria-label="Toggle light/dark">🌙</button>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>📚 Vocabulary Dictionary</h2>
+    <p>Key terms from the <a href="https://github.com/hachi-admin/hachi-wiki" target="_blank">knowledge wiki</a> — finance, market infrastructure, and AI/LLM. Search or filter, and follow any term back to its source page.</p>
+  </div>
+
+  <div class="controls">
+    <input class="searchbox" id="search" type="search" placeholder="🔍 Search terms and definitions…" oninput="render()" autocomplete="off">
+    <div class="ndrop" id="catDrop">
+      <button class="ndrop-btn" type="button" onclick="toggleDrop(event)" aria-haspopup="listbox">
+        <span class="ndrop-label" id="catLabel">All</span><span class="ndrop-chev">▼</span>
+      </button>
+      <div class="ndrop-panel" id="catPanel" role="listbox"></div>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <button class="quiz-fab neu-btn" id="quizBtn" onclick="startQuiz()">🎯 Quiz me (<span id="quizN">0</span>)</button>
+
+  <div id="quiz" style="display:none"></div>
+  <div id="results"></div>
+</main>
+
+<footer>
+  Pulled from the <a href="https://github.com/hachi-admin/hachi-wiki" target="_blank">knowledge wiki</a> ·
+  Add terms via <a href="vocab.js" target="_blank">vocab.js</a> ·
+  Back to the <a href="../quiz/">Quiz</a> · <a href="flashcards.html">Flashcards 🃏</a>
+</footer>
+
+<script src="vocab.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="dict.js"></script>
+</body>
+</html>

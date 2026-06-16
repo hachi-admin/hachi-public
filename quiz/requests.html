@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hachi quiz — Requests</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="../shared/neu.css" rel="stylesheet">
+<style>
+strong{font-weight:800}
+main{max-width:760px;margin:0 auto;padding:26px 18px}
+
+/* ── HERO ─────────────────────────────────────────────── */
+.hero{text-align:center;padding:18px 0 8px}
+.hero h2{font-size:1.5rem;font-weight:800;margin-bottom:8px}
+.hero p{color:var(--m);font-size:.88rem;max-width:560px;margin:0 auto;line-height:1.6}
+
+/* ── GRID ─────────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:16px;padding:20px;box-shadow:var(--sh)}
+.card h3{font-size:1rem;font-weight:800;margin-bottom:4px}
+.card .sub{font-size:.76rem;color:var(--m2);margin-bottom:14px;line-height:1.5}
+label{display:block;font-size:.74rem;color:var(--m);font-weight:700;margin:10px 0 4px}
+input,textarea,select{
+  width:100%;font-family:inherit;font-size:.86rem;color:var(--txt);
+  background:var(--surf);border:1px solid var(--div);border-radius:10px;
+  padding:10px 12px;outline:none
+}
+input:focus,textarea:focus,select:focus{border-color:var(--acc)}
+textarea{resize:vertical;min-height:60px;line-height:1.5}
+
+/* ── BUTTONS ──────────────────────────────────────────── */
+/* neu-btn handles pattern; these set sizing + color token */
+.add-btn{
+  --tc:var(--acc);
+  margin-top:14px;width:100%;min-height:44px;border-radius:12px;
+  font-size:.88rem;font-family:inherit
+}
+.add-btn.slim{width:auto;min-height:40px;padding:0 16px;font-size:.82rem}
+.tool{min-height:38px;border:none;border-radius:10px;background:var(--surf);color:var(--m);
+  font-weight:700;font-size:.76rem;padding:0 14px;cursor:pointer;
+  box-shadow:var(--sh-sm);transition:box-shadow .14s,color .15s}
+.tool:hover{color:var(--acc)}.tool:active{box-shadow:var(--sh-press)}
+.tool:disabled{opacity:.45;cursor:default}
+
+/* ── SAVED REQUESTS ───────────────────────────────────── */
+.saved{margin-top:26px}
+.saved-h{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.saved-h h3{font-size:1rem;font-weight:800;flex:1}
+.req{background:var(--card);border-radius:12px;padding:12px 14px;box-shadow:var(--sh-sm);
+  margin-bottom:9px;display:flex;align-items:flex-start;gap:10px}
+.req .badge{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  padding:3px 8px;border-radius:99px;background:var(--surf);box-shadow:var(--sh-sm);
+  color:var(--acc);white-space:nowrap;flex-shrink:0}
+.req .badge.quiz{color:var(--pur)}
+.req .body{flex:1;min-width:0}
+.req .ttl{font-weight:700;font-size:.9rem}
+.req .meta{font-size:.74rem;color:var(--m);line-height:1.5;margin-top:2px;word-break:break-word}
+.req .del{border:none;background:none;color:var(--m2);cursor:pointer;font-size:1rem;
+  padding:2px 4px;border-radius:8px}
+.req .del:hover{color:var(--red)}
+.empty{text-align:center;color:var(--m2);font-size:.88rem;padding:30px 0}
+.note{margin-top:16px;font-size:.74rem;color:var(--m2);line-height:1.6;
+  background:var(--card);border:1px solid var(--div);border-radius:12px;padding:12px 14px}
+.note code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--surf);
+  padding:1px 5px;border-radius:5px}
+
+/* ── VOCAB BOX ────────────────────────────────────────── */
+.vocab-box{width:100%;min-height:190px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:.84rem;line-height:1.6;color:var(--txt);background:var(--surf);
+  border:1px solid var(--div);border-radius:12px;padding:12px 14px;resize:vertical;outline:none}
+.vocab-box:focus{border-color:var(--acc)}
+.card-actions{display:flex;align-items:center;gap:8px;margin-top:12px}
+.card-actions .hint{font-size:.72rem;color:var(--m2);margin-right:auto}
+
+/* ── SOURCE PICKER ────────────────────────────────────── */
+.srcpick{position:relative}
+.src-results{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;
+  background:var(--bg);border-radius:12px;box-shadow:var(--sh-lg);
+  max-height:230px;overflow-y:auto;padding:6px;display:none}
+.src-results.show{display:block}
+.src-res-item{padding:8px 10px;border-radius:8px;font-size:.76rem;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--m);cursor:pointer}
+.src-res-item:hover{color:var(--txt);background:var(--surf)}
+.src-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.src-chip{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;
+  color:var(--m);background:var(--surf);box-shadow:var(--sh-sm);
+  border-radius:99px;padding:5px 7px 5px 11px}
+.src-chip button{border:none;background:none;color:var(--m2);cursor:pointer;font-size:.8rem;line-height:1;padding:0}
+.src-chip button:hover{color:var(--red)}
+.qsaved{margin-top:18px}.qsaved .saved-h{margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">hachi <span>Requests</span></div>
+  <a class="hbtn" href="index.html" title="Back to quiz" aria-label="Back to quiz">←</a>
+  <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark" aria-label="Toggle light/dark">🌙</button>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>📥 Learning Requests</h2>
+    <p>Jot down vocabulary or quiz ideas here. They're saved in your browser so you can come back any time, then <strong>export</strong> them and let your local Claude Code client research &amp; build them — no cloud AI involved.</p>
+  </div>
+
+  <div class="grid">
+    <!-- Vocabulary: one free-text box -->
+    <div class="card">
+      <h3>📚 Vocabulary</h3>
+      <div class="sub">Jot terms freely — one per line. Add the intended sense after a dash, e.g. <code>Alpha — finance excess-return sense, not the letter</code>. Saved automatically as you type.</div>
+      <textarea id="vocabBox" class="vocab-box" placeholder="Alpha — finance excess-return sense&#10;RAG — retrieval-augmented generation&#10;Theta — options time decay" oninput="saveVocab()"></textarea>
+      <div class="card-actions">
+        <span class="hint" id="vocabCount">0 entries</span>
+        <button class="tool" onclick="copyVocab(event)">📋 Copy</button>
+        <button class="add-btn slim neu-btn" onclick="downloadVocab()">⬇ Download vocab</button>
+      </div>
+    </div>
+
+    <!-- Quiz: form with searchable wiki sources -->
+    <div class="card">
+      <h3>📝 Quiz</h3>
+      <div class="sub">A topic to turn into a quiz. Search the wiki for the source pages to base it on.</div>
+      <label for="q-topic">Topic *</label>
+      <input id="q-topic" type="text" placeholder="e.g. Algorithmic Trading" autocomplete="off">
+      <label>Wiki source files</label>
+      <div class="srcpick">
+        <input id="srcSearch" type="text" placeholder="🔍 search obsidian wiki pages…" autocomplete="off" oninput="onSrcSearch()" onfocus="onSrcSearch()">
+        <div class="src-results" id="srcResults"></div>
+      </div>
+      <div class="src-chips" id="srcChips"></div>
+      <label for="q-note">Notes (optional)</label>
+      <textarea id="q-note" placeholder="e.g. focus on VWAP/TWAP, ~10 questions"></textarea>
+      <button class="add-btn neu-btn" onclick="addQuiz()">+ Save quiz request</button>
+      <div class="qsaved" id="quizSaved"></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>How to process:</strong> <code>⬇ Download vocab</code> → save as <code>quiz/_vocab.txt</code>; the quiz <code>⬇ Download</code> → <code>quiz/_quiz-requests.json</code> (or use the 📋 Copy buttons). Then in local Claude Code:
+    <em>"process the terms in quiz/_vocab.txt into vocab/vocab.js, and quiz/_quiz-requests.json into quiz/topics.js, per vocab/CLAUDE.md + quiz/CLAUDE.md."</em>
+    Everything stays in your browser until you download or clear it.
+  </div>
+</main>
+
+<footer>Saved locally in your browser · Export → repo → local Claude Code · Back to the <a href="index.html">Quiz</a></footer>
+
+<script src="../shared/wiki-tree.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="requests.js"></script>
+</body>
+</html>

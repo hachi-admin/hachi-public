@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>hachi dashboard</title>
+<title>hachi dash</title>
 <link rel="stylesheet" href="shared/neu.css">
 <link rel="stylesheet" href="dashboard.css">
 </head>
@@ -27,6 +27,9 @@
     <div class="ndrop" id="more-nav-drop">
       <button class="nav-pill" onclick="toggleDrop('more-nav-drop')" title="More pages" aria-label="More">⋯</button>
       <div class="ndrop-panel" id="more-nav-panel">
+        <button class="ndrop-opt" onclick="navTo('quiz');toggleDrop('more-nav-drop')">🧠 Quiz</button>
+        <button class="ndrop-opt" onclick="navTo('vocab');toggleDrop('more-nav-drop')">📖 Vocab</button>
+        <hr class="ndrop-sep">
         <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')">💬 Channels</button>
         <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')">📦 Repos</button>
         <hr class="ndrop-sep">

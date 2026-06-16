@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hachi vocab — Flashcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="../shared/neu.css" rel="stylesheet">
+<style>
+strong{font-weight:800}
+main{max-width:680px;margin:0 auto;padding:24px 18px 60px}
+
+/* ── Deck picker ──────────────────────────────────────── */
+.ndrop{margin-bottom:14px}
+
+/* ── Stat row ─────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:14px;padding:11px 8px;box-shadow:var(--sh-sm);
+  text-align:center;min-height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.stat .v{font-size:1.25rem;font-weight:800;line-height:1.1}
+.stat .l{font-size:.66rem;color:var(--m2);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.stat.new .v{color:var(--blue)}.stat.due .v{color:var(--yel)}.stat.done .v{color:var(--grn)}
+
+/* ── Flashcard ────────────────────────────────────────── */
+.scene{perspective:1400px;margin:6px 0 18px}
+.fcard{position:relative;width:100%;min-height:300px;transform-style:preserve-3d;
+  transition:transform .55s cubic-bezier(.4,.15,.2,1);cursor:pointer}
+.fcard.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  background:var(--card);border-radius:22px;box-shadow:var(--sh-lg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:30px 26px;gap:8px}
+.back{transform:rotateY(180deg)}
+.tag{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--acc);
+  background:var(--surf);box-shadow:var(--sh-sm);padding:4px 11px;border-radius:99px;margin-bottom:6px}
+.term{font-size:1.9rem;font-weight:800;line-height:1.2}
+.full{font-size:.95rem;color:var(--m2);font-family:ui-monospace,Menlo,Consolas,monospace}
+.def{font-size:1rem;color:var(--txt);line-height:1.65;max-width:520px}
+.def em{color:var(--pur);font-style:normal;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.95em}
+.flip-hint{position:absolute;bottom:14px;left:0;right:0;font-size:.7rem;color:var(--m2)}
+.wlink{display:inline-block;margin-top:10px;font-size:.72rem;color:var(--m);text-decoration:none;
+  padding:4px 11px;border-radius:99px;background:var(--surf);box-shadow:var(--sh-sm);font-weight:600}
+.wlink:hover{color:var(--acc)}
+
+/* ── Controls ─────────────────────────────────────────── */
+.reveal-row{display:flex;justify-content:center}
+/* neu-btn handles pattern; sizing here */
+.reveal{--tc:var(--acc);border-radius:14px;padding:0 30px;min-height:52px;font-size:.95rem;
+  font-family:inherit}
+.grades{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.grade{border:none;background:var(--surf);cursor:pointer;border-radius:14px;padding:11px 6px;
+  min-height:62px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:box-shadow .14s,transform .12s;font-family:inherit}
+.grade:active{box-shadow:var(--sh-press);transform:scale(.97)}
+.grade .g{font-weight:800;font-size:.86rem}
+.grade .iv{font-size:.66rem;color:var(--m2);font-weight:600}
+.grade.again .g{color:var(--red)}.grade.hard .g{color:var(--yel)}
+.grade.good .g{color:var(--grn)}.grade.easy .g{color:var(--blue)}
+.kbd{font-size:.6rem;color:var(--m2);margin-top:1px}
+
+/* ── Done / empty ─────────────────────────────────────── */
+.done{text-align:center;background:var(--card);border-radius:22px;box-shadow:var(--sh-lg);padding:40px 26px}
+.done .em{font-size:2.6rem;margin-bottom:8px}
+.done h3{font-size:1.3rem;font-weight:800;margin-bottom:6px}
+.done p{color:var(--m);font-size:.88rem;margin-bottom:20px;line-height:1.6}
+.done .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.tool{border:none;background:var(--surf);color:var(--m);font-weight:700;font-size:.82rem;
+  padding:0 18px;min-height:44px;border-radius:12px;cursor:pointer;
+  box-shadow:var(--sh-sm);transition:box-shadow .14s,color .15s}
+.tool:hover{color:var(--acc)}.tool:active{box-shadow:var(--sh-press)}
+/* neu-btn handles pattern for accent variant */
+.tool.accent{--tc:var(--acc);font-family:inherit}
+.dir-row{display:flex;justify-content:flex-end;margin-bottom:8px}
+.dir-btn{min-height:34px;font-size:.72rem;padding:0 12px}
+
+@media (prefers-reduced-motion:reduce){.fcard{transition:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">hachi <span>Flashcards</span></div>
+  <a class="hbtn" href="index.html" title="Vocabulary dictionary" aria-label="Vocabulary dictionary">📚</a>
+  <a class="hbtn" href="../quiz/" title="Quiz" aria-label="Quiz">📝</a>
+  <button class="hbtn pill" id="vocab-user-btn" style="font-size:11px;font-weight:700;gap:4px;min-width:54px">↑ Sync</button>
+  <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark" aria-label="Toggle light/dark">🌙</button>
+</header>
+
+<main>
+  <div class="ndrop" id="deckDrop">
+    <button class="ndrop-btn" type="button" onclick="toggleDrop(event)" aria-haspopup="listbox">
+      <span class="ndrop-label" id="deckLabel">All</span><span class="ndrop-chev">▼</span>
+    </button>
+    <div class="ndrop-panel" id="deckPanel" role="listbox"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div id="stage"></div>
+  <div class="dir-row">
+    <button class="tool dir-btn" id="dirBtn" onclick="toggleDir()">🔁 Term → Definition</button>
+  </div>
+</main>
+
+<footer>
+  Spaced-repetition (SM-2) · progress saved in your browser ·
+  <a href="index.html">Dictionary</a> · <a href="../quiz/">Quiz</a>
+</footer>
+
+<script src="vocab.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="flashcards.js"></script>
+</body>
+</html>
