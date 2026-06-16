@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   app.js — no-gem Dashboard (static GitHub Pages edition)
+   app.js — hachi Dashboard (static GitHub Pages edition)
    Auth: GitHub OAuth → JWT stored in localStorage.
    API_BASE read from ?api=... URL param; no key in URLs.
    Local dev (no ?api=): direct /api/... calls, no auth guard.
@@ -25,12 +25,22 @@ function apiUrl(path)   { return `${API_BASE}${path}`; }
 function _jwtPayload()  { try { const p = _jwt().split('.')[1]; return p ? JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))) : null; } catch { return null; } }
 let _currentUser = _jwtPayload();
 
-// Redirect to GitHub OAuth if no JWT (only when API_BASE points to a remote backend).
+// Verify JWT with backend on load; redirect to OAuth if missing or invalid.
 async function _ensureAuth() {
   if (!API_BASE) return true; // local dev — no auth required
-  if (_jwt()) return true;
-  window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
-  return false;
+  if (!_jwt()) {
+    window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
+    return false;
+  }
+  try {
+    const res = await fetch(apiUrl('/auth/verify'), { headers: _authHeaders() });
+    if (!res.ok) { _handleUnauthorized(); return false; }
+    const { user } = await res.json();
+    _currentUser = user;
+  } catch {
+    // network error — proceed with cached JWT, API calls will 401 if truly invalid
+  }
+  return true;
 }
 
 // On 401 from any API call: clear JWT and redirect to re-auth.
