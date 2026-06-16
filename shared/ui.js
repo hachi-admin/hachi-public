@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
-   shared/ui.js — no-gem-dash shared utilities
+   shared/ui.js — hachi-public shared utilities
    Theme toggle · HTML escape · array shuffle
-   Loaded on every page before page-specific scripts.
+   Loaded on every page (quiz, vocab, dashboard) before page-specific scripts.
    ═══════════════════════════════════════════════════════════ */
 
 /* ── Theme ─────────────────────────────────────────────── */
@@ -9,9 +9,8 @@ const root = document.documentElement;
 const themeBtn = document.getElementById('theme-btn');
 
 (function initTheme() {
-  const stored = localStorage.getItem('dash-theme');
-  const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const t = stored || (systemDark ? 'dark' : 'light');
+  const stored = localStorage.getItem('nogem-theme');
+  const t = stored || 'light';
   root.setAttribute('data-theme', t);
   if (themeBtn) themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
 })();
@@ -20,7 +19,7 @@ function toggleTheme() {
   const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   root.setAttribute('data-theme', t);
   if (themeBtn) themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('dash-theme', t);
+  localStorage.setItem('nogem-theme', t);
   window.dispatchEvent(new CustomEvent('themechange', { detail: t }));
 }
 

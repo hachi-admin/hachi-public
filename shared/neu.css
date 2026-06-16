@@ -48,6 +48,8 @@ header{
 }
 .logo{font-size:1.1rem;font-weight:800;color:var(--acc);flex:1}
 .logo span{color:var(--txt);font-weight:400;font-size:.85rem;margin-left:8px}
+.logo-gem{font-style:normal}
+.logo-dash{color:var(--txt);font-family:'Righteous',sans-serif;font-weight:400;font-size:.95rem;letter-spacing:.02em}
 
 /* Circular icon-pill (default for all header nav buttons) */
 .hbtn{

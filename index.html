@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>hachi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
 <link href="shared/neu.css" rel="stylesheet">
 <style>
 body{min-height:100vh;display:flex;flex-direction:column}
@@ -22,9 +25,11 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 .lcard:active{box-shadow:var(--sh-press);transform:none}
 .lcard-icon{font-size:2.2rem}
 .lcard-title{font-size:1.05rem;font-weight:800}
+.logo-gem{font-style:normal}
 .lcard-desc{font-size:.8rem;color:var(--m);line-height:1.5}
 .lcard-badge{font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:8px;
   display:inline-block;width:fit-content}
+.badge-acc{background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
 .badge-grn{background:color-mix(in srgb,var(--grn) 15%,transparent);color:var(--grn)}
 .badge-lock{background:color-mix(in srgb,var(--m) 12%,transparent);color:var(--m)}
 </style>
@@ -51,14 +56,14 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
     </a>
 
     <a class="lcard" href="vocab/">
-      <div class="lcard-icon">📖</div>
+      <div class="lcard-icon">📚</div>
       <div class="lcard-title">hachi vocab</div>
       <div class="lcard-desc">Spaced-repetition flashcards for finance, AI, and market infrastructure terms.</div>
       <span class="lcard-badge badge-grn">Public</span>
     </a>
 
     <a class="lcard" href="dash/">
-      <div class="lcard-icon">⚙️</div>
+      <div class="lcard-icon">💎</div>
       <div class="lcard-title">hachi dash</div>
       <div class="lcard-desc">AI agent orchestration, task inbox, and system health — owner access only.</div>
       <span class="lcard-badge badge-lock">Restricted</span>

@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>hachi dash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Righteous&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/neu.css">
 <link rel="stylesheet" href="dashboard.css">
 </head>
@@ -13,7 +16,7 @@
      FLOATING HEADER
 ════════════════════════════════════════════════ -->
 <header>
-  <span class="logo">hachi</span>
+  <a href="../" class="logo" style="text-decoration:none">hachi</a>
 
   <nav class="nav-pills" role="tablist">
     <button class="nav-pill active" data-page="overview" role="tab">Overview</button>
@@ -27,40 +30,29 @@
     <div class="ndrop" id="more-nav-drop">
       <button class="nav-pill" onclick="toggleDrop('more-nav-drop')" title="More pages" aria-label="More">⋯</button>
       <div class="ndrop-panel" id="more-nav-panel">
-        <button class="ndrop-opt" onclick="navTo('quiz');toggleDrop('more-nav-drop')">🧠 Quiz</button>
-        <button class="ndrop-opt" onclick="navTo('vocab');toggleDrop('more-nav-drop')">📖 Vocab</button>
+        <button class="ndrop-opt" onclick="navTo('wiki');toggleDrop('more-nav-drop')"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
+        <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')"><i class="ni ni-channels" aria-hidden="true"></i> Channels</button>
+        <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')"><i class="ni ni-repos" aria-hidden="true"></i> Repos</button>
         <hr class="ndrop-sep">
-        <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')">💬 Channels</button>
-        <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')">📦 Repos</button>
-        <hr class="ndrop-sep">
-        <button class="ndrop-opt" onclick="navTo('analytics');toggleDrop('more-nav-drop')">📊 Analytics</button>
-        <button class="ndrop-opt" onclick="navTo('knowledge');toggleDrop('more-nav-drop')">📚 Sources</button>
-        <button class="ndrop-opt" onclick="navTo('settings');toggleDrop('more-nav-drop')">⚙️ Settings</button>
+        <button class="ndrop-opt" onclick="navTo('analytics');toggleDrop('more-nav-drop')"><i class="ni ni-analytics" aria-hidden="true"></i> Analytics</button>
+        <button class="ndrop-opt" onclick="navTo('knowledge');toggleDrop('more-nav-drop')"><i class="ni ni-sources" aria-hidden="true"></i> Sources</button>
+        <button class="ndrop-opt" onclick="navTo('settings');toggleDrop('more-nav-drop')"><i class="ni ni-settings" aria-hidden="true"></i> Settings</button>
       </div>
     </div>
   </nav>
 
   <div class="header-controls">
     <span id="cost-badge" class="cost-badge"></span>
-    <div class="ndrop" id="location-drop">
-      <button class="hbtn pill" id="location-pill" onclick="toggleDrop('location-drop')">📍 —</button>
-      <div class="ndrop-panel" id="location-panel">
-        <div style="padding:10px 12px 6px;font-size:11px;font-weight:700;color:var(--txt)">Location</div>
-        <div id="location-detail" style="padding:4px 12px 8px;font-size:11px;color:var(--m)">Loading…</div>
+    <div class="ndrop" id="user-drop">
+      <button class="hbtn pill user-pill-btn" id="user-pill" onclick="toggleDrop('user-drop')" title="Account" style="gap:5px;padding:3px">
+        <img id="user-avatar" src="" width="30" height="30" style="border-radius:50%;display:none;object-fit:cover">
+        <span id="user-name" style="font-size:11px;font-weight:700;color:var(--m);padding:0 4px">—</span>
+      </button>
+      <div class="ndrop-panel" id="user-panel" style="right:0;left:auto;min-width:170px">
+        <div style="padding:10px 12px 4px;font-size:11px;font-weight:700;color:var(--txt)" id="user-detail-name">—</div>
+        <div style="padding:0 12px 8px;font-size:10px;color:var(--m2)" id="user-detail-login"></div>
         <hr class="ndrop-sep">
-        <div style="padding:6px 8px">
-          <input class="form-input" id="loc-city-input" placeholder="City override" style="font-size:11px;margin-bottom:6px">
-          <input class="form-input" id="loc-country-input" placeholder="Country code (e.g. JP)" style="font-size:11px;margin-bottom:6px">
-          <button class="save-btn" style="width:100%" onclick="saveLocationOverride()">Save override</button>
-          <button class="refresh-btn" style="width:100%;margin-top:4px" onclick="clearLocationOverride()">Clear override</button>
-        </div>
-      </div>
-    </div>
-    <div class="ndrop" id="model-drop">
-      <button class="hbtn pill" id="model-btn" onclick="toggleDrop('model-drop')">⚡ —</button>
-      <div class="ndrop-panel" id="model-panel">
-        <div style="padding:8px 12px 4px;font-size:11px;font-weight:700;color:var(--txt)">Force Flash</div>
-        <div id="flash-list" style="padding:0 8px 8px"></div>
+        <button class="ndrop-opt" onclick="logoutUser()" style="color:var(--red)">Sign out</button>
       </div>
     </div>
     <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
@@ -106,7 +98,6 @@
         <option value="balanced" selected>Balanced</option>
         <option value="aggressive">Aggressive</option>
       </select>
-      <button class="flash-toggle inactive" id="flash-global-btn" onclick="toggleFlashGlobal()">⚡ Flash: off</button>
       <span id="day-cost-label" class="cs-note"></span>
     </div>
 
@@ -172,6 +163,35 @@
     </div>
   </section>
 
+  <!-- ── WIKI VIEWER ──────────────────────────── -->
+  <section class="page" id="page-wiki" data-mob-panel="wiki">
+    <div class="page-hd">
+      <div class="page-title">Wiki</div>
+      <input class="wiki-search-input" id="wiki-search" type="text" placeholder="Search…" oninput="_wikiSearchInput(this.value)" />
+    </div>
+    <!-- Tab bar: Wiki pages (Firestore) | Files (GitHub raw) -->
+    <div class="tab-bar" role="tablist" style="margin-bottom:10px">
+      <button class="tab-btn active" id="wiki-tab-pages" onclick="setWikiTab('pages')">Wiki pages</button>
+      <button class="tab-btn" id="wiki-tab-files" onclick="setWikiTab('files')">Raw files</button>
+    </div>
+    <div class="docs-layout">
+      <div class="docs-tree-panel" id="wiki-tree" style="position:relative">
+        <!-- Floating multi-select button -->
+        <button class="wiki-fab" id="wiki-fab" onclick="toggleWikiSelect()" title="Select multiple files for quiz/vocab prompt">＋</button>
+      </div>
+      <div class="docs-reader" id="wiki-reader">
+        <div class="docs-welcome">Select a page from the wiki</div>
+      </div>
+    </div>
+    <!-- Multi-select toolbar (hidden by default) -->
+    <div class="wiki-select-bar" id="wiki-select-bar" style="display:none">
+      <span id="wiki-select-count">0 selected</span>
+      <button class="save-btn" onclick="showWikiMultiPrompt('quiz')">✏️ Quiz prompt</button>
+      <button class="save-btn" onclick="showWikiMultiPrompt('vocab')">📖 Vocab prompt</button>
+      <button class="refresh-btn" onclick="toggleWikiSelect()">✕ Cancel</button>
+    </div>
+  </section>
+
   <!-- ── SOURCES (was Knowledge) ───────────────── -->
   <section class="page" id="page-knowledge" data-mob-panel="knowledge">
     <div class="page-hd">
@@ -230,93 +250,160 @@
   <section class="page" id="page-settings" data-mob-panel="settings">
     <div class="page-hd"><div class="page-title">Settings</div></div>
 
-    <!-- Quick settings -->
-    <div class="qs-card">
-      <div class="qs-field">
-        <label class="form-label" for="intensity-select-s">Intensity</label>
-        <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
-          <option value="conservative">Conservative</option>
-          <option value="balanced" selected>Balanced</option>
-          <option value="aggressive">Aggressive</option>
-        </select>
-      </div>
-      <div class="qs-field">
-        <label class="form-label">Model</label>
-        <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">⚡ Flash: off</button>
-      </div>
-    </div>
+    <div class="settings-layout">
+      <!-- Sidebar navigation -->
+      <nav class="settings-nav" id="settings-nav">
+        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">General</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI Providers</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'context')">Context</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'location')">Location &amp; Flash</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">Admin</button>
+      </nav>
 
-    <!-- AI Providers -->
-    <div class="section-hd" style="margin-top:24px">AI Providers</div>
-    <div class="qs-card">
-      <div class="qs-field">
-        <label class="form-label">Active provider</label>
-        <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)">
-          <option value="gemini">Google Gemini</option>
-          <option value="claude">Anthropic Claude</option>
-        </select>
-      </div>
-      <div class="qs-field" style="margin-top:10px">
-        <label class="form-label">Update API key</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="form-input" id="provider-key-input" type="password" placeholder="Paste key to update…" autocomplete="new-password" style="flex:1;font-size:11px">
-          <button class="save-btn" onclick="saveProviderKey()">Save</button>
+      <!-- Content panel -->
+      <div class="settings-panel">
+
+        <!-- GENERAL -->
+        <div class="settings-section active" id="ss-general">
+          <div class="section-hd" style="margin-top:0">General</div>
+          <div class="qs-card">
+            <div class="qs-field">
+              <label class="form-label" for="intensity-select-s">Intensity</label>
+              <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
+                <option value="conservative">Conservative</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="aggressive">Aggressive</option>
+              </select>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">Controls agent review thresholds and task approval flow.</div>
+            </div>
+            <div class="qs-field" style="margin-top:14px">
+              <label class="form-label">Global Flash override</label>
+              <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">Forces all agents to use Flash model regardless of per-agent setting.</div>
+            </div>
+          </div>
         </div>
-        <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
-      </div>
-      <div id="provider-key-hint" style="font-size:10px;color:var(--m);margin-top:6px;padding-top:6px;border-top:1px solid var(--div)">
-        Key saved here is stored in Firestore (auth-gated). For production, rotate in GCP Secret Manager instead.
-      </div>
-    </div>
 
-    <!-- Context Window -->
-    <div class="section-hd" style="margin-top:24px">Context Window</div>
-    <div class="qs-card" id="context-settings-card">
-      <div class="qs-field">
-        <label class="form-label">Max messages retained</label>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input type="range" id="ctx-max-messages" min="5" max="100" step="5" value="20"
-            style="flex:1" oninput="document.getElementById('ctx-max-label').textContent=this.value">
-          <span id="ctx-max-label" style="font-size:12px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">20</span>
+        <!-- AI PROVIDERS -->
+        <div class="settings-section" id="ss-providers">
+          <div class="section-hd" style="margin-top:0">Active provider</div>
+          <div class="qs-card">
+            <div class="qs-field">
+              <label class="form-label">Provider</label>
+              <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)">
+                <option value="gemini">Google Gemini</option>
+                <option value="claude">Anthropic Claude</option>
+              </select>
+            </div>
+            <div class="qs-field" style="margin-top:10px">
+              <label class="form-label">API key override (Firestore, for testing)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-input" id="provider-key-input" type="password" placeholder="Paste key to override…" autocomplete="new-password" style="flex:1;font-size:11px">
+                <button class="save-btn" onclick="saveProviderKey()">Save</button>
+              </div>
+              <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+            </div>
+            <div id="provider-key-hint" style="font-size:10px;color:var(--m);margin-top:6px;padding-top:6px;border-top:1px solid var(--div)">
+              Key saved here overrides GCP Secret Manager (stored in Firestore, auth-gated). For production keys, rotate in Secret Manager below.
+            </div>
+          </div>
+
+          <div class="section-hd" style="margin-top:20px">GCP Secret Manager</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:10px;line-height:1.6">
+            Production keys live in GCP Secret Manager. Changes there take effect on next Cloud Run revision.
+            <a href="https://console.cloud.google.com/security/secret-manager" target="_blank" rel="noopener" style="color:var(--acc);display:inline-block;margin-top:4px">&#8594; Open GCP Secret Manager</a>
+          </div>
+          <div class="qs-card" style="display:flex;flex-direction:column;gap:0">
+            <div style="padding-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">GEMINI_API_KEY</div>
+              <div style="font-size:11px;color:var(--m)">All Gemini agents (Pro &amp; Flash). Rotate at Google AI Studio.</div>
+            </div>
+            <div style="border-top:1px solid var(--div);padding-top:12px;padding-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">ANTHROPIC_API_KEY</div>
+              <div style="font-size:11px;color:var(--m)">Active when Claude is the selected provider. Rotate at Anthropic Console.</div>
+            </div>
+            <div style="border-top:1px solid var(--div);padding-top:12px" id="provider-agents-list">
+              <div style="font-size:11px;color:var(--m)">Per-agent model assignments shown in Overview cards.</div>
+            </div>
+          </div>
         </div>
-        <div style="font-size:10px;color:var(--m);margin-top:3px">Messages loaded per chat context window. Lower = cheaper, higher = more memory.</div>
-      </div>
-      <div class="qs-field" style="margin-top:12px">
-        <label class="form-label">Context compression</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="flash-toggle inactive" id="ctx-compress-btn" onclick="toggleContextCompression()">Off</button>
-          <select class="form-select" id="ctx-compress-model" style="width:auto;font-size:11px" onchange="saveContextSettings()">
-            <option value="flash">Flash (fast + cheap)</option>
-            <option value="pro">Pro (richer summary)</option>
-          </select>
+
+        <!-- CONTEXT WINDOW -->
+        <div class="settings-section" id="ss-context">
+          <div class="section-hd" style="margin-top:0">Context Window</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:12px">Global defaults. Per-channel context can be adjusted in the Channels page.</div>
+          <div class="qs-card" id="context-settings-card">
+            <div class="qs-field">
+              <label class="form-label">Max messages retained</label>
+              <div style="display:flex;gap:10px;align-items:center">
+                <input type="range" id="ctx-max-messages" min="5" max="100" step="5" value="20"
+                  style="flex:1" oninput="document.getElementById('ctx-max-label').textContent=this.value">
+                <span id="ctx-max-label" style="font-size:12px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">20</span>
+              </div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">Messages loaded per chat context window. Lower = cheaper, higher = more memory.</div>
+            </div>
+            <div class="qs-field" style="margin-top:12px">
+              <label class="form-label">Context compression</label>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="flash-toggle inactive" id="ctx-compress-btn" onclick="toggleContextCompression()">Off</button>
+                <select class="form-select" id="ctx-compress-model" style="width:auto;font-size:11px" onchange="saveContextSettings()">
+                  <option value="flash">Flash (fast + cheap)</option>
+                  <option value="pro">Pro (richer summary)</option>
+                </select>
+              </div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">Summarizes older messages with AI before injecting into context. Reduces token cost on long conversations.</div>
+            </div>
+            <button class="save-btn" style="margin-top:12px" onclick="saveContextSettings()">Save</button>
+            <div id="ctx-save-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+          </div>
         </div>
-        <div style="font-size:10px;color:var(--m);margin-top:3px">Summarizes older messages with AI before injecting into context. Reduces token cost on long conversations.</div>
-      </div>
-      <button class="save-btn" style="margin-top:12px" onclick="saveContextSettings()">Save context settings</button>
-      <div id="ctx-save-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
-    </div>
 
-    <!-- Agent → channel assignments -->
-    <div class="section-hd" style="margin-top:24px">Agent → channel assignments</div>
-    <div id="agent-ch-list"></div>
+        <!-- LOCATION & FLASH -->
+        <div class="settings-section" id="ss-location">
+          <div class="section-hd" style="margin-top:0">Location</div>
+          <div class="qs-card">
+            <div id="settings-loc-detail" style="font-size:12px;color:var(--m);margin-bottom:12px;line-height:1.5">Loading…</div>
+            <div class="form-grid" style="margin-bottom:0">
+              <div class="qs-field">
+                <label class="form-label">City override</label>
+                <input class="form-input" id="settings-loc-city" placeholder="e.g. Tokyo" style="font-size:11px">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">Country code</label>
+                <input class="form-input" id="settings-loc-country" placeholder="e.g. JP" style="font-size:11px">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="save-btn" onclick="saveLocationOverrideSettings()">Save override</button>
+              <button class="refresh-btn" onclick="clearLocationOverride()">Clear override</button>
+            </div>
+          </div>
 
-    <!-- Dashboard Access -->
-    <div class="section-hd" style="margin-top:24px">Dashboard Access</div>
-    <div class="qs-card" id="access-card">
-      <div style="font-size:11px;color:var(--m);margin-bottom:10px">GitHub accounts that can log into this dashboard. You cannot remove yourself.</div>
-      <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="form-input" id="access-add-input" type="text" placeholder="github-username" autocomplete="off" style="flex:1;font-size:12px"
-          onkeydown="if(event.key==='Enter')addDashboardUser()">
-        <button class="save-btn" onclick="addDashboardUser()">Add</button>
-      </div>
-      <div id="access-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
-    </div>
+          <div class="section-hd" style="margin-top:20px">Per-agent Flash override</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:10px">Force individual agents to use Flash model regardless of global setting.</div>
+          <div class="qs-card" id="settings-flash-list" style="padding:8px"></div>
+        </div>
 
-    <!-- Admin -->
-    <div class="section-hd" style="margin-top:24px">Admin</div>
-    <p class="admin-hint">All changes go through the API at the URL configured on page load.</p>
-    <button class="save-btn" onclick="resetDashLayout()">↺ Reset dashboard layout</button>
+        <!-- ADMIN -->
+        <div class="settings-section" id="ss-admin">
+          <div class="section-hd" style="margin-top:0">Dashboard Access</div>
+          <div class="qs-card" id="access-card">
+            <div style="font-size:11px;color:var(--m);margin-bottom:10px">GitHub accounts that can log into this dashboard. You cannot remove yourself.</div>
+            <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="form-input" id="access-add-input" type="text" placeholder="github-username" autocomplete="off" style="flex:1;font-size:12px"
+                onkeydown="if(event.key==='Enter')addDashboardUser()">
+              <button class="save-btn" onclick="addDashboardUser()">Add</button>
+            </div>
+            <div id="access-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+          </div>
+          <div class="section-hd" style="margin-top:24px">Admin</div>
+          <p class="admin-hint">All changes go through the API at the URL configured on page load.</p>
+          <button class="save-btn" onclick="resetDashLayout()">&#8635; Reset dashboard layout</button>
+        </div>
+
+      </div><!-- end settings-panel -->
+    </div><!-- end settings-layout -->
   </section>
 
   <!-- ── CHANNELS ───────────────────────────────── -->
@@ -326,8 +413,39 @@
         <div class="page-title">Discord Channels</div>
         <div class="page-sub">Manage bot channel registry + agent routing</div>
       </div>
-      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">↻ Fetch from Discord</button>
+      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Fetch from Discord</button>
     </div>
+
+    <!-- Bot permissions info -->
+    <details style="background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;padding:12px 14px;margin-bottom:16px">
+      <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--txt);cursor:pointer">
+        Bot visibility — required Discord permissions
+        <span style="color:var(--m);font-size:10px;font-weight:400">&#9660;</span>
+      </summary>
+      <div style="margin-top:10px;font-size:11px;color:var(--m);line-height:1.7">
+        <strong style="color:var(--txt)">Problem:</strong> the bot only sees channels its role can access.<br>
+        <strong style="color:var(--txt)">Fix:</strong>
+        <ol style="margin:4px 0 8px 16px">
+          <li>Server Settings &#8594; Roles &#8594; create role "Bot"</li>
+          <li>Enable: View Channels, Read Message History, Send Messages, Send in Threads, Embed Links, Manage Channels, Manage Messages</li>
+          <li>Assign this role to your bot in Server Members</li>
+          <li>For private channels: add the Bot role in that channel's Permission Overrides</li>
+        </ol>
+        <strong style="color:var(--txt)">Required permissions (integer: 3271745):</strong>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">View Channels</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Read Message History</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Send Messages</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Send in Threads</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Create Threads</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Embed Links</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Attach Files</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Add Reactions</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Manage Channels</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Manage Messages</span>
+        </div>
+      </div>
+    </details>
 
     <!-- Guild picker (populated after fetch) -->
     <div id="guild-picker" style="display:none;margin-bottom:12px">
@@ -339,15 +457,15 @@
     <div id="discord-live-channels" style="display:none;margin-bottom:16px">
       <div class="section-hd" style="display:flex;align-items:center;gap:8px">
         Server channels
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()">＋ New folder</button>
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()">＋ New channel</button>
+        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()">&#65291; New folder</button>
+        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()">&#65291; New channel</button>
       </div>
-      <div style="font-size:10px;color:var(--m);margin-bottom:8px">Click any text channel to pre-fill the register form. Green = already registered.</div>
+      <div style="font-size:10px;color:var(--m);margin-bottom:8px">Click any text channel to pre-fill the register form below. Green = already registered.</div>
       <div id="live-channel-tree" class="ch-tree"></div>
 
       <!-- New category (folder) form -->
       <div id="create-cat-form" style="display:none;margin-top:10px;padding:12px;background:var(--bg);box-shadow:var(--sh-press);border-radius:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px">📁 New category</div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px">New category</div>
         <input class="form-input" id="new-cat-name" placeholder="Category name (e.g. BOT CHANNELS)" style="margin-bottom:8px;font-size:11px">
         <div style="display:flex;gap:6px">
           <button class="save-btn" onclick="createDiscordCategory()" id="create-cat-btn">Create folder</button>
@@ -358,16 +476,17 @@
 
       <!-- New channel form -->
       <div id="create-ch-form" style="display:none;margin-top:10px;padding:14px;background:var(--bg);box-shadow:var(--sh-press);border-radius:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:10px">💬 New channel</div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:10px">New channel</div>
         <input class="form-input" id="new-discord-ch-name" placeholder="Channel name (letters, numbers, dashes)" style="margin-bottom:8px;font-size:11px">
         <div class="form-grid" style="margin-bottom:8px">
           <div>
             <label class="form-label">Type</label>
             <select class="form-select" id="new-discord-ch-type" style="font-size:11px">
-              <option value="0">💬 Text channel</option>
-              <option value="5">📢 Announcement</option>
-              <option value="11">🧵 Thread channel</option>
-              <option value="15">🗂️ Forum channel</option>
+              <option value="0">Text channel</option>
+              <option value="2">Voice channel</option>
+              <option value="5">Announcement</option>
+              <option value="11">Thread channel</option>
+              <option value="15">Forum channel</option>
             </select>
           </div>
           <div>
@@ -378,10 +497,10 @@
           </div>
         </div>
         <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:10px">
-          <input type="checkbox" id="new-discord-ch-private"> 🔒 Private channel (visible to selected roles only)
+          <input type="checkbox" id="new-discord-ch-private"> Private channel (visible to selected roles only)
         </label>
         <div style="margin-bottom:10px">
-          <label class="form-label">Map bots to this channel</label>
+          <label class="form-label">Map agents to this channel</label>
           <div id="new-ch-bot-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
@@ -392,31 +511,42 @@
       </div>
     </div>
 
-    <!-- Registered channels -->
-    <div class="section-hd">Registered channels</div>
+    <!-- Registered channels (channel-centric, rendered by JS) -->
+    <div class="section-hd" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <span>Registered channels</span>
+      <button class="save-btn" id="reg-ch-toggle-btn" onclick="toggleRegisterForm()" style="font-size:10px;padding:4px 12px;min-height:28px">+ Add</button>
+    </div>
     <div id="registered-channel-list" style="margin-bottom:12px"></div>
 
-    <!-- Register channel form -->
-    <div class="qs-card">
-      <div class="qs-field">
-        <label class="form-label">Register channel</label>
-        <input class="form-input" id="reg-ch-key" placeholder="Key (e.g. general, alerts)" style="margin-bottom:6px;font-size:11px">
-        <input class="form-input" id="reg-ch-id" placeholder="Discord channel ID (numeric)" style="margin-bottom:6px;font-size:11px">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-          <label style="font-size:11px;color:var(--m);white-space:nowrap;cursor:pointer" for="reg-ch-thread">Auto-thread</label>
-          <input type="checkbox" id="reg-ch-thread">
-          <input class="form-input" id="reg-ch-threadname" placeholder="Thread name template (optional)" style="flex:1;font-size:11px">
+    <!-- Register form (expandable) -->
+    <div id="reg-ch-form" style="display:none;margin-bottom:16px" class="qs-card">
+      <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:12px">Register channel</div>
+      <div class="form-grid" style="margin-bottom:8px">
+        <div class="qs-field">
+          <label class="form-label">Key (alias)</label>
+          <input class="form-input" id="reg-ch-key" placeholder="e.g. general, alerts" style="font-size:11px">
         </div>
+        <div class="qs-field">
+          <label class="form-label">Discord Channel ID</label>
+          <input class="form-input" id="reg-ch-id" placeholder="Click channel in tree above" style="font-size:11px">
+        </div>
+      </div>
+      <div class="qs-field" style="margin-bottom:8px">
+        <label class="form-label">Tags (optional, comma-separated)</label>
+        <input class="form-input" id="reg-ch-tags" placeholder="news, alerts, daily" style="font-size:11px">
+      </div>
+      <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <input type="checkbox" id="reg-ch-thread"> Auto-thread mode
+      </label>
+      <input class="form-input" id="reg-ch-threadname" placeholder="Thread name template (optional)" style="font-size:11px;margin-bottom:12px">
+      <div style="display:flex;gap:6px">
         <button class="save-btn" onclick="registerDiscordChannel()">Register</button>
+        <button class="refresh-btn" onclick="toggleRegisterForm()">Cancel</button>
       </div>
     </div>
 
     <!-- (legacy hidden card kept for id refs) -->
     <div id="create-discord-ch-card" style="display:none"></div>
-
-    <!-- Agent→channel assignments (also in Settings for quick access) -->
-    <div class="section-hd" style="margin-top:24px">Agent → channel routing</div>
-    <div id="ch-agent-assignments"></div>
   </section>
 
   <!-- ── REPOS ─────────────────────────────────── -->
@@ -427,6 +557,27 @@
         <div class="page-sub">Search, browse, and create repositories</div>
       </div>
     </div>
+
+    <!-- Create repo form (collapsed by default) -->
+    <details class="wiki-cat-group" id="new-repo-details" style="margin-bottom:16px">
+      <summary style="font-size:12px;font-weight:700;color:var(--acc)">➕ New repository</summary>
+      <div class="qs-card" style="margin-top:8px">
+        <div class="qs-field">
+          <input class="form-input" id="new-repo-name" placeholder="Repository name" style="margin-bottom:6px;font-size:11px">
+          <input class="form-input" id="new-repo-desc" placeholder="Description (optional)" style="margin-bottom:6px;font-size:11px">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+            <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
+              <input type="checkbox" id="new-repo-private" checked> Private
+            </label>
+            <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
+              <input type="checkbox" id="new-repo-init" checked> Initialize with README
+            </label>
+          </div>
+          <button class="save-btn" onclick="createRepo()" id="create-repo-btn">Create repository</button>
+          <div id="create-repo-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+        </div>
+      </div>
+    </details>
 
     <!-- Pinned repos -->
     <div class="section-hd">Your repos</div>
@@ -441,25 +592,6 @@
 
     <!-- Repo list -->
     <div id="repo-list" class="feed-box" style="margin-bottom:16px"></div>
-
-    <!-- Create repo form -->
-    <div class="section-hd">Create new repository</div>
-    <div class="qs-card">
-      <div class="qs-field">
-        <input class="form-input" id="new-repo-name" placeholder="Repository name" style="margin-bottom:6px;font-size:11px">
-        <input class="form-input" id="new-repo-desc" placeholder="Description (optional)" style="margin-bottom:6px;font-size:11px">
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-          <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
-            <input type="checkbox" id="new-repo-private" checked> Private
-          </label>
-          <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
-            <input type="checkbox" id="new-repo-init" checked> Initialize with README
-          </label>
-        </div>
-        <button class="save-btn" onclick="createRepo()" id="create-repo-btn">Create repository</button>
-        <div id="create-repo-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
-      </div>
-    </div>
   </section>
 
 </main>
@@ -469,25 +601,25 @@
 ════════════════════════════════════════════════ -->
 <nav class="mob-tab-bar" role="tablist">
   <button class="mob-tab active" data-page="overview" onclick="navTo('overview')">
-    <span class="mob-tab-icon">🤖</span>
+    <i class="ni ni-agents" aria-hidden="true"></i>
     <span>Agents</span>
   </button>
   <button class="mob-tab" data-page="tasks" onclick="navTo('tasks')">
-    <span class="mob-tab-icon">📋</span>
+    <i class="ni ni-tasks" aria-hidden="true"></i>
     <span>Tasks</span>
     <span id="mob-tasks-badge" class="mob-tab-badge" style="display:none"></span>
   </button>
   <button class="mob-tab" data-page="inbox" onclick="navTo('inbox')">
-    <span class="mob-tab-icon">🚧</span>
+    <i class="ni ni-inbox" aria-hidden="true"></i>
     <span>Inbox</span>
     <span id="mob-inbox-badge" class="mob-tab-badge warn" style="display:none"></span>
   </button>
   <button class="mob-tab" data-page="docs" onclick="navTo('docs')">
-    <span class="mob-tab-icon">📄</span>
+    <i class="ni ni-docs" aria-hidden="true"></i>
     <span>Docs</span>
   </button>
   <button class="mob-tab" data-page="more" onclick="openMoreSheet()">
-    <span class="mob-tab-icon">⋯</span>
+    <i class="ni ni-more" aria-hidden="true"></i>
     <span>More</span>
   </button>
 </nav>
@@ -503,20 +635,21 @@
     </div>
 
     <!-- Primary secondary pages -->
-    <button class="mob-more-opt" onclick="navTo('channels');closeMoreSheet()">💬 Channels</button>
-    <button class="mob-more-opt" onclick="navTo('repos');closeMoreSheet()">📦 Repos</button>
+    <button class="mob-more-opt" onclick="navTo('wiki');closeMoreSheet()"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
+    <button class="mob-more-opt" onclick="navTo('channels');closeMoreSheet()"><i class="ni ni-channels" aria-hidden="true"></i> Channels</button>
+    <button class="mob-more-opt" onclick="navTo('repos');closeMoreSheet()"><i class="ni ni-repos" aria-hidden="true"></i> Repos</button>
 
     <div class="mob-more-sep"></div>
 
     <!-- Less-frequent pages -->
-    <button class="mob-more-opt" onclick="navTo('analytics');closeMoreSheet()">📊 Analytics</button>
-    <button class="mob-more-opt" onclick="navTo('knowledge');closeMoreSheet()">📚 Sources</button>
-    <button class="mob-more-opt" onclick="navTo('settings');closeMoreSheet()">⚙️ Settings</button>
+    <button class="mob-more-opt" onclick="navTo('analytics');closeMoreSheet()"><i class="ni ni-analytics" aria-hidden="true"></i> Analytics</button>
+    <button class="mob-more-opt" onclick="navTo('knowledge');closeMoreSheet()"><i class="ni ni-sources" aria-hidden="true"></i> Sources</button>
+    <button class="mob-more-opt" onclick="navTo('settings');closeMoreSheet()"><i class="ni ni-settings" aria-hidden="true"></i> Settings</button>
 
     <div class="mob-more-sep"></div>
 
     <button class="mob-more-opt" onclick="loadDashboard();closeMoreSheet()">↺ Refresh</button>
-    <button class="mob-more-opt" onclick="toggleTheme();closeMoreSheet()">🌙 Toggle theme</button>
+    <button class="mob-more-opt" onclick="toggleTheme();closeMoreSheet()"><i class="ni ni-theme" aria-hidden="true"></i> Theme</button>
   </div>
 </div>
 
@@ -546,7 +679,7 @@
 ════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
-<script src="shared/ui.js"></script>
+<script src="../shared/ui.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

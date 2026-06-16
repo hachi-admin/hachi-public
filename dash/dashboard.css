@@ -30,8 +30,42 @@ body { display:flex; flex-direction:column; height:100% }
 
 /* ── FLOATING HEADER (extends neu.css header) */
 header{margin:12px;padding:10px 16px}
-.logo{font-size:1rem;font-weight:800;color:var(--acc);white-space:nowrap}
-.logo span{color:var(--txt);font-weight:400;font-size:.8rem;margin-left:6px}
+.logo{font-size:1rem;font-weight:800;color:var(--acc);white-space:nowrap;display:flex;align-items:center;gap:4px}
+.logo-dash{color:var(--txt);font-family:'Righteous',sans-serif;font-weight:400;font-size:.95rem;letter-spacing:.02em}
+.logo-gem{font-style:normal;font-size:1rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,.12))}
+
+/* ═══════════════════════════════════════════════════════════
+   NEUMORPHIC ICON SYSTEM (.ni)
+   Embossed icon chips — replace emoji across nav + menus.
+   Active state handled by parent (.mob-tab.active .ni, .ndrop-opt:hover .ni).
+══════════════════════════════════════════════════════════════ */
+.ni{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:9px;
+  background:var(--bg);box-shadow:var(--sh-sm);
+  font-style:normal;font-weight:800;font-size:11px;
+  color:var(--m);letter-spacing:-.5px;flex-shrink:0;
+  transition:box-shadow .15s,color .15s;
+  font-family:'SF Mono','Monaco','Courier New',monospace;
+  user-select:none;
+}
+/* Pressed/active state when parent is active */
+.mob-tab.active .ni,.ndrop-opt:hover .ni,.mob-more-opt:hover .ni{
+  box-shadow:var(--sh-press);color:var(--acc);
+}
+/* Icon glyphs via pseudo-element text */
+.ni-agents::before  { content: 'AI'; font-size:9px; letter-spacing:-.3px; }
+.ni-tasks::before   { content: '✓'; font-size:14px; font-weight:900; }
+.ni-inbox::before   { content: '!'; font-size:15px; font-weight:900; }
+.ni-docs::before    { content: '≡'; font-size:16px; font-weight:400; }
+.ni-wiki::before    { content: 'W'; font-size:12px; }
+.ni-more::before    { content: '···'; font-size:10px; letter-spacing:1px; }
+.ni-channels::before{ content: '#'; font-size:14px; }
+.ni-repos::before   { content: '{}'; font-size:10px; letter-spacing:-.5px; }
+.ni-analytics::before{ content: '↗'; font-size:13px; font-weight:400; }
+.ni-sources::before { content: '⊕'; font-size:13px; font-weight:400; }
+.ni-settings::before{ content: '⚙'; font-size:13px; font-weight:400; }
+.ni-theme::before   { content: '◑'; font-size:13px; font-weight:400; }
 
 /* Main nav pills */
 .nav-pills{display:flex;gap:6px;flex:1;justify-content:center}
@@ -89,7 +123,9 @@ header{margin:12px;padding:10px 16px}
 }
 .mob-tab:active{background:var(--accent-bg)}
 .mob-tab.active{color:var(--acc)}
-.mob-tab-icon{font-size:20px;line-height:1}
+/* .mob-tab-icon retired — replaced by .ni neumorphic chip */
+.mob-tab .ni{width:32px;height:32px;border-radius:10px;font-size:12px}
+.mob-tab.active .ni{box-shadow:var(--sh-press);color:var(--acc)}
 .mob-tab-badge{
   position:absolute;top:4px;right:50%;
   transform:translateX(calc(50% + 9px));
@@ -375,17 +411,17 @@ header{margin:12px;padding:10px 16px}
 .feed-time{font-size:10px;color:var(--m2);flex-shrink:0}
 
 /* ══════════════════════════════════════════════════════════════
-   TAB CONTROL
+   TAB CONTROL — neumorphic pill style
 ══════════════════════════════════════════════════════════════ */
-.tab-bar{display:flex;gap:0;border-bottom:1px solid color-mix(in srgb,var(--m2) 25%,transparent);margin-top:14px}
+.tab-bar{display:flex;gap:6px;margin-top:12px;margin-bottom:14px;flex-wrap:wrap}
 .tab-btn{
-  background:var(--bg);border:none;border-bottom:2px solid transparent;
-  color:var(--m);font-size:12px;padding:8px 16px;cursor:pointer;
-  transition:color .15s,border-color .15s;margin-bottom:-1px;min-height:40px;font-family:inherit;
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;color:var(--m);
+  font-size:12px;padding:6px 16px;border-radius:20px;cursor:pointer;
+  transition:box-shadow .15s,color .15s;white-space:nowrap;min-height:34px;font-family:inherit;
 }
-.tab-btn.active{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
-.tab-btn:not(.active):hover{color:var(--txt)}
-.tab-content{padding-top:12px;min-height:160px}
+.tab-btn:hover{box-shadow:var(--sh);color:var(--txt)}
+.tab-btn.active{box-shadow:var(--sh-press);color:var(--acc);font-weight:600}
+.tab-content{min-height:160px}
 
 /* ══════════════════════════════════════════════════════════════
    DETAIL OVERLAY / MODAL
@@ -628,10 +664,10 @@ header{margin:12px;padding:10px 16px}
 /* ══════════════════════════════════════════════════════════════
    DOCS VIEWER
 ══════════════════════════════════════════════════════════════ */
-.docs-layout{display:grid;grid-template-columns:220px 1fr;gap:14px;min-height:60vh}
+.docs-layout{display:grid;grid-template-columns:220px 1fr;gap:14px;min-height:60vh;align-items:start}
 .docs-tree-panel{
   background:var(--bg);box-shadow:var(--sh);border-radius:14px;
-  padding:12px 8px;overflow-y:auto;max-height:80vh;position:sticky;top:80px;align-self:start;
+  padding:14px 8px;overflow-y:auto;max-height:80vh;position:sticky;top:80px;align-self:start;
 }
 .docs-section{margin-bottom:8px}
 .docs-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--m2);padding:4px 8px 6px;}
@@ -643,7 +679,7 @@ header{margin:12px;padding:10px 16px}
 }
 .docs-tree-item:hover{background:color-mix(in srgb,var(--acc) 8%,transparent);color:var(--txt)}
 .docs-tree-item.active{box-shadow:var(--sh-press);color:var(--acc);font-weight:600}
-.docs-reader{background:var(--bg);box-shadow:var(--sh);border-radius:14px;padding:20px 24px;overflow-y:auto;max-height:80vh;}
+.docs-reader{background:var(--bg);box-shadow:var(--sh);border-radius:14px;padding:14px 24px;overflow-y:auto;max-height:80vh;}
 .docs-welcome{color:var(--m2);font-size:13px;padding:40px 0;text-align:center}
 .docs-loading{color:var(--m2);font-size:12px;padding:20px 0;text-align:center}
 .docs-content{font-size:13px;line-height:1.7;color:var(--txt)}
@@ -666,6 +702,104 @@ header{margin:12px;padding:10px 16px}
 .docs-content strong{font-weight:700;color:var(--txt)}
 .docs-content .mermaid{background:color-mix(in srgb,var(--d-sh) 15%,transparent);border-radius:10px;padding:16px;margin:12px 0;overflow-x:auto;text-align:center}
 .docs-content .mermaid svg{max-width:100%;height:auto}
+
+/* ══════════════════════════════════════════════════════════════
+   WIKI VIEWER
+══════════════════════════════════════════════════════════════ */
+.wiki-search-input{
+  background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:20px;
+  padding:6px 14px;font-size:12px;color:var(--txt);font-family:inherit;
+  width:180px;transition:box-shadow .15s;outline:none;
+}
+.wiki-search-input:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 30%,transparent)}
+.wiki-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.wiki-tag{font-size:9px;padding:2px 7px;border-radius:99px;background:color-mix(in srgb,var(--acc) 14%,transparent);color:var(--acc);cursor:pointer}
+.wiki-tag:hover{background:color-mix(in srgb,var(--acc) 24%,transparent)}
+.wiki-q-btn{
+  display:inline-block;margin:3px 2px;padding:4px 10px;border-radius:20px;font-size:11px;
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;color:var(--m);cursor:pointer;
+  font-family:inherit;transition:box-shadow .15s,color .15s;
+}
+.wiki-q-btn:hover{box-shadow:var(--sh);color:var(--acc)}
+.wiki-open-btn{
+  display:inline-flex;align-items:center;gap:4px;margin-top:12px;padding:6px 14px;
+  border-radius:20px;font-size:12px;background:var(--bg);box-shadow:var(--sh-sm);
+  border:none;color:var(--m);cursor:pointer;font-family:inherit;transition:box-shadow .15s,color .15s;text-decoration:none;
+}
+.wiki-open-btn:hover{box-shadow:var(--sh);color:var(--acc)}
+/* Wiki FAB + multi-select */
+.wiki-fab{
+  position:sticky;bottom:12px;float:right;width:36px;height:36px;border-radius:50%;
+  background:var(--acc);color:#fff;font-size:20px;font-weight:700;border:none;cursor:pointer;
+  box-shadow:0 4px 14px color-mix(in srgb,var(--acc) 40%,transparent);
+  display:flex;align-items:center;justify-content:center;
+  transition:box-shadow .15s,transform .15s;z-index:10;clear:both;margin-top:8px;
+}
+.wiki-fab:hover{box-shadow:0 6px 20px color-mix(in srgb,var(--acc) 55%,transparent);transform:scale(1.08)}
+.wiki-select-bar{
+  position:sticky;bottom:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 12px;background:var(--bg);box-shadow:0 -2px 12px color-mix(in srgb,var(--m) 12%,transparent);
+  border-top:1px solid var(--div);border-radius:0 0 14px 14px;z-index:20;
+  font-size:11px;color:var(--m);
+}
+.wiki-sel-cb{width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:var(--acc)}
+.wiki-sel-active{background:color-mix(in srgb,var(--acc) 8%,var(--bg))!important;color:var(--acc)!important}
+.wiki-count{font-size:10px;color:var(--m);padding:2px 4px 8px;opacity:.7}
+.wiki-flat-item{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  width:100%;padding:7px 10px;border-radius:10px;border:none;
+  background:var(--bg);box-shadow:var(--sh-sm);cursor:pointer;
+  font-family:inherit;font-size:12px;color:var(--txt);text-align:left;
+  transition:box-shadow .15s,color .15s;margin-bottom:4px;
+}
+.wiki-flat-item:hover{box-shadow:var(--sh);color:var(--acc)}
+.wiki-flat-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wiki-cat-badge{font-size:9px;padding:2px 6px;border-radius:8px;flex-shrink:0;
+  background:color-mix(in srgb,var(--m) 12%,transparent);color:var(--m)}
+.wiki-cat-group{margin-bottom:4px}
+.wiki-cat-group>summary{
+  list-style:none;display:flex;align-items:center;justify-content:space-between;
+  padding:6px 10px;border-radius:10px;background:var(--bg);box-shadow:var(--sh-sm);
+  cursor:pointer;font-size:11px;font-weight:700;color:var(--txt);
+  margin-bottom:4px;
+}
+.wiki-cat-group>summary::-webkit-details-marker{display:none}
+.wiki-cat-group>summary::before{content:'▸';margin-right:6px;color:var(--m);font-size:9px;transition:transform .15s}
+.wiki-cat-group[open]>summary::before{transform:rotate(90deg)}
+.wiki-cat-count{font-size:9px;color:var(--m);font-weight:400}
+
+/* ══════════════════════════════════════════════════════════════
+   SETTINGS SIDEBAR LAYOUT
+══════════════════════════════════════════════════════════════ */
+.settings-layout{display:grid;grid-template-columns:168px 1fr;gap:14px;align-items:start}
+.settings-nav{
+  background:var(--bg);box-shadow:var(--sh);border-radius:14px;
+  padding:10px 8px;position:sticky;top:80px;
+}
+.settings-nav-btn{
+  display:block;width:100%;text-align:left;background:none;border:none;
+  font-family:inherit;font-size:12px;color:var(--m);padding:8px 10px;
+  border-radius:8px;cursor:pointer;transition:background .12s,color .12s;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;
+}
+.settings-nav-btn:hover{background:color-mix(in srgb,var(--acc) 8%,transparent);color:var(--txt)}
+.settings-nav-btn.active{box-shadow:var(--sh-press);color:var(--acc);font-weight:600}
+.settings-panel{background:var(--bg);box-shadow:var(--sh);border-radius:14px;padding:20px 22px}
+.settings-section{display:none}
+.settings-section.active{display:block}
+
+/* ══════════════════════════════════════════════════════════════
+   CHANNEL AGENT ASSIGN TOGGLES
+══════════════════════════════════════════════════════════════ */
+.ch-reg-card{background:var(--bg);box-shadow:var(--sh);border-radius:12px;padding:14px;margin-bottom:10px}
+.ch-agent-assign-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ch-agent-assign-btn{
+  font-size:10px;padding:4px 11px;border-radius:20px;border:none;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--m);
+  cursor:pointer;font-family:inherit;transition:box-shadow .15s,color .15s;min-height:28px;
+}
+.ch-agent-assign-btn:hover:not(:disabled){box-shadow:var(--sh);color:var(--txt)}
+.ch-agent-assign-btn.active{box-shadow:var(--sh-press);color:var(--acc);font-weight:600}
 
 /* ══════════════════════════════════════════════════════════════
    LOADING STATE
@@ -732,8 +866,22 @@ header{margin:12px;padding:10px 16px}
   .page-title{font-size:15px}
   .cost-badge{display:none}
   .docs-layout{grid-template-columns:1fr;min-height:unset}
-  .docs-tree-panel{max-height:200px;position:static}
-  .docs-reader{max-height:60vh}
+  .docs-tree-panel{max-height:160px;position:static;padding:10px 6px}
+  .docs-reader{max-height:none;min-height:50vh}
+  .wiki-search-input{width:100%;box-sizing:border-box}
+  /* Settings sidebar → horizontal scrollable pills on mobile */
+  .settings-layout{grid-template-columns:1fr}
+  .settings-nav{
+    position:static;display:flex;flex-wrap:nowrap;overflow-x:auto;
+    padding:8px;border-radius:12px;gap:6px;scrollbar-width:none;
+  }
+  .settings-nav::-webkit-scrollbar{display:none}
+  .settings-nav-btn{
+    white-space:nowrap;padding:6px 14px;border-radius:20px;
+    background:var(--bg);box-shadow:var(--sh-sm);flex-shrink:0;
+    margin-bottom:0;display:inline-block;
+  }
+  .settings-panel{padding:14px 14px}
   .agent-stats-box{gap:2px;padding:10px 12px}
   .asb-sep{display:none}
   /* Channels + Repos pages mobile */
@@ -741,6 +889,15 @@ header{margin:12px;padding:10px 16px}
   .live-ch-chip{width:100%;justify-content:flex-start}
   /* Settings/Channels forms: full-width inputs */
   .qs-card .qs-field input[type="range"]{width:100%}
+  /* Detail overlay: slide up from bottom on mobile */
+  .overlay{align-items:flex-end}
+  .overlay .panel{
+    width:100%;max-width:100%;
+    border-radius:18px 18px 0 0;
+    padding:20px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height:88vh;
+    animation:riseIn .2s ease;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

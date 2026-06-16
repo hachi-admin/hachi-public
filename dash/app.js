@@ -7,7 +7,11 @@
 
 /* ── Config from URL ─────────────────────────────────────── */
 const _params = new URLSearchParams(window.location.search);
-const API_BASE = (_params.get('api') || '').replace(/\/$/, '');
+// Persist api= param so the URL is bookmarkable without query strings.
+// Default to the production Cloud Run URL so no manual setup is needed.
+const _DEFAULT_API = 'https://hachi-core-685554938840.asia-northeast1.run.app';
+const API_BASE = (_params.get('api') || localStorage.getItem('nogem-api') || _DEFAULT_API).replace(/\/$/, '');
+if (_params.get('api')) localStorage.setItem('nogem-api', _params.get('api')); // persist override
 
 // If /auth/callback redirected here with ?token=, store it and clean the URL.
 (function _handleAuthReturn() {
@@ -22,7 +26,54 @@ const API_BASE = (_params.get('api') || '').replace(/\/$/, '');
 function _jwt()         { return localStorage.getItem('dash-jwt') || ''; }
 function _authHeaders() { const j = _jwt(); return j ? { Authorization: `Bearer ${j}` } : {}; }
 function apiUrl(path)   { return `${API_BASE}${path}`; }
-function _jwtPayload()  { try { const p = _jwt().split('.')[1]; return p ? JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))) : null; } catch { return null; } }
+
+function _jwtPayload() {
+  const jwt = _jwt();
+  if (!jwt) return null;
+  try {
+    const part = jwt.split('.')[1];
+    return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+  } catch { return null; }
+}
+
+function _renderUserPill() {
+  const p = _jwtPayload();
+  const nameEl    = document.getElementById('user-name');
+  const avatarEl  = document.getElementById('user-avatar');
+  const detailN   = document.getElementById('user-detail-name');
+  const detailL   = document.getElementById('user-detail-login');
+  if (!nameEl) return;
+  if (!p) { nameEl.textContent = '—'; return; }
+  if (avatarEl && p.avatar) {
+    avatarEl.src = `${p.avatar}&s=60`;
+    avatarEl.style.display = '';
+    nameEl.style.display = 'none';
+    const pillBtn = document.getElementById('user-pill');
+    if (pillBtn) { pillBtn.style.padding = '3px'; pillBtn.style.borderRadius = '50%'; pillBtn.style.width = '36px'; pillBtn.style.height = '36px'; }
+  } else {
+    nameEl.textContent = p.name || p.sub || '—';
+  }
+  if (detailN) detailN.textContent = p.name || p.sub || '—';
+  if (detailL) detailL.textContent = `@${p.sub || ''}`;
+}
+
+function logoutUser() {
+  localStorage.removeItem('dash-jwt');
+  if (API_BASE) window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
+  else window.location.reload();
+}
+
+function _handleForbidden(msg) {
+  document.body.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:14px;background:var(--bg);font-family:inherit;text-align:center;padding:24px">
+      <div style="font-size:2.5rem">🚫</div>
+      <div style="font-weight:800;color:var(--txt);font-size:1.1rem">Access denied</div>
+      <div style="color:var(--m);font-size:13px;max-width:340px">${esc(msg || 'You are not authorized to access this dashboard.')}</div>
+      <div style="color:var(--m2);font-size:11px">Ask the dashboard owner to add your GitHub username to the allowlist.</div>
+      <button onclick="logoutUser()" style="margin-top:8px;padding:10px 22px;border-radius:10px;border:none;background:var(--surf);box-shadow:var(--sh-sm);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">Sign in with a different account</button>
+    </div>`;
+}
+
 let _currentUser = _jwtPayload();
 
 // Verify JWT with backend on load; redirect to OAuth if missing or invalid.
@@ -34,11 +85,12 @@ async function _ensureAuth() {
   }
   try {
     const res = await fetch(apiUrl('/auth/verify'), { headers: _authHeaders() });
+    if (res.status === 403) { _handleForbidden(); return false; }
     if (!res.ok) { _handleUnauthorized(); return false; }
     const { user } = await res.json();
     _currentUser = user;
   } catch {
-    // network error — proceed with cached JWT, API calls will 401 if truly invalid
+    // network error — proceed, API calls will 401 if truly invalid
   }
   return true;
 }
@@ -46,7 +98,10 @@ async function _ensureAuth() {
 // On 401 from any API call: clear JWT and redirect to re-auth.
 function _handleUnauthorized() {
   localStorage.removeItem('dash-jwt');
-  if (API_BASE) window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
+  if (API_BASE) {
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);font-family:inherit;color:var(--m);font-size:13px">Session expired — redirecting to login…</div>`;
+    setTimeout(() => { window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`; }, 1200);
+  }
 }
 
 /* ── Global state (populated after fetch) ─────────────────── */
@@ -82,6 +137,7 @@ const FLOWS = [
 ══════════════════════════════════════════════════════════════ */
 async function loadDashboard() {
   if (!await _ensureAuth()) return;
+  _renderUserPill();
 
   // Show a loading indicator without destroying the DOM
   const loaderId = '_dash-load-overlay';
@@ -99,6 +155,11 @@ async function loadDashboard() {
   try {
     const res = await fetch(apiUrl('/api/dashboard-data'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
+    if (res.status === 403) {
+      const body = await res.json().catch(() => ({}));
+      _handleForbidden(body.error || 'Your account is not authorized for this dashboard.');
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const data = await res.json();
     _applyData(data);
@@ -111,8 +172,8 @@ async function loadDashboard() {
         <div class="dash-error-title">Failed to load dashboard</div>
         <div class="dash-error-msg">${esc(err.message)}</div>
         <div class="dash-error-hint">
-          Add <code>?api=https://your-cloud-run-url&key=SECRET</code> to the URL,
-          or run the backend locally at the same origin.
+          Check that the backend is reachable at <code>${API_BASE}</code>.<br>
+          To use a different backend, add <code>?api=https://your-cloud-run-url</code> to the URL.
         </div>
         <button class="save-btn" style="margin-top:14px" onclick="loadDashboard()">Retry</button>
       </div>`;
@@ -180,8 +241,9 @@ function navTo(pageId) {
   document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
   if (pageId === 'analytics') _initCharts();
   if (pageId === 'docs') _initDocsIfNeeded();
-  if (pageId === 'settings') { _loadDiscordChannels(); _loadContextSettings(); _loadAccessUsers(); }
-  if (pageId === 'channels') _initChannelsPage();
+  if (pageId === 'wiki') _initWikiIfNeeded();
+  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); }
+  if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); }
   if (pageId === 'repos') _initReposPage();
   window.scrollTo({ top:0, behavior:'instant' });
 }
@@ -760,24 +822,41 @@ function _renderPrivMatrix() {
    SETTINGS PAGE
 ══════════════════════════════════════════════════════════════ */
 function _renderSettings(channels) {
-  _renderAgentChannelAssignments(channels, 'agent-ch-list');
-  _renderAgentChannelAssignments(channels, 'ch-agent-assignments');
+  // Channel assignments are now in the Channels page (channel-centric view).
+  // Flash list and location are rendered by _renderFlashList() and _renderLocationPill().
 }
 
-function _renderAgentChannelAssignments(channels, containerId) {
-  const el = document.getElementById(containerId); if (!el) return;
-  const opts = (channels || []).map(ch => {
-    const val = ch.key || ch.channelId || '';
-    const label = ch.key ? `${ch.key} (${ch.id || ch.channelId || ''})` : ch.channelId;
-    return `<option value="${esc(val)}">${esc(label)}</option>`;
-  }).join('');
-  el.innerHTML = REGISTRY.map(reg => `<div class="agent-ch-row">
-    <span class="agent-ch-name">${esc(reg.name)}</span>
-    <select class="agent-ch-select" onchange="saveAgentChannel('${reg.id}',this.value)">
-      <option value="">— none —</option>
-      ${opts}
-    </select>
-  </div>`).join('');
+function setSettingsSection(btn, id) {
+  document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
+  if (id === 'location') _renderSettingsLocation();
+}
+
+function _renderSettingsLocation() {
+  const lp = LOCATION_PROFILE;
+  const el = document.getElementById('settings-loc-detail');
+  if (el) {
+    el.innerHTML = lp?.city
+      ? `<strong style="color:var(--txt)">${esc(lp.city)}, ${esc(lp.country || '')}</strong>${lp.timezone ? ' &middot; ' + esc(lp.timezone) : ''}${lp.confidence ? ' &middot; ' + esc(lp.confidence) + ' confidence' : ''}${lp.userOverride ? ' <span style="color:var(--grn)">(manual override)</span>' : ''}`
+      : '<span>No location profile yet. Infers automatically from chat + calendar signals.</span>';
+  }
+  const ci = document.getElementById('settings-loc-city');
+  const coi = document.getElementById('settings-loc-country');
+  if (lp && ci && !ci.value) ci.value = lp.city || '';
+  if (lp && coi && !coi.value) coi.value = lp.countryCode || '';
+}
+
+async function saveLocationOverrideSettings() {
+  const city = document.getElementById('settings-loc-city')?.value.trim();
+  const cc   = document.getElementById('settings-loc-country')?.value.trim().toUpperCase();
+  if (!city) { showToast('City is required.', 'warn'); return; }
+  const res = await fetch(apiUrl('/api/project/location'), {
+    method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
+    body: JSON.stringify({ city, countryCode: cc || null, userOverride: true })
+  });
+  if (!res.ok) { showToast('Save failed: ' + res.status, 'error'); return; }
+  showToast('Location override saved.', 'success');
+  loadDashboard();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -836,23 +915,51 @@ async function _loadDiscordChannels() {
 }
 
 function _renderRegisteredChannels(channels) {
-  // Renders into both the old settings page location (if present) and the new Channels page
-  const containers = ['registered-channel-list'].filter(id => document.getElementById(id));
-  const html = (!channels || !channels.length)
-    ? '<div style="font-size:11px;color:var(--m)">No Discord channels registered yet.</div>'
-    : channels.map(ch => `
-      <div class="src-row" data-ch-key="${esc(ch.key)}">
-        <div class="src-body">
-          <div class="src-name"># ${esc(ch.key)}</div>
-          <div class="src-meta">
-            <span style="font-family:monospace;color:var(--m)">${esc(ch.id || ch.channelId || '')}</span>
-            <span style="color:${ch.asThread?'#7289DA':'var(--m2)'}">${ch.asThread ? '🧵 thread' : '💬 post'}</span>
-            ${ch.threadName ? `<span style="font-size:9px;color:var(--m)">${esc(ch.threadName)}</span>` : ''}
-          </div>
+  const el = document.getElementById('registered-channel-list'); if (!el) return;
+  if (!channels || !channels.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--m);padding:8px 0">No Discord channels registered yet. Click "+ Add" to register one.</div>';
+    return;
+  }
+  el.innerHTML = channels.map(ch => {
+    const agentToggles = REGISTRY.map(reg => {
+      const isAssigned = (ch.agents || []).includes(reg.id);
+      const short = esc(reg.id.replace(/-agent$/, ''));
+      return `<button class="ch-agent-assign-btn${isAssigned ? ' active' : ''}"
+        title="${esc(reg.name)}"
+        onclick="toggleChannelAgent('${esc(ch.key)}','${esc(reg.id)}',this)">${short}</button>`;
+    }).join('');
+    return `<div class="ch-reg-card" data-ch-key="${esc(ch.key)}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div class="ch-card-key"># ${esc(ch.key)}</div>
+          <div style="font-size:10px;color:var(--m);font-family:ui-monospace,monospace;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ch.id || ch.channelId || '')}</div>
+          ${ch.asThread ? `<div style="font-size:9px;color:var(--acc);margin-top:2px">thread${ch.threadName ? ': ' + esc(ch.threadName) : ''}</div>` : ''}
         </div>
-        <button class="act-btn cancel" onclick="removeDiscordChannel('${esc(ch.key)}')" style="font-size:8px;padding:2px 8px">✕</button>
-      </div>`).join('');
-  containers.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = html; });
+        <button class="act-btn cancel" onclick="removeDiscordChannel('${esc(ch.key)}')" style="font-size:8px;padding:2px 8px;flex-shrink:0">&#10005;</button>
+      </div>
+      <div style="margin-top:10px">
+        <div class="form-label" style="font-size:9px;margin-bottom:6px">Agents posted here</div>
+        <div class="ch-agent-assign-row">${agentToggles || '<span style="font-size:10px;color:var(--m)">No agents registered yet.</span>'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleChannelAgent(channelKey, agentId, btn) {
+  const isActive = btn.classList.contains('active');
+  btn.disabled = true;
+  await saveAgentChannel(agentId, isActive ? '' : channelKey);
+  btn.classList.toggle('active', !isActive);
+  btn.disabled = false;
+}
+
+function toggleRegisterForm() {
+  const form = document.getElementById('reg-ch-form');
+  const toggleBtn = document.getElementById('reg-ch-toggle-btn');
+  const visible = form && form.style.display !== 'none';
+  if (form) form.style.display = visible ? 'none' : '';
+  if (toggleBtn) toggleBtn.textContent = visible ? '+ Add' : '✕ Cancel';
+  if (!visible) document.getElementById('reg-ch-key')?.focus();
 }
 
 async function registerDiscordChannel() {
@@ -904,10 +1011,10 @@ async function _loadAccessUsers() {
     const res  = await fetch(apiUrl('/api/dashboard/access'), { headers: _authHeaders() });
     if (!res.ok) { listEl.innerHTML = `<div style="color:var(--error);font-size:11px">Failed to load</div>`; return; }
     const { allowedUsers } = await res.json();
-    const me = _currentUser?.sub || '';
+    const me = (_currentUser?.sub || '').toLowerCase();
     listEl.innerHTML = allowedUsers.map(u => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:10px;background:var(--bg);font-size:12px">
-        <span style="font-weight:${u === me ? '700' : '400'}">${esc(u)}${u === me ? ' <span style="color:var(--m);font-size:10px">(you)</span>' : ''}</span>
+        <span style="font-weight:${u === me ? '700' : '400'}">${esc(u)}${u === me ? ' <span style="color:var(--m2);font-size:10px">(you)</span>' : ''}</span>
         ${u !== me ? `<button class="act-btn cancel" onclick="removeDashboardUser('${esc(u)}')" style="font-size:9px;padding:2px 8px">✕</button>` : ''}
       </div>`).join('');
     if (statusEl) statusEl.textContent = '';
@@ -962,22 +1069,8 @@ async function saveAgentChannel(agentId, channelKey) {
    LOCATION PILL + MODAL
 ══════════════════════════════════════════════════════════════ */
 function _renderLocationPill() {
-  const lp = LOCATION_PROFILE;
-  const pill = document.getElementById('location-pill');
-  if (pill) {
-    const label = lp?.city ? `📍 ${lp.city}${lp.countryCode ? ', ' + lp.countryCode : ''}` : '📍 —';
-    pill.textContent = label;
-  }
-  const det = document.getElementById('location-detail');
-  if (det && lp) {
-    det.innerHTML = `<b>${esc(lp.city||'?')}, ${esc(lp.country||'?')}</b><br>
-      ${lp.timezone ? esc(lp.timezone) + '<br>' : ''}
-      ${lp.confidence ? 'Confidence: ' + esc(lp.confidence) + '<br>' : ''}
-      ${lp.userOverride ? '<span style="color:var(--grn)">Manual override</span><br>' : ''}
-      ${lp.reasoning ? '<span style="font-size:10px;color:var(--m)">' + esc(lp.reasoning.substring(0,100)) + '…</span>' : ''}`;
-    const ci = document.getElementById('loc-city-input'), coi = document.getElementById('loc-country-input');
-    if (ci) ci.value = lp.city || ''; if (coi) coi.value = lp.countryCode || '';
-  }
+  // Location is now Settings-only — delegate directly.
+  _renderSettingsLocation();
 }
 
 async function saveLocationOverride() {
@@ -999,7 +1092,7 @@ function clearLocationOverride() {
       body: JSON.stringify({ clearOverride:true })
     }).catch(()=>{});
     loadDashboard();
-  }, document.getElementById('location-pill'));
+  }, document.getElementById('settings-loc-city'));
 }
 
 function closeLocOverlay(e) {
@@ -1012,16 +1105,18 @@ function closeLocOverlay(e) {
    FLASH LIST + SETTINGS
 ══════════════════════════════════════════════════════════════ */
 function _renderFlashList() {
-  const el = document.getElementById('flash-list'); if (!el) return;
-  el.innerHTML = REGISTRY.map(reg => {
+  const html = REGISTRY.map(reg => {
     const isFlash = FORCE_FLASH || (LEVEL_OVERRIDES && LEVEL_OVERRIDES[reg.id] === 'flash');
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;font-size:11px">
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;font-size:11px;border-bottom:1px solid color-mix(in srgb,var(--m2) 15%,transparent)">
       <span style="color:var(--txt)">${esc(reg.name)}</span>
       <button class="flash-toggle ${isFlash?'active':'inactive'}" style="font-size:9px;padding:3px 8px" onclick="toggleAgentFlash('${reg.id}',this)">
-        ${isFlash ? '⚡ Flash' : 'Pro'}
+        ${isFlash ? '&#9889; Flash' : 'Pro'}
       </button>
     </div>`;
   }).join('');
+  ['flash-list', 'settings-flash-list'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = html;
+  });
 }
 
 async function toggleFlashGlobal() {
@@ -1483,6 +1578,378 @@ async function loadDoc(btn, path, label) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   WIKI VIEWER
+══════════════════════════════════════════════════════════════ */
+let _wikiInited = false, _wikiPages = [], _wikiFiles = [], _wikiQuery = '';
+let _wikiTab = 'pages'; // 'pages' | 'files'
+let _wikiSelectMode = false, _wikiSelected = new Set();
+
+async function _initWikiIfNeeded() {
+  if (_wikiInited || !API_BASE) return;
+  _wikiInited = true;
+  const treeEl = document.getElementById('wiki-tree');
+  if (treeEl) treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">Loading…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/wiki/pages'), { headers: _authHeaders() });
+    if (res.status === 401) { _handleUnauthorized(); return; }
+    const data = await res.json();
+    _wikiPages = data.pages || [];
+    _renderWikiTree(_wikiPages);
+  } catch (e) {
+    if (treeEl) treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Failed to load wiki</div>`;
+  }
+}
+
+async function _loadWikiFiles() {
+  const treeEl = document.getElementById('wiki-tree'); if (!treeEl) return;
+  if (_wikiFiles.length) { _renderWikiFiles(_wikiFiles); return; }
+  treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">Loading files…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/wiki/files'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    _wikiFiles = data.files || [];
+    _renderWikiFiles(_wikiFiles);
+  } catch (e) {
+    treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Failed to load files: ${esc(e.message)}</div>`;
+  }
+}
+
+function setWikiTab(tab) {
+  _wikiTab = tab;
+  _wikiQuery = '';
+  const searchEl = document.getElementById('wiki-search');
+  if (searchEl) searchEl.value = '';
+  document.getElementById('wiki-tab-pages')?.classList.toggle('active', tab === 'pages');
+  document.getElementById('wiki-tab-files')?.classList.toggle('active', tab === 'files');
+  if (tab === 'pages') _renderWikiTree(_wikiPages);
+  else _loadWikiFiles();
+}
+
+function _wikiSearchInput(q) {
+  _wikiQuery = (q || '').toLowerCase().trim();
+  if (_wikiTab === 'pages') {
+    _renderWikiTree(_wikiQuery
+      ? _wikiPages.filter(p =>
+          p.title.toLowerCase().includes(_wikiQuery) ||
+          (p.category || '').toLowerCase().includes(_wikiQuery) ||
+          (p.tags || []).some(t => t.toLowerCase().includes(_wikiQuery)))
+      : _wikiPages);
+  } else {
+    _renderWikiFiles(_wikiQuery
+      ? _wikiFiles.filter(f => f.path.toLowerCase().includes(_wikiQuery))
+      : _wikiFiles);
+  }
+}
+
+// keep old name working for any existing callers
+function filterWikiPages(q) { _wikiSearchInput(q); }
+
+function _wikiItemBtn(id, label, badge, isFile) {
+  const selAttr = _wikiSelectMode ? `data-wiki-sel="${esc(id)}"` : '';
+  const checked = _wikiSelected.has(id) ? 'checked' : '';
+  const selBox = _wikiSelectMode
+    ? `<input type="checkbox" class="wiki-sel-cb" ${checked} onclick="event.stopPropagation();_wikiToggleSel('${esc(id)}')">`
+    : '';
+  const clickFn = isFile
+    ? `loadWikiFile(this,'${esc(id)}')`
+    : `loadWikiPage(this,'${esc(id)}','${esc(label)}')`;
+  return `<button class="wiki-flat-item${_wikiSelected.has(id)?' wiki-sel-active':''}" ${selAttr} onclick="${clickFn}">
+    ${selBox}<span class="wiki-flat-title">${esc(label)}</span>${badge ? `<span class="wiki-cat-badge">${esc(badge)}</span>` : ''}
+  </button>`;
+}
+
+function _wikiToggleSel(id) {
+  if (_wikiSelected.has(id)) _wikiSelected.delete(id);
+  else _wikiSelected.add(id);
+  const countEl = document.getElementById('wiki-select-count');
+  if (countEl) countEl.textContent = `${_wikiSelected.size} selected`;
+  document.querySelectorAll(`[data-wiki-sel="${CSS.escape(id)}"]`).forEach(el => {
+    el.classList.toggle('wiki-sel-active', _wikiSelected.has(id));
+    const cb = el.querySelector('.wiki-sel-cb');
+    if (cb) cb.checked = _wikiSelected.has(id);
+  });
+}
+
+function toggleWikiSelect() {
+  _wikiSelectMode = !_wikiSelectMode;
+  if (!_wikiSelectMode) _wikiSelected.clear();
+  const bar = document.getElementById('wiki-select-bar');
+  if (bar) bar.style.display = _wikiSelectMode ? 'flex' : 'none';
+  const fab = document.getElementById('wiki-fab');
+  if (fab) { fab.textContent = _wikiSelectMode ? '✕' : '＋'; fab.title = _wikiSelectMode ? 'Cancel selection' : 'Select multiple files'; }
+  const countEl = document.getElementById('wiki-select-count');
+  if (countEl) countEl.textContent = '0 selected';
+  if (_wikiTab === 'pages') _renderWikiTree(_wikiPages);
+  else _renderWikiFiles(_wikiFiles);
+}
+
+function _renderWikiTree(pages) {
+  const treeEl = document.getElementById('wiki-tree'); if (!treeEl) return;
+  // Preserve fab button
+  const fab = document.getElementById('wiki-fab');
+  if (!pages.length) {
+    treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">No pages found.</div>';
+    if (fab) treeEl.appendChild(fab);
+    return;
+  }
+
+  if (_wikiQuery) {
+    treeEl.innerHTML = `<div class="wiki-count">${pages.length} result${pages.length===1?'':'s'}</div>` +
+      pages.map(p => _wikiItemBtn(p.slug, p.title, p.category, false)).join('');
+  } else {
+    const recent = pages.slice(0, 10);
+    const groups = {};
+    for (const p of pages) { const c = p.category||'General'; (groups[c]||(groups[c]=[])).push(p); }
+    const catCount = Object.keys(groups).length;
+    treeEl.innerHTML =
+      `<div class="wiki-count">${pages.length} pages · ${catCount} categories</div>` +
+      `<div class="docs-section"><div class="docs-section-label">Recent</div>${recent.map(p=>_wikiItemBtn(p.slug,p.title,p.category,false)).join('')}</div>` +
+      Object.entries(groups).map(([cat,ps])=>`<details class="wiki-cat-group">
+        <summary class="docs-section-label wiki-cat-summary">${esc(cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
+        ${ps.map(p=>_wikiItemBtn(p.slug,p.title,'',false)).join('')}
+      </details>`).join('');
+  }
+  if (fab) treeEl.appendChild(fab);
+}
+
+function _renderWikiFiles(files) {
+  const treeEl = document.getElementById('wiki-tree'); if (!treeEl) return;
+  const fab = document.getElementById('wiki-fab');
+  if (!files.length) {
+    treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">No files found.</div>';
+    if (fab) treeEl.appendChild(fab);
+    return;
+  }
+  // Group by ext type: md, json, other
+  const EXT_LABEL = { md:'Markdown', json:'JSON', txt:'Text', yaml:'YAML', yml:'YAML', js:'Scripts', ts:'Scripts', py:'Python' };
+  const groups = {};
+  for (const f of files) {
+    const grp = EXT_LABEL[f.ext] || (f.dir ? f.dir.split('/')[0] : 'Other');
+    (groups[grp]||(groups[grp]=[])).push(f);
+  }
+  treeEl.innerHTML =
+    `<div class="wiki-count">${files.length} files · ${Object.keys(groups).length} types</div>` +
+    Object.entries(groups).map(([grp,fs])=>`<details class="wiki-cat-group" ${grp==='Markdown'?'open':''}>
+      <summary class="docs-section-label wiki-cat-summary">${esc(grp)} <span class="wiki-cat-count">${fs.length}</span></summary>
+      ${fs.map(f=>_wikiItemBtn(f.path, f.name, f.dir||'', true)).join('')}
+    </details>`).join('');
+  if (fab) treeEl.appendChild(fab);
+}
+
+async function loadWikiFile(btn, path) {
+  if (!path) return;
+  const reader = document.getElementById('wiki-reader');
+  reader.innerHTML = '<div class="docs-loading">Loading…</div>';
+  try {
+    const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(path)}`), { headers: _authHeaders() });
+    if (!res.ok) {
+      // Fallback: try raw GitHub URL
+      reader.innerHTML = `<div class="docs-content"><p style="color:var(--m);font-size:12px">File: <code>${esc(path)}</code></p><p style="font-size:11px;color:var(--m2)">Raw preview not available for this file type.</p></div>`;
+      return;
+    }
+    const data = await res.json();
+    reader.innerHTML = `<div class="docs-content"><h1>${esc(data.title||path)}</h1>${_markdownToHtml(data.content||'')}</div>`;
+    if (window.mermaid) {
+      const nodes = reader.querySelectorAll('.mermaid');
+      if (nodes.length) mermaid.run({ nodes }).catch(()=>{});
+    }
+  } catch (e) {
+    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadWikiPage(btn, slug, title) {
+  if (!slug) return;
+  document.querySelectorAll('#wiki-tree .docs-tree-item').forEach(b => b.classList.toggle('active', b === btn));
+  const reader = document.getElementById('wiki-reader');
+  reader.innerHTML = '<div class="docs-loading">Loading…</div>';
+  try {
+    const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(slug)}`), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const tags = (data.tags || []).map(t => `<span class="wiki-tag">${esc(t)}</span>`).join('');
+    const qs = (data.suggestedQuestions || []).map(q =>
+      `<button class="wiki-q-btn" onclick="queueWikiFollowup('${esc(slug)}',this)" data-q="${esc(q)}" title="Queue as research task">${esc(q)}</button>`
+    ).join('');
+    const ghLink = data.wikiUrl ? `<a class="wiki-open-btn" href="${esc(data.wikiUrl)}" target="_blank" rel="noopener">↗ GitHub</a>` : '';
+    const storeSlug = slug; const storeTitle = data.title || title; const storeContent = data.content || '';
+    reader.innerHTML = `
+      <div class="docs-content">
+        <h1>${esc(data.title || title)}</h1>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          ${tags ? `<div class="wiki-tags" style="margin:0">${tags}</div>` : ''}
+          ${ghLink}
+          <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">✏️ Quiz prompt</button>
+          <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">📖 Vocab prompt</button>
+        </div>
+        ${_markdownToHtml(storeContent)}
+        ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">Suggested follow-ups</div>${qs}</div>` : ''}
+      </div>`;
+    if (window.mermaid) {
+      const nodes = reader.querySelectorAll('.mermaid');
+      if (nodes.length) mermaid.run({ nodes }).catch(() => {});
+    }
+  } catch (e) {
+    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+async function queueWikiFollowup(pageSlug, btn) {
+  const q = btn.dataset.q;
+  if (!q) return;
+  btn.disabled = true; btn.textContent = '…queuing';
+  try {
+    const res = await fetch(apiUrl('/api/wiki/followup'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageSlug, question: q, mode: 'queue' }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    btn.textContent = '✓ queued';
+  } catch { btn.disabled = false; btn.textContent = q; }
+}
+
+function showWikiPrompt(type, slug, title) {
+  const isQuiz = type === 'quiz';
+  const prompt = isQuiz
+    ? `You are an expert educator. Using the wiki page titled "${title}" (slug: ${slug}), create a quiz topic JSON for the hachi quiz app.
+
+The format must match this schema:
+{
+  "id": "${slug}-quiz",
+  "title": "${title}",
+  "emoji": "💎",
+  "slides": [
+    { "title": "...", "bullets": ["...", "..."], "note": "..." }
+  ],
+  "quiz": [
+    { "q": "Question?", "options": ["A", "B", "C", "D"], "answer": 0, "explanation": "..." }
+  ]
+}
+
+Rules:
+- 5–8 slides covering key concepts from the page
+- 8–12 quiz questions, multiple choice, 4 options each
+- answer is the index (0-3) of the correct option
+- explanations should reference the source material
+- Output only valid JSON, no markdown fencing`
+    : `You are an expert educator. Using the wiki page titled "${title}" (slug: ${slug}), create vocabulary flashcard entries for the hachi vocab app.
+
+The format must match this schema (array of entries):
+[
+  {
+    "term": "Term or concept",
+    "reading": "pronunciation or abbreviation (optional)",
+    "definition": "Clear 1-2 sentence definition",
+    "example": "Example sentence or use case",
+    "tags": ["tag1", "tag2"]
+  }
+]
+
+Rules:
+- Extract 10–20 key terms, acronyms, or concepts from the page
+- Definitions should be precise and self-contained
+- Tags should reflect the category/domain (e.g. "finance", "AI", "market")
+- Output only valid JSON array, no markdown fencing`;
+
+  const existingModal = document.getElementById('wiki-prompt-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wiki-prompt-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:var(--bg);box-shadow:var(--sh-lg);border-radius:16px;width:min(640px,95vw);max-height:85vh;display:flex;flex-direction:column;padding:20px;gap:12px;position:relative">
+      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ Quiz prompt' : '📖 Vocab prompt'} — ${esc(title)}</div>
+      <div style="font-size:11px;color:var(--m)">Copy this prompt and run it with Gemini CLI or Claude Code to generate content.</div>
+      <textarea id="wiki-prompt-text" style="flex:1;min-height:280px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
+      <div style="display:flex;gap:8px">
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
+        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">Close</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function showWikiMultiPrompt(type) {
+  if (!_wikiSelected.size) { alert('Select at least one page first.'); return; }
+  const isQuiz = type === 'quiz';
+  const items = [..._wikiSelected];
+  const pages = _wikiTab === 'pages'
+    ? items.map(id => { const p = _wikiPages.find(x => x.slug===id); return p ? `"${p.title}" (slug: ${id})` : id; })
+    : items.map(id => `file: ${id}`);
+  const pageList = pages.map((p,i) => `${i+1}. ${p}`).join('\n');
+  const ids = items.join(', ');
+
+  const prompt = isQuiz
+    ? `You are an expert educator. Using the following wiki pages, create a combined quiz topic JSON for the hachi quiz app.
+
+Pages to cover:
+${pageList}
+
+The format must match this schema:
+{
+  "id": "combined-quiz",
+  "title": "Combined Quiz",
+  "emoji": "🧠",
+  "slides": [
+    { "title": "...", "bullets": ["...", "..."], "note": "..." }
+  ],
+  "quiz": [
+    { "q": "Question?", "options": ["A", "B", "C", "D"], "answer": 0, "explanation": "..." }
+  ]
+}
+
+Rules:
+- 2–4 slides per source page covering key concepts
+- 3–6 quiz questions per source page, multiple choice, 4 options each
+- Mix questions across all pages for an integrated quiz
+- answer is the index (0-3) of the correct option
+- Include page title as a tag or note in each question's explanation
+- Output only valid JSON, no markdown fencing`
+    : `You are an expert educator. Using the following wiki pages, create vocabulary flashcard entries for the hachi vocab app.
+
+Pages to cover:
+${pageList}
+
+The format must match this schema (array of entries):
+[
+  {
+    "term": "Term or concept",
+    "definition": "Clear 1-2 sentence definition",
+    "example": "Example sentence or use case",
+    "tags": ["tag1", "tag2", "source-page-slug"]
+  }
+]
+
+Rules:
+- Extract 5–15 key terms per source page
+- Include the source page slug in the tags array so terms can be filtered by origin
+- Definitions should be precise and self-contained
+- Output only valid JSON array, no markdown fencing`;
+
+  const existingModal = document.getElementById('wiki-prompt-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wiki-prompt-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:var(--bg);box-shadow:var(--sh-lg);border-radius:16px;width:min(680px,95vw);max-height:85vh;display:flex;flex-direction:column;padding:20px;gap:12px">
+      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ Quiz prompt' : '📖 Vocab prompt'} — ${_wikiSelected.size} pages</div>
+      <div style="font-size:11px;color:var(--m)">Pages: ${esc(pages.join(' · '))}. Copy and run locally with Gemini CLI or Claude Code.</div>
+      <textarea id="wiki-prompt-text" style="flex:1;min-height:300px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
+      <div style="display:flex;gap:8px">
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
+        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">Close</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 function _markdownToHtml(md) {
   // Extract fenced code/mermaid blocks before any escaping
   const blocks = [];
@@ -1797,12 +2264,16 @@ async function createDiscordCategory() {
 }
 
 function _prefillChannelForm(id, name) {
+  // Auto-open the register form
+  const form = document.getElementById('reg-ch-form');
+  const toggleBtn = document.getElementById('reg-ch-toggle-btn');
+  if (form) form.style.display = '';
+  if (toggleBtn) toggleBtn.textContent = '✕ Cancel';
   const keyEl = document.getElementById('reg-ch-key');
   const idEl  = document.getElementById('reg-ch-id');
   if (keyEl && !keyEl.value) keyEl.value = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   if (idEl) idEl.value = id;
-  // Scroll form into view
-  document.getElementById('reg-ch-key')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  form?.scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
 async function createDiscordChannel() {
@@ -1916,8 +2387,10 @@ let _repoSearchTimer = null;
 let _reposInited = false;
 
 const PINNED_REPOS = [
-  { fullName:'hachi-admin/hachi-core',   label:'hachi-core',   desc:'Main service — Discord agent pipeline', icon:'⚙️',  url:'https://github.com/hachi-admin/hachi-core' },
-  { fullName:'hachi-admin/hachi-public', label:'hachi-public', desc:'This dashboard (GitHub Pages SPA)',     icon:'📊',  url:'https://github.com/hachi-admin/hachi-public' },
+  { fullName:'hachi-admin/hachi-core',  label:'hachi-core',    desc:'Framework upstream — fork base for no-gem', icon:'⚙️',  url:'https://github.com/hachi-admin/hachi-core' },
+  { fullName:'hachi-admin/no-gem-dash', label:'no-gem-dash',   desc:'This dashboard (GitHub Pages SPA)',          icon:'📊',  url:'https://github.com/hachi-admin/no-gem-dash' },
+  { fullName:'hachi-admin/hachi-wiki',    label:'obsidian',      desc:'Knowledge management wiki repo',             icon:'📚',  url:'https://github.com/hachi-admin/hachi-wiki' },
+  { fullName:'hachi-admin/hachi-public-1', label:'hachi-public-1', desc:'Second brain knowledge base',           icon:'🧠',  url:'https://github.com/hachi-admin/hachi-public-1' },
 ];
 
 function _renderPinnedRepos() {
@@ -1956,7 +2429,10 @@ async function _loadRepos() {
     if (res.status === 401) { _handleUnauthorized(); return; }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error: ${esc(err.error || res.status)}</div>`;
+      const hint = res.status === 500
+        ? ' — Check that GITHUB_ACCESS_TOKEN is set in GCP Secret Manager with repo + read:org scopes.'
+        : '';
+      listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error: ${esc(err.error || res.status)}${esc(hint)}</div>`;
       return;
     }
     const data = await res.json();

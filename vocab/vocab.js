@@ -1,7 +1,7 @@
 /**
  * ══════════════════════════════════════════════════════════════
  *  SECOND BRAIN — Vocabulary Dictionary
- *  second-brain/vocab/vocab.js
+ *  hachi-public/vocab/vocab.js
  * ══════════════════════════════════════════════════════════════
  *
  *  Terms are pulled from the knowledge wiki (obsidian repo).
