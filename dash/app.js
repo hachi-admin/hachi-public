@@ -2109,9 +2109,7 @@ let _selectedGuildId = null;
 
 function _initChannelsPage() {
   _loadDiscordChannels();
-  // Show create-channel card only after guilds are fetched
-  const createCard = document.getElementById('create-discord-ch-card');
-  if (createCard) createCard.style.display = 'none';
+  _fetchDiscordGuilds();
 }
 
 async function _fetchDiscordGuilds() {
@@ -2171,18 +2169,31 @@ function _renderLiveChannels(guild) {
   // Populate bot list for new channel creation
   _renderNewChannelBotList();
 
-  const registeredIds = new Set(_discordChannels.map(ch => String(ch.id || ch.channelId || '')));
+  const registeredChannelMap = new Map();
+  for (const ch of _discordChannels) {
+    registeredChannelMap.set(String(ch.id || ch.channelId || ''), ch);
+  }
   const clickable = new Set([0, 5, 11, 15]);
 
   function chItem(ch) {
     const icon = CH_TYPE_ICON[ch.type] || '#';
-    const isReg = registeredIds.has(String(ch.id));
+    const regCh = registeredChannelMap.get(String(ch.id));
+    const isReg = !!regCh;
+    const canInteract = clickable.has(ch.type);
     const cls = ['ch-tree-item', isReg ? 'registered' : ''].filter(Boolean).join(' ');
-    const click = clickable.has(ch.type) ? `onclick="_prefillChannelForm('${esc(ch.id)}','${esc(ch.name)}')"` : '';
-    return `<div class="${cls}" ${click} title="ID: ${esc(ch.id)}">
+    const agents = regCh?.agents || [];
+    const agentPills = agents.length
+      ? `<div class="ch-tree-agents">${agents.map(a => `<span class="ch-tree-agent-pill">${esc(a.replace('-agent',''))}</span>`).join('')}</div>`
+      : '';
+    const plusBtn = canInteract
+      ? `<button class="ch-plus-btn" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)" title="Assign agents">+</button>`
+      : '';
+    return `<div class="${cls}" title="ID: ${esc(ch.id)}">
       <span style="flex-shrink:0">${icon}</span>
       <span class="ch-tree-item-name">${esc(ch.name)}</span>
-      ${isReg ? '<span style="font-size:9px;color:var(--grn);flex-shrink:0">✓</span>' : ''}
+      ${isReg ? '<span class="ch-tree-check">✓</span>' : ''}
+      ${agentPills}
+      ${plusBtn}
     </div>`;
   }
 
@@ -2214,6 +2225,89 @@ function _renderLiveChannels(guild) {
 
   tree.innerHTML = sections.join('') || '<div style="font-size:11px;color:var(--m)">No channels found.</div>';
   container.style.display = '';
+}
+
+let _agentMenuChannelId = null;
+
+function _openAgentMenu(channelId, channelName, event) {
+  const existing = document.getElementById('agent-menu-popup');
+  if (existing) { existing.remove(); }
+  if (_agentMenuChannelId === channelId) { _agentMenuChannelId = null; return; }
+  _agentMenuChannelId = channelId;
+
+  const regCh = _discordChannels.find(ch => String(ch.id || ch.channelId || '') === String(channelId));
+  const assignedHere = new Set(regCh?.agents || []);
+
+  // Build agent → current channel map for exclusivity display
+  const agentCurrentKey = {};
+  for (const ch of _discordChannels) {
+    for (const aid of (ch.agents || [])) agentCurrentKey[aid] = ch.key;
+  }
+
+  const items = REGISTRY.map(reg => {
+    const isHere = assignedHere.has(reg.id);
+    const elsewhere = !isHere && agentCurrentKey[reg.id] ? agentCurrentKey[reg.id] : null;
+    return `<label class="agent-menu-item">
+      <input type="checkbox" ${isHere ? 'checked' : ''}
+        onchange="_toggleAgentOnChannel('${esc(reg.id)}','${esc(channelId)}','${esc(channelName)}',this)">
+      <span style="flex:1">${esc(reg.id.replace('-agent',''))}</span>
+      ${elsewhere ? `<span class="agent-menu-elsewhere">#${esc(elsewhere)}</span>` : ''}
+    </label>`;
+  }).join('');
+
+  const popup = document.createElement('div');
+  popup.id = 'agent-menu-popup';
+  popup.className = 'agent-menu-popup';
+  popup.style.position = 'fixed';
+  popup.style.zIndex = '9000';
+  popup.innerHTML = `<div style="font-size:10px;font-weight:700;color:var(--txt);margin-bottom:8px"># ${esc(channelName)}</div>${items}`;
+
+  const btn = event.target.closest('button') || event.target;
+  const rect = btn.getBoundingClientRect();
+  popup.style.top = (rect.bottom + 6) + 'px';
+  const left = Math.min(rect.left, window.innerWidth - 250);
+  popup.style.left = Math.max(8, left) + 'px';
+  document.body.appendChild(popup);
+
+  setTimeout(() => document.addEventListener('click', _closeAgentMenuOutside, { capture: true, once: false }), 0);
+}
+
+function _closeAgentMenuOutside(e) {
+  const popup = document.getElementById('agent-menu-popup');
+  if (!popup) { document.removeEventListener('click', _closeAgentMenuOutside, { capture: true }); return; }
+  if (!popup.contains(e.target)) {
+    popup.remove();
+    _agentMenuChannelId = null;
+    document.removeEventListener('click', _closeAgentMenuOutside, { capture: true });
+  }
+}
+
+async function _toggleAgentOnChannel(agentId, channelId, channelName, checkbox) {
+  const isChecked = checkbox.checked;
+  checkbox.disabled = true;
+  try {
+    // Auto-register channel if not yet registered
+    let regCh = _discordChannels.find(ch => String(ch.id || ch.channelId || '') === String(channelId));
+    let key = regCh?.key;
+    if (!regCh) {
+      key = channelName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '') || channelId;
+      const res = await fetch(apiUrl('/api/channels'), {
+        method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, id: channelId })
+      });
+      if (!res.ok) { checkbox.checked = !isChecked; showToast('Failed to register channel', 'error'); return; }
+    }
+    await saveAgentChannel(agentId, isChecked ? key : '');
+    await _loadDiscordChannels();
+    // Re-render the live tree with updated data
+    const guild = _guildsData.find(g => g.id === _selectedGuildId) || _guildsData[0];
+    if (guild) _renderLiveChannels(guild);
+  } catch (e) {
+    checkbox.checked = !isChecked;
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    checkbox.disabled = false;
+  }
 }
 
 function _renderNewChannelBotList() {

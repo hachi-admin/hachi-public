@@ -460,7 +460,7 @@
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()">&#65291; New folder</button>
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()">&#65291; New channel</button>
       </div>
-      <div style="font-size:10px;color:var(--m);margin-bottom:8px">Click any text channel to pre-fill the register form below. Green = already registered.</div>
+      <div style="font-size:10px;color:var(--m);margin-bottom:8px">Green channels are registered. Click <strong>+</strong> to assign agents — each agent posts to one channel only.</div>
       <div id="live-channel-tree" class="ch-tree"></div>
 
       <!-- New category (folder) form -->
@@ -511,41 +511,14 @@
       </div>
     </div>
 
-    <!-- Registered channels (channel-centric, rendered by JS) -->
-    <div class="section-hd" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <span>Registered channels</span>
-      <button class="save-btn" id="reg-ch-toggle-btn" onclick="toggleRegisterForm()" style="font-size:10px;padding:4px 12px;min-height:28px">+ Add</button>
-    </div>
-    <div id="registered-channel-list" style="margin-bottom:12px"></div>
-
-    <!-- Register form (expandable) -->
-    <div id="reg-ch-form" style="display:none;margin-bottom:16px" class="qs-card">
-      <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:12px">Register channel</div>
-      <div class="form-grid" style="margin-bottom:8px">
-        <div class="qs-field">
-          <label class="form-label">Key (alias)</label>
-          <input class="form-input" id="reg-ch-key" placeholder="e.g. general, alerts" style="font-size:11px">
-        </div>
-        <div class="qs-field">
-          <label class="form-label">Discord Channel ID</label>
-          <input class="form-input" id="reg-ch-id" placeholder="Click channel in tree above" style="font-size:11px">
-        </div>
-      </div>
-      <div class="qs-field" style="margin-bottom:8px">
-        <label class="form-label">Tags (optional, comma-separated)</label>
-        <input class="form-input" id="reg-ch-tags" placeholder="news, alerts, daily" style="font-size:11px">
-      </div>
-      <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:6px">
-        <input type="checkbox" id="reg-ch-thread"> Auto-thread mode
-      </label>
-      <input class="form-input" id="reg-ch-threadname" placeholder="Thread name template (optional)" style="font-size:11px;margin-bottom:12px">
-      <div style="display:flex;gap:6px">
-        <button class="save-btn" onclick="registerDiscordChannel()">Register</button>
-        <button class="refresh-btn" onclick="toggleRegisterForm()">Cancel</button>
-      </div>
-    </div>
-
-    <!-- (legacy hidden card kept for id refs) -->
+    <!-- Hidden inputs kept for registerDiscordChannel() compat -->
+    <input type="hidden" id="reg-ch-key">
+    <input type="hidden" id="reg-ch-id">
+    <input type="hidden" id="reg-ch-tags">
+    <input type="hidden" id="reg-ch-thread">
+    <input type="hidden" id="reg-ch-threadname">
+    <div id="registered-channel-list" style="display:none"></div>
+    <div id="reg-ch-form" style="display:none"></div>
     <div id="create-discord-ch-card" style="display:none"></div>
   </section>
 

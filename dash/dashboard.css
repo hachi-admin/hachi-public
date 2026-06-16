@@ -501,6 +501,15 @@ header{margin:12px;padding:10px 16px}
 .ch-tree-item.registered{color:var(--grn)}
 .ch-tree-item.selected{background:color-mix(in srgb,var(--acc) 10%,transparent);color:var(--acc)}
 .ch-tree-item-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-tree-check{font-size:10px;color:var(--grn);flex-shrink:0;font-weight:700}
+.ch-tree-agents{display:flex;gap:3px;flex-wrap:wrap;flex-shrink:0}
+.ch-tree-agent-pill{font-size:8px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc);font-weight:600;white-space:nowrap}
+.ch-plus-btn{flex-shrink:0;width:18px;height:18px;border-radius:4px;border:none;background:color-mix(in srgb,var(--m) 12%,transparent);color:var(--m);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .1s,color .1s}
+.ch-plus-btn:hover{background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
+.agent-menu-popup{background:var(--card);box-shadow:0 4px 24px rgba(0,0,0,.18);border-radius:12px;padding:12px 14px;min-width:180px;max-width:240px;z-index:9000}
+.agent-menu-item{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:11px;color:var(--txt);cursor:pointer;border-radius:6px;user-select:none}
+.agent-menu-item input[type=checkbox]{accent-color:var(--acc);cursor:pointer}
+.agent-menu-elsewhere{font-size:9px;color:var(--m);margin-left:auto;white-space:nowrap}
 
 /* Desktop More nav dropdown */
 .nav-pills .ndrop { display:flex; align-items:center; }
