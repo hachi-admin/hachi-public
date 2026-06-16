@@ -300,6 +300,19 @@
     <div class="section-hd" style="margin-top:24px">Agent → channel assignments</div>
     <div id="agent-ch-list"></div>
 
+    <!-- Dashboard Access -->
+    <div class="section-hd" style="margin-top:24px">Dashboard Access</div>
+    <div class="qs-card" id="access-card">
+      <div style="font-size:11px;color:var(--m);margin-bottom:10px">GitHub accounts that can log into this dashboard. You cannot remove yourself.</div>
+      <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="form-input" id="access-add-input" type="text" placeholder="github-username" autocomplete="off" style="flex:1;font-size:12px"
+          onkeydown="if(event.key==='Enter')addDashboardUser()">
+        <button class="save-btn" onclick="addDashboardUser()">Add</button>
+      </div>
+      <div id="access-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+    </div>
+
     <!-- Admin -->
     <div class="section-hd" style="margin-top:24px">Admin</div>
     <p class="admin-hint">All changes go through the API at the URL configured on page load.</p>

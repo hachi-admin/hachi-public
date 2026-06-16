@@ -22,6 +22,8 @@ const API_BASE = (_params.get('api') || '').replace(/\/$/, '');
 function _jwt()         { return localStorage.getItem('dash-jwt') || ''; }
 function _authHeaders() { const j = _jwt(); return j ? { Authorization: `Bearer ${j}` } : {}; }
 function apiUrl(path)   { return `${API_BASE}${path}`; }
+function _jwtPayload()  { try { const p = _jwt().split('.')[1]; return p ? JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))) : null; } catch { return null; } }
+let _currentUser = _jwtPayload();
 
 // Redirect to GitHub OAuth if no JWT (only when API_BASE points to a remote backend).
 async function _ensureAuth() {
@@ -168,7 +170,7 @@ function navTo(pageId) {
   document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
   if (pageId === 'analytics') _initCharts();
   if (pageId === 'docs') _initDocsIfNeeded();
-  if (pageId === 'settings') { _loadDiscordChannels(); _loadContextSettings(); }
+  if (pageId === 'settings') { _loadDiscordChannels(); _loadContextSettings(); _loadAccessUsers(); }
   if (pageId === 'channels') _initChannelsPage();
   if (pageId === 'repos') _initReposPage();
   window.scrollTo({ top:0, behavior:'instant' });
@@ -881,6 +883,62 @@ function resetDashLayout() {
     await fetch(apiUrl('/api/dashboard/prefs'), { method:'DELETE', headers:_authHeaders() }).catch(()=>{});
     loadDashboard();
   }, document.querySelector('[onclick="resetDashLayout()"]'));
+}
+
+// ── Dashboard Access management ───────────────────────────────────────────────
+async function _loadAccessUsers() {
+  const listEl   = document.getElementById('access-user-list');
+  const statusEl = document.getElementById('access-status');
+  if (!listEl) return;
+  try {
+    const res  = await fetch(apiUrl('/api/dashboard/access'), { headers: _authHeaders() });
+    if (!res.ok) { listEl.innerHTML = `<div style="color:var(--error);font-size:11px">Failed to load</div>`; return; }
+    const { allowedUsers } = await res.json();
+    const me = _currentUser?.sub || '';
+    listEl.innerHTML = allowedUsers.map(u => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:10px;background:var(--bg);font-size:12px">
+        <span style="font-weight:${u === me ? '700' : '400'}">${esc(u)}${u === me ? ' <span style="color:var(--m);font-size:10px">(you)</span>' : ''}</span>
+        ${u !== me ? `<button class="act-btn cancel" onclick="removeDashboardUser('${esc(u)}')" style="font-size:9px;padding:2px 8px">✕</button>` : ''}
+      </div>`).join('');
+    if (statusEl) statusEl.textContent = '';
+  } catch (e) {
+    if (listEl) listEl.innerHTML = `<div style="color:var(--error);font-size:11px">${esc(e.message)}</div>`;
+  }
+}
+
+async function addDashboardUser() {
+  const input    = document.getElementById('access-add-input');
+  const statusEl = document.getElementById('access-status');
+  const login    = input?.value.trim().toLowerCase();
+  if (!login) { if (statusEl) statusEl.textContent = 'Enter a GitHub username.'; return; }
+  if (statusEl) statusEl.textContent = 'Adding…';
+  try {
+    const res = await fetch(apiUrl('/api/dashboard/access'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', login }),
+    });
+    const data = await res.json();
+    if (!res.ok) { if (statusEl) statusEl.textContent = data.error || 'Error'; return; }
+    if (input) input.value = '';
+    if (statusEl) statusEl.textContent = `Added ${login}.`;
+    _loadAccessUsers();
+  } catch (e) { if (statusEl) statusEl.textContent = e.message; }
+}
+
+async function removeDashboardUser(login) {
+  const statusEl = document.getElementById('access-status');
+  showConfirm(`Remove "${login}" from dashboard access?`, async () => {
+    try {
+      const res = await fetch(apiUrl('/api/dashboard/access'), {
+        method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', login }),
+      });
+      const data = await res.json();
+      if (!res.ok) { if (statusEl) statusEl.textContent = data.error || 'Error'; return; }
+      if (statusEl) statusEl.textContent = `Removed ${login}.`;
+      _loadAccessUsers();
+    } catch (e) { if (statusEl) statusEl.textContent = e.message; }
+  });
 }
 
 async function saveAgentChannel(agentId, channelKey) {
