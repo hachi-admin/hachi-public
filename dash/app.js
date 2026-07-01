@@ -108,7 +108,7 @@ function _handleUnauthorized() {
 let AVATARS = {}, DQ_AVATARS = {}, DQ_TYPE_MAP = {}, DQ_COLORS = {};
 let REGISTRY = [], DETAIL_DATA = {}, TASK_STATS = { recent:[], upcoming:[], byDay:{}, byType:{} };
 let ALL_BY_STATUS = {}, SOURCES = [], COSTS = {}, PRIVILEGE_MATRIX = {}, LEVEL_OVERRIDES = {};
-let FORCE_FLASH = false, INTENSITY_MODE = 'balanced', ACTIVE_PROVIDER = 'gemini';
+let FORCE_FLASH = false, INTENSITY_MODE = 'balanced', ACTIVE_PROVIDER = 'gemini', PROJECT_LANG = 'JP';
 let PANEL_PREFS = {}, COST_BY_DAY = {}, LAST_7_KEYS = [], COST_BY_AGENT_7D = {};
 let LOCATION_PROFILE = null;
 const SCALE = 6, DS = 8;
@@ -198,6 +198,8 @@ function _applyData(d) {
   FORCE_FLASH      = !!d.forceFlash;
   INTENSITY_MODE   = d.intensityMode   || 'balanced';
   ACTIVE_PROVIDER  = d.activeProvider  || 'gemini';
+  PROJECT_LANG     = d.language        || 'JP';
+  _syncLangUI();
   PANEL_PREFS      = d.panelPrefs      || {};
   COST_BY_DAY      = d.costByDay       || {};
   LAST_7_KEYS      = d.last7Keys       || [];
@@ -1150,6 +1152,32 @@ async function setIntensity(value) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   PROJECT LANGUAGE
+══════════════════════════════════════════════════════════════ */
+function _syncLangUI() {
+  const sel = document.getElementById('lang-select-s');
+  if (sel) sel.value = PROJECT_LANG;
+  document.documentElement.lang = PROJECT_LANG === 'JP' ? 'ja'
+    : PROJECT_LANG === 'PT' ? 'pt'
+    : PROJECT_LANG === 'ES' ? 'es'
+    : PROJECT_LANG === 'FR' ? 'fr'
+    : 'en';
+}
+
+async function setProjectLanguage(value) {
+  if (!value || value === PROJECT_LANG) return;
+  const res = await fetch(apiUrl('/api/project/language'), {
+    method: 'POST',
+    headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: value }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('Language update failed', 'error'); return; }
+  PROJECT_LANG = value;
+  _syncLangUI();
+  showToast('Content language updated', 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════
    AGENT DETAIL OVERLAY
 ══════════════════════════════════════════════════════════════ */
 function openDetail(id) {
@@ -1951,8 +1979,19 @@ Rules:
 }
 
 function _markdownToHtml(md) {
-  // Extract fenced code/mermaid blocks before any escaping
   const blocks = [];
+
+  // 1. Extract <details>/<summary> blocks (editorial agent uses these for collapsibles)
+  md = md.replace(/<details>([\s\S]*?)<\/details>/gi, (_, inner) => {
+    const idx = blocks.length;
+    const sum = inner.match(/<summary>([\s\S]*?)<\/summary>/i);
+    const body = inner.replace(/<summary>[\s\S]*?<\/summary>/i, '').trim();
+    const label = sum ? sum[1].trim() : 'Details';
+    blocks.push(`<details><summary>${label}</summary><div style="padding:8px 0">${_markdownToHtml(body)}</div></details>`);
+    return `\x00BLK${idx}\x00`;
+  });
+
+  // 2. Extract fenced code/mermaid blocks before any escaping
   md = md.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
     const idx = blocks.length;
     const safe = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n$/,'');
@@ -1965,12 +2004,21 @@ function _markdownToHtml(md) {
     return `\x00BLK${idx}\x00`;
   });
 
+  // 3. Fallback: bare "mermaid" keyword starting a line (context agent output without fences)
+  md = md.replace(/^mermaid\r?\n([\s\S]*?)(?=\n(?:##|#|\n|$))/gm, (_, diagram) => {
+    const idx = blocks.length;
+    const safe = diagram.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trimEnd();
+    blocks.push(`<div class="mermaid">${safe}</div>`);
+    return `\x00BLK${idx}\x00`;
+  });
+
   // HTML-escape remaining text
   md = md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const out = [], lines = md.split('\n');
-  let inUl = false, inOl = false, inPara = false;
+  let inUl = false, inOl = false, inPara = false, inBq = false;
   const flush = () => {
+    if (inBq)  { out.push('</blockquote>'); inBq  = false; }
     if (inUl)  { out.push('</ul>');  inUl  = false; }
     if (inOl)  { out.push('</ol>');  inOl  = false; }
     if (inPara){ out.push('</p>');   inPara = false; }
@@ -1982,12 +2030,21 @@ function _markdownToHtml(md) {
     if (!line.trim()) { flush(); continue; }
 
     // Headings
-    const hm = line.match(/^(#{1,3}) (.+)$/);
+    const hm = line.match(/^(#{1,6}) (.+)$/);
     if (hm) { flush(); out.push(`<h${hm[1].length}>${_inline(hm[2])}</h${hm[1].length}>`); continue; }
 
-    // Blockquote
-    const bq = line.match(/^&gt; (.+)$/);
-    if (bq) { flush(); out.push(`<blockquote>${_inline(bq[1])}</blockquote>`); continue; }
+    // Blockquote — group consecutive > lines into one <blockquote>
+    const bq = line.match(/^&gt; ?(.*)$/);
+    if (bq) {
+      if (inPara) { out.push('</p>'); inPara = false; }
+      if (inUl)   { out.push('</ul>'); inUl = false; }
+      if (inOl)   { out.push('</ol>'); inOl = false; }
+      if (!inBq)  { out.push('<blockquote>'); inBq = true; }
+      else out.push('<br>');
+      out.push(_inline(bq[1]));
+      continue;
+    }
+    if (inBq) { out.push('</blockquote>'); inBq = false; }
 
     // HR
     if (/^[-*_]{3,}$/.test(line.trim())) { flush(); out.push('<hr>'); continue; }

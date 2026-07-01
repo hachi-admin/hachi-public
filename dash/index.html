@@ -277,6 +277,17 @@
               <div style="font-size:10px;color:var(--m);margin-top:4px">Controls agent review thresholds and task approval flow.</div>
             </div>
             <div class="qs-field" style="margin-top:14px">
+              <label class="form-label">Content language</label>
+              <select class="form-select" id="lang-select-s" onchange="setProjectLanguage(this.value)">
+                <option value="JP">Japanese（日本語）</option>
+                <option value="EN">English</option>
+                <option value="PT">Portuguese（Português）</option>
+                <option value="ES">Spanish（Español）</option>
+                <option value="FR">French（Français）</option>
+              </select>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">Default output language for AI-generated content (news, wiki, summaries). Per-user <code>/lang</code> overrides this.</div>
+            </div>
+            <div class="qs-field" style="margin-top:14px">
               <label class="form-label">Global Flash override</label>
               <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
               <div style="font-size:10px;color:var(--m);margin-top:4px">Forces all agents to use Flash model regardless of per-agent setting.</div>
