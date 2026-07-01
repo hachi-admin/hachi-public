@@ -19,24 +19,24 @@
   <a href="../" class="logo" style="text-decoration:none"><span class="logo-gem">⚙️</span> Hachi<span class="logo-dash">Dash</span></a>
 
   <nav class="nav-pills" role="tablist">
-    <button class="nav-pill active" data-page="overview" role="tab">Overview</button>
+    <button class="nav-pill active" data-page="overview" role="tab">概要</button>
     <button class="nav-pill" data-page="tasks" role="tab">
-      Tasks<span id="tasks-badge" class="nav-badge" style="display:none"></span>
+      タスク<span id="tasks-badge" class="nav-badge" style="display:none"></span>
     </button>
     <button class="nav-pill" data-page="inbox" role="tab">
-      Inbox<span id="inbox-badge" class="nav-badge warn" style="display:none"></span>
+      受信箱<span id="inbox-badge" class="nav-badge warn" style="display:none"></span>
     </button>
-    <button class="nav-pill" data-page="docs" role="tab">Docs</button>
+    <button class="nav-pill" data-page="docs" role="tab">ドキュメント</button>
     <div class="ndrop" id="more-nav-drop">
       <button class="nav-pill" onclick="toggleDrop('more-nav-drop')" title="More pages" aria-label="More">⋯</button>
       <div class="ndrop-panel" id="more-nav-panel">
         <button class="ndrop-opt" onclick="navTo('wiki');toggleDrop('more-nav-drop')"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
-        <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')"><i class="ni ni-channels" aria-hidden="true"></i> Channels</button>
-        <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')"><i class="ni ni-repos" aria-hidden="true"></i> Repos</button>
+        <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')"><i class="ni ni-channels" aria-hidden="true"></i> チャンネル</button>
+        <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')"><i class="ni ni-repos" aria-hidden="true"></i> リポジトリ</button>
         <hr class="ndrop-sep">
-        <button class="ndrop-opt" onclick="navTo('analytics');toggleDrop('more-nav-drop')"><i class="ni ni-analytics" aria-hidden="true"></i> Analytics</button>
-        <button class="ndrop-opt" onclick="navTo('knowledge');toggleDrop('more-nav-drop')"><i class="ni ni-sources" aria-hidden="true"></i> Sources</button>
-        <button class="ndrop-opt" onclick="navTo('settings');toggleDrop('more-nav-drop')"><i class="ni ni-settings" aria-hidden="true"></i> Settings</button>
+        <button class="ndrop-opt" onclick="navTo('analytics');toggleDrop('more-nav-drop')"><i class="ni ni-analytics" aria-hidden="true"></i> 分析</button>
+        <button class="ndrop-opt" onclick="navTo('knowledge');toggleDrop('more-nav-drop')"><i class="ni ni-sources" aria-hidden="true"></i> ソース</button>
+        <button class="ndrop-opt" onclick="navTo('settings');toggleDrop('more-nav-drop')"><i class="ni ni-settings" aria-hidden="true"></i> 設定</button>
       </div>
     </div>
   </nav>
@@ -53,17 +53,14 @@
         <div style="padding:0 12px 8px;font-size:10px;color:var(--m2)" id="user-detail-login"></div>
         <hr class="ndrop-sep">
         <div style="padding:6px 12px">
-          <div style="font-size:10px;color:var(--m);margin-bottom:4px">Content language</div>
+          <div style="font-size:10px;color:var(--m);margin-bottom:4px">コンテンツ言語</div>
           <select class="form-select" id="lang-select-h" style="font-size:11px;width:100%" onchange="setProjectLanguage(this.value)">
             <option value="JP">Japanese（日本語）</option>
             <option value="EN">English</option>
-            <option value="PT">Portuguese（Português）</option>
-            <option value="ES">Spanish（Español）</option>
-            <option value="FR">French（Français）</option>
           </select>
         </div>
         <hr class="ndrop-sep">
-        <button class="ndrop-opt" onclick="logoutUser()" style="color:var(--red)">Sign out</button>
+        <button class="ndrop-opt" onclick="logoutUser()" style="color:var(--red)">サインアウト</button>
       </div>
     </div>
     <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
@@ -125,7 +122,7 @@
   <section class="page" id="page-tasks" data-mob-panel="tasks">
     <div class="page-hd">
       <div>
-        <div class="page-title">Tasks</div>
+        <div class="page-title">タスク</div>
         <div class="page-sub">Orchestrator queue</div>
       </div>
     </div>
@@ -145,7 +142,7 @@
   <!-- ── INBOX ──────────────────────────────────── -->
   <section class="page" id="page-inbox" data-mob-panel="inbox">
     <div class="page-hd">
-      <div class="page-title">Orchestrator Inbox</div>
+      <div class="page-title">受信箱</div>
       <div class="page-sub">Boundary violations queued for local action</div>
     </div>
 
@@ -165,7 +162,7 @@
 
   <!-- ── DOCS ───────────────────────────────────── -->
   <section class="page" id="page-docs" data-mob-panel="docs">
-    <div class="page-hd"><div class="page-title">Docs</div></div>
+    <div class="page-hd"><div class="page-title">ドキュメント</div></div>
     <div class="docs-layout">
       <div class="docs-tree-panel" id="docs-tree"></div>
       <div class="docs-reader" id="docs-reader">
@@ -206,7 +203,7 @@
   <!-- ── SOURCES (was Knowledge) ───────────────── -->
   <section class="page" id="page-knowledge" data-mob-panel="knowledge">
     <div class="page-hd">
-      <div class="page-title">Sources</div>
+      <div class="page-title">ソース</div>
     </div>
 
     <div class="tab-bar" role="tablist">
@@ -230,7 +227,7 @@
 
   <!-- ── ANALYTICS ──────────────────────────────── -->
   <section class="page" id="page-analytics" data-mob-panel="analytics">
-    <div class="page-hd"><div class="page-title">Analytics</div></div>
+    <div class="page-hd"><div class="page-title">分析</div></div>
 
     <!-- Costs chart -->
     <div class="chart-box">
@@ -259,17 +256,17 @@
 
   <!-- ── SETTINGS ───────────────────────────────── -->
   <section class="page" id="page-settings" data-mob-panel="settings">
-    <div class="page-hd"><div class="page-title">Settings</div></div>
+    <div class="page-hd"><div class="page-title">設定</div></div>
 
     <div class="settings-layout">
       <!-- Sidebar navigation -->
       <nav class="settings-nav" id="settings-nav">
-        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">General</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI Providers</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'context')">Context</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'location')">Location &amp; Flash</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">Mail</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">Admin</button>
+        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">一般</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI プロバイダー</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'context')">コンテキスト</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'location')">位置・Flash</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">メール</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">管理</button>
       </nav>
 
       <!-- Content panel -->
@@ -277,10 +274,10 @@
 
         <!-- GENERAL -->
         <div class="settings-section active" id="ss-general">
-          <div class="section-hd" style="margin-top:0">General</div>
+          <div class="section-hd" style="margin-top:0">一般設定</div>
           <div class="qs-card">
             <div class="qs-field">
-              <label class="form-label" for="intensity-select-s">Intensity</label>
+              <label class="form-label" for="intensity-select-s">強度</label>
               <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
                 <option value="conservative">Conservative</option>
                 <option value="balanced" selected>Balanced</option>
@@ -293,14 +290,11 @@
               <select class="form-select" id="lang-select-s" onchange="setProjectLanguage(this.value)">
                 <option value="JP">Japanese（日本語）</option>
                 <option value="EN">English</option>
-                <option value="PT">Portuguese（Português）</option>
-                <option value="ES">Spanish（Español）</option>
-                <option value="FR">French（Français）</option>
               </select>
               <div style="font-size:10px;color:var(--m);margin-top:4px">Default output language for AI-generated content (news, wiki, summaries). Per-user <code>/lang</code> overrides this.</div>
             </div>
             <div class="qs-field" style="margin-top:14px">
-              <label class="form-label">Global Flash override</label>
+              <label class="form-label">Flash オーバーライド</label>
               <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
               <div style="font-size:10px;color:var(--m);margin-top:4px">Forces all agents to use Flash model regardless of per-agent setting.</div>
             </div>
@@ -309,7 +303,7 @@
 
         <!-- AI PROVIDERS -->
         <div class="settings-section" id="ss-providers">
-          <div class="section-hd" style="margin-top:0">Active provider</div>
+          <div class="section-hd" style="margin-top:0">プロバイダー</div>
           <div class="qs-card">
             <div class="qs-field">
               <label class="form-label">Provider</label>
@@ -465,7 +459,7 @@
 
         <!-- ADMIN -->
         <div class="settings-section" id="ss-admin">
-          <div class="section-hd" style="margin-top:0">Dashboard Access</div>
+          <div class="section-hd" style="margin-top:0">ダッシュボードアクセス</div>
           <div class="qs-card" id="access-card">
             <div style="font-size:11px;color:var(--m);margin-bottom:10px">GitHub accounts that can log into this dashboard. You cannot remove yourself.</div>
             <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
@@ -489,11 +483,15 @@
   <section class="page" id="page-channels" data-mob-panel="channels">
     <div class="page-hd">
       <div>
-        <div class="page-title">Discord Channels</div>
-        <div class="page-sub">Manage bot channel registry + agent routing</div>
+        <div class="page-title">Discord チャンネル</div>
+        <div class="page-sub">チャンネルレジストリ・エージェントルーティング</div>
       </div>
       <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Fetch from Discord</button>
     </div>
+
+    <!-- Agent / Task → Channel routing matrix -->
+    <div class="section-hd" style="margin-top:0;margin-bottom:8px">ルーティング</div>
+    <div id="routing-table" style="margin-bottom:20px;background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;overflow:hidden"></div>
 
     <!-- Bot permissions info -->
     <details style="background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;padding:12px 14px;margin-bottom:16px">
@@ -605,7 +603,7 @@
   <section class="page" id="page-repos" data-mob-panel="repos">
     <div class="page-hd">
       <div>
-        <div class="page-title">GitHub Repos</div>
+        <div class="page-title">GitHub リポジトリ</div>
         <div class="page-sub">Search, browse, and create repositories</div>
       </div>
     </div>
@@ -688,15 +686,15 @@
 
     <!-- Primary secondary pages -->
     <button class="mob-more-opt" onclick="navTo('wiki');closeMoreSheet()"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
-    <button class="mob-more-opt" onclick="navTo('channels');closeMoreSheet()"><i class="ni ni-channels" aria-hidden="true"></i> Channels</button>
-    <button class="mob-more-opt" onclick="navTo('repos');closeMoreSheet()"><i class="ni ni-repos" aria-hidden="true"></i> Repos</button>
+    <button class="mob-more-opt" onclick="navTo('channels');closeMoreSheet()"><i class="ni ni-channels" aria-hidden="true"></i> チャンネル</button>
+    <button class="mob-more-opt" onclick="navTo('repos');closeMoreSheet()"><i class="ni ni-repos" aria-hidden="true"></i> リポジトリ</button>
 
     <div class="mob-more-sep"></div>
 
     <!-- Less-frequent pages -->
-    <button class="mob-more-opt" onclick="navTo('analytics');closeMoreSheet()"><i class="ni ni-analytics" aria-hidden="true"></i> Analytics</button>
-    <button class="mob-more-opt" onclick="navTo('knowledge');closeMoreSheet()"><i class="ni ni-sources" aria-hidden="true"></i> Sources</button>
-    <button class="mob-more-opt" onclick="navTo('settings');closeMoreSheet()"><i class="ni ni-settings" aria-hidden="true"></i> Settings</button>
+    <button class="mob-more-opt" onclick="navTo('analytics');closeMoreSheet()"><i class="ni ni-analytics" aria-hidden="true"></i> 分析</button>
+    <button class="mob-more-opt" onclick="navTo('knowledge');closeMoreSheet()"><i class="ni ni-sources" aria-hidden="true"></i> ソース</button>
+    <button class="mob-more-opt" onclick="navTo('settings');closeMoreSheet()"><i class="ni ni-settings" aria-hidden="true"></i> 設定</button>
 
     <div class="mob-more-sep"></div>
 

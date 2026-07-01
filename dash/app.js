@@ -209,6 +209,7 @@ function _applyData(d) {
   window._inboxData      = d.inbox         || { pending:[], done:[], ignored:[] };
   window._factChecks     = d.factChecks    || [];
   window._knowledgeData  = d.knowledgeData || {};
+  window._routingRows    = d.routing?.rows || [];
 }
 
 function _renderAll(d) {
@@ -216,6 +217,7 @@ function _renderAll(d) {
   _renderAgentGrid();
   _renderKpiRow();
   _renderChannelCards(d.channels || []);
+  if (d.routing) _renderRoutingTable(d.routing.rows || [], d.channels || []);
   _renderCostStrip();
   _renderTaskFeed();
   _renderKnowledge();
@@ -2231,6 +2233,59 @@ let _selectedGuildId = null;
 function _initChannelsPage() {
   _loadDiscordChannels();
   _fetchDiscordGuilds();
+  _renderRoutingTable(window._routingRows || [], window._discordChannels || []);
+}
+
+function _renderRoutingTable(rows, channels) {
+  const el = document.getElementById('routing-table');
+  if (!el) return;
+  const chKeys = [...new Set(channels.map(c => c.key).filter(Boolean))].sort();
+  // Pretty task type labels
+  const LABELS = {
+    deep_context:'Deep Context', ingest:'Ingest', wiki_lint:'Wiki Lint', scout:'Scout',
+    scout_external:'Scout (external)', develop:'Develop', review:'Review', db_audit:'DB Audit',
+    system_audit:'System Audit', knowledge_query:'Knowledge Query', feed_health_check:'Feed Health',
+    discover_source:'Discover Source', review_sources:'Review Sources', knowledge_init:'Knowledge Init',
+    repo_audit:'Repo Audit', content:'Content', content_review:'Content Review', plan:'Plan',
+    log_monitor:'Log Monitor', set_agent_level:'Set Agent Level', mail_check:'Mail Check',
+    cost_report:'Cost Report', infer_location:'Infer Location',
+  };
+  const rows2 = (rows || []).sort((a,b) => a.channelKey.localeCompare(b.channelKey) || a.taskType.localeCompare(b.taskType));
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:8px 12px;text-align:left;color:var(--m);font-weight:600">Task type</th>
+      <th style="padding:8px 12px;text-align:left;color:var(--m);font-weight:600">Agent</th>
+      <th style="padding:8px 12px;text-align:left;color:var(--m);font-weight:600">Channel</th>
+    </tr></thead>
+    <tbody>${rows2.map((r,i) => `
+      <tr style="border-bottom:1px solid var(--border);background:${i%2?'transparent':'var(--card-bg)'}">
+        <td style="padding:7px 12px;color:var(--txt)">${esc(LABELS[r.taskType]||r.taskType)}</td>
+        <td style="padding:7px 12px;color:var(--m2)">${esc(r.agentId)}</td>
+        <td style="padding:7px 12px">
+          <select style="font-size:10px;padding:2px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:${r.overridden?'var(--acc)':'var(--txt)'}"
+            onchange="_saveRouting('${r.taskType}',this.value)">
+            <option value="tasks" ${r.channelKey==='tasks'?'selected':''}>tasks</option>
+            <option value="log-monitoring" ${r.channelKey==='log-monitoring'?'selected':''}>log-monitoring</option>
+            <option value="mails" ${r.channelKey==='mails'?'selected':''}>mails</option>
+            <option value="bug-reports" ${r.channelKey==='bug-reports'?'selected':''}>bug-reports</option>
+            <option value="billing" ${r.channelKey==='billing'?'selected':''}>billing</option>
+            <option value="news" ${r.channelKey==='news'?'selected':''}>news</option>
+            <option value="releases" ${r.channelKey==='releases'?'selected':''}>releases</option>
+            ${chKeys.filter(k=>!['tasks','log-monitoring','mails','bug-reports','billing','news','releases'].includes(k)).map(k=>`<option value="${esc(k)}" ${r.channelKey===k?'selected':''}>${esc(k)}</option>`).join('')}
+          </select>
+          ${r.overridden?`<span style="font-size:9px;color:var(--acc);margin-left:4px">overridden</span>`:''}
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function _saveRouting(taskType, channelKey) {
+  const res = await fetch(apiUrl('/api/routing'), {
+    method:'PATCH', headers:{..._authHeaders(),'Content-Type':'application/json'},
+    body: JSON.stringify({ taskType, channelKey }),
+  });
+  if (!res.ok) showToast('Routing save failed', 'error');
+  else showToast(`${taskType} → ${channelKey}`, 'success');
 }
 
 async function _fetchDiscordGuilds() {
