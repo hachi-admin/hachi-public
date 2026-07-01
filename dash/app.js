@@ -1217,8 +1217,10 @@ async function setIntensity(value) {
    PROJECT LANGUAGE
 ══════════════════════════════════════════════════════════════ */
 function _syncLangUI() {
-  const sel = document.getElementById('lang-select-s');
-  if (sel) sel.value = PROJECT_LANG;
+  for (const id of ['lang-select-s', 'lang-select-h']) {
+    const sel = document.getElementById(id);
+    if (sel) sel.value = PROJECT_LANG;
+  }
   document.documentElement.lang = PROJECT_LANG === 'JP' ? 'ja'
     : PROJECT_LANG === 'PT' ? 'pt'
     : PROJECT_LANG === 'ES' ? 'es'

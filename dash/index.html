@@ -52,6 +52,17 @@
         <div style="padding:10px 12px 4px;font-size:11px;font-weight:700;color:var(--txt)" id="user-detail-name">—</div>
         <div style="padding:0 12px 8px;font-size:10px;color:var(--m2)" id="user-detail-login"></div>
         <hr class="ndrop-sep">
+        <div style="padding:6px 12px">
+          <div style="font-size:10px;color:var(--m);margin-bottom:4px">Content language</div>
+          <select class="form-select" id="lang-select-h" style="font-size:11px;width:100%" onchange="setProjectLanguage(this.value)">
+            <option value="JP">Japanese（日本語）</option>
+            <option value="EN">English</option>
+            <option value="PT">Portuguese（Português）</option>
+            <option value="ES">Spanish（Español）</option>
+            <option value="FR">French（Français）</option>
+          </select>
+        </div>
+        <hr class="ndrop-sep">
         <button class="ndrop-opt" onclick="logoutUser()" style="color:var(--red)">Sign out</button>
       </div>
     </div>
