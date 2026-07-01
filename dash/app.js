@@ -576,7 +576,7 @@ function _renderTaskFeed() {
   } else {
     tasks = ALL_BY_STATUS[_taskStatusFilter] || [];
   }
-  if (!tasks.length) { el.innerHTML = '<div style="color:var(--m);font-size:11px;padding:12px 0">No tasks.</div>'; return; }
+  if (!tasks.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:12px 0">${t['empty-tasks']}</div>`; return; }
   el.innerHTML = tasks.slice(0, 60).map(t => {
     const isUpcoming = t.status === 'pending' || t.status === 'running';
     const btn = isUpcoming
@@ -617,7 +617,7 @@ function _renderKnowledge() {
 }
 
 function _buildSourceRows(sources) {
-  if (!sources || !sources.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">No sources yet.</div>`;
+  if (!sources || !sources.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-sources']}</div>`; }
   return sources.map(s => {
     const tc = s.type === 'rss' ? '#60A5FA' : s.type === 'url' ? '#A78BFA' : '#34D399';
     const dc = s.domain === 'news' ? '#FBBF24' : '#2DD4BF';
@@ -667,7 +667,7 @@ function _buildMergeSuggestionRows(items) {
 }
 
 function _buildSuggestedFollowupRows(items) {
-  if (!items || !items.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">No pending follow-ups.</div>`;
+  if (!items || !items.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-followups']}</div>`; }
   const byPage = {};
   for (const it of items) (byPage[it.pageSlug] ??= { pageName: it.pageName, items:[] }).items.push(it);
   return Object.entries(byPage).map(([slug, g]) => `<div class="src-row" style="display:block;padding:6px 8px;border-left:3px solid #A78BFA">
@@ -736,7 +736,7 @@ function _renderInbox() {
 function _renderInboxList(status) {
   const el = document.getElementById('inbox-list'); if (!el) return;
   const items = (window._inboxData || {})[status] || [];
-  if (!items.length) { el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:12px 0">${status === 'pending' ? 'No pending items — orchestrator is unblocked.' : 'No items.'}</div>`; return; }
+  if (!items.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:12px 0">${status === 'pending' ? t['empty-inbox'] : t['empty-items']}</div>`; return; }
   el.innerHTML = items.map(it => {
     const ago = it.lastSeenAt ? new Date(it.lastSeenAt).toLocaleString('en-US', { timeZone:'Asia/Tokyo', hour12:false }) : '';
     const isUrl = it.command && /^https?:\/\//i.test(it.command);
@@ -761,7 +761,7 @@ function _renderInboxList(status) {
 function _renderFactChecks() {
   const el = document.getElementById('factcheck-list'); if (!el) return;
   const fcs = (window._factChecks || []);
-  if (!fcs.length) { el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:8px 0">No fact-check runs yet.</div>`; return; }
+  if (!fcs.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-factchecks']}</div>`; return; }
   el.innerHTML = fcs.map(fc => {
     const c = fc.counts || {};
     const total = (fc.verdicts || []).length || 0;
@@ -1243,7 +1243,7 @@ const _I18N = {
     'channels':          'チャンネル',
     'intensity':         'Intensity',   // intensity mode values stay English
     'queue':             'キュー',
-    'fact-checks':       'Fact Check',
+    'fact-checks':       'Fact Check',  // "Fact Check" is commonly used in Japanese too
     // placeholders
     'search-agents':     'エージェントを検索…',
     // KPI bar
@@ -1291,6 +1291,14 @@ const _I18N = {
     // settings
     'set-save':          '保存',
     'set-cancel':        'キャンセル',
+    // empty states (dynamic JS strings)
+    'empty-tasks':       'タスクなし',
+    'empty-inbox':       'アイテムなし — オーケストレーターは待機中です',
+    'empty-items':       'アイテムなし',
+    'empty-factchecks':  'Fact Checkの実行記録がありません',
+    'empty-sources':     'ソースなし',
+    'empty-followups':   'フォローアップなし',
+    'empty-channels':    'チャンネルなし',
   },
   EN: {
     'all':               'All',
@@ -1340,6 +1348,13 @@ const _I18N = {
     'ch-add-tag':        '+ Add tag',
     'set-save':          'Save',
     'set-cancel':        'Cancel',
+    'empty-tasks':       'No tasks.',
+    'empty-inbox':       'No pending items — orchestrator is unblocked.',
+    'empty-items':       'No items.',
+    'empty-factchecks':  'No fact-check runs yet.',
+    'empty-sources':     'No sources yet.',
+    'empty-followups':   'No pending follow-ups.',
+    'empty-channels':    'No channels found.',
   },
 };
 
@@ -1456,7 +1471,7 @@ function openTaskModal(status) {
         ${status==='pending'&&t.id?`<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">✕</button>`:''}
         ${status==='running'&&t.id?`<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">⏹</button>`:''}
         ${(status==='failed'||status==='cancelled')&&t.id?`<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻</button>`:''}
-      </div>`).join('') : '<div style="color:var(--m);font-size:11px;padding:8px">No tasks.</div>'}
+      </div>`).join('') : `<div style="color:var(--m);font-size:11px;padding:8px">${(_I18N[PROJECT_LANG]||_I18N.JP)['empty-tasks']}</div>`}
     </div>`;
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -2631,7 +2646,7 @@ function _renderLiveChannels(guild) {
     sections.push(`<div class="ch-tree-children" style="padding-left:0">${orphans.map(chItem).join('')}</div>`);
   }
 
-  tree.innerHTML = sections.join('') || '<div style="font-size:11px;color:var(--m)">No channels found.</div>';
+  tree.innerHTML = sections.join('') || `<div style="font-size:11px;color:var(--m)">${(_I18N[PROJECT_LANG]||_I18N.JP)['empty-channels']}</div>`;
   container.style.display = '';
 }
 
