@@ -143,7 +143,7 @@
   <section class="page" id="page-inbox" data-mob-panel="inbox">
     <div class="page-hd">
       <div class="page-title">受信箱</div>
-      <div class="page-sub">Boundary violations queued for local action</div>
+      <div class="page-sub" data-i18n="inbox-sub">ローカルアクション待ちのアイテム</div>
     </div>
 
     <div class="tab-bar">
@@ -166,7 +166,7 @@
     <div class="docs-layout">
       <div class="docs-tree-panel" id="docs-tree"></div>
       <div class="docs-reader" id="docs-reader">
-        <div class="docs-welcome">Select a document from the tree</div>
+        <div class="docs-welcome" data-i18n="docs-welcome">ドキュメントをツリーから選択</div>
       </div>
     </div>
   </section>
@@ -179,8 +179,8 @@
     </div>
     <!-- Tab bar: Wiki pages (Firestore) | Files (GitHub raw) -->
     <div class="tab-bar" role="tablist" style="margin-bottom:10px">
-      <button class="tab-btn active" id="wiki-tab-pages" onclick="setWikiTab('pages')">Wiki pages</button>
-      <button class="tab-btn" id="wiki-tab-files" onclick="setWikiTab('files')">Raw files</button>
+      <button class="tab-btn active" id="wiki-tab-pages" onclick="setWikiTab('pages')" data-i18n="wiki-pages-tab">Wikiページ</button>
+      <button class="tab-btn" id="wiki-tab-files" onclick="setWikiTab('files')" data-i18n="wiki-files-tab">ファイル</button>
     </div>
     <div class="docs-layout">
       <div class="docs-tree-panel" id="wiki-tree" style="position:relative">
@@ -188,7 +188,7 @@
         <button class="wiki-fab" id="wiki-fab" onclick="toggleWikiSelect()" title="Select multiple files for quiz/vocab prompt">＋</button>
       </div>
       <div class="docs-reader" id="wiki-reader">
-        <div class="docs-welcome">Select a page from the wiki</div>
+        <div class="docs-welcome" data-i18n="wiki-welcome">Wikiページを左から選択</div>
       </div>
     </div>
     <!-- Multi-select toolbar (hidden by default) -->
@@ -207,12 +207,12 @@
     </div>
 
     <div class="tab-bar" role="tablist">
-      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')">Sources</button>
-      <button class="tab-btn" data-ktab="blocked" onclick="setKTab(this,'blocked')">Blocked</button>
-      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')">Follow-ups</button>
-      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')">Merges</button>
-      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')">Vaults</button>
-      <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')">Bases</button>
+      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')" data-i18n="src-sources">Sources</button>
+      <button class="tab-btn" data-ktab="blocked" onclick="setKTab(this,'blocked')" data-i18n="src-blocked">ブロック済み</button>
+      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')" data-i18n="src-followups">Follow-up</button>
+      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">Merges</button>
+      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">Vaults</button>
+      <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')" data-i18n="src-bases">Bases</button>
     </div>
 
     <div class="tab-content">
@@ -232,7 +232,7 @@
     <!-- Costs chart -->
     <div class="chart-box">
       <div class="chart-header">
-        <span class="chart-title">Token cost — last 7 days</span>
+        <span class="chart-title" data-i18n="analytics-chart">トークンコスト — 直近7日</span>
         <div class="chart-tabs">
           <button class="chart-tab active" data-ctab="bar" onclick="setCostTab(this,'bar')">Bar</button>
           <button class="chart-tab" data-ctab="line" onclick="setCostTab(this,'line')">Line</button>
@@ -243,14 +243,14 @@
     </div>
 
     <!-- Cost table -->
-    <div class="section-hd">Agent costs today</div>
+    <div class="section-hd" data-i18n="analytics-costs">本日のコスト</div>
     <table class="ct-table">
-      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>Cost (est.)</th></tr></thead>
+      <thead><tr><th data-i18n="analytics-agent">Agent</th><th>Model</th><th data-i18n="analytics-tokens">Tokens</th><th data-i18n="analytics-cost">Cost (est.)</th></tr></thead>
       <tbody id="cost-table-body"></tbody>
     </table>
 
     <!-- Privilege matrix -->
-    <div class="section-hd" style="margin-top:20px">Privilege matrix</div>
+    <div class="section-hd" style="margin-top:20px" data-i18n="analytics-priv">Privilege matrix</div>
     <div id="priv-matrix"></div>
   </section>
 
@@ -489,10 +489,6 @@
       <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Fetch from Discord</button>
     </div>
 
-    <!-- Agent / Task → Channel routing matrix -->
-    <div class="section-hd" style="margin-top:0;margin-bottom:8px">ルーティング</div>
-    <div id="routing-table" style="margin-bottom:20px;background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;overflow:hidden"></div>
-
     <!-- Bot permissions info -->
     <details style="background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;padding:12px 14px;margin-bottom:16px">
       <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--txt);cursor:pointer">
@@ -533,9 +529,9 @@
     <!-- Live channel tree -->
     <div id="discord-live-channels" style="display:none;margin-bottom:16px">
       <div class="section-hd" style="display:flex;align-items:center;gap:8px">
-        Server channels
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()">&#65291; New folder</button>
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()">&#65291; New channel</button>
+        <span data-i18n="ch-server">Server channels</span>
+        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()" data-i18n="ch-new-folder">+ フォルダ</button>
+        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()" data-i18n="ch-new-channel">+ チャンネル</button>
       </div>
       <div style="font-size:10px;color:var(--m);margin-bottom:8px">Green channels are registered. Click <strong>+</strong> to assign agents — each agent posts to one channel only.</div>
       <div id="live-channel-tree" class="ch-tree"></div>

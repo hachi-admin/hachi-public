@@ -351,8 +351,7 @@ function nextRun(freq) {
 function agentChip(taskType) {
   const agentId = TASK_TO_AGENT_ID[taskType]; if (!agentId) return '';
   const reg = REGISTRY.find(r => r.id === agentId); if (!reg) return '';
-  const n = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp : reg.name;
-  return `<span class="agent-chip" style="border-color:${reg.colors[0]}66;color:${reg.colors[0]}">⬡ ${esc(n)}</span>`;
+  return `<span class="agent-chip" style="border-color:${reg.colors[0]}66;color:${reg.colors[0]}">⬡ ${esc(reg.name)}</span>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -397,10 +396,10 @@ function _renderAgentGrid() {
     const costEst = (COST_BY_AGENT_7D[reg.id] || 0);
     const trig = (d.trigger || 'interactive');
     const spark = LAST_7_KEYS.map(k => (TASK_STATS.byDay?.[k]?.agentCounts?.[reg.id] || 0)).join(',');
-    const displayName = isJP && reg.nameJp ? reg.nameJp : reg.name;
+    const displayName = reg.name; // agent names stay English — natural in JP tech context
     const displayDesc = isJP && reg.descJp ? reg.descJp : (reg.desc || '');
-    const statusLabel = t[`status-${status}`] || status;
-    const catLabel    = t[`cat-${reg.category}`] || reg.category || '';
+    const statusLabel = status; // status chips stay English (idle/running/done/failed)
+    const catLabel    = reg.category || ''; // category stays English
     return `<div class="acard ${status} ${enabled ? '' : 'disabled'}"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${(reg.colors || []).join('|')}"
@@ -1228,75 +1227,119 @@ async function setIntensity(value) {
 /* ═══════════════════════════════════════════════════════════
    PROJECT LANGUAGE + I18N
 ══════════════════════════════════════════════════════════════ */
+// Translation map. Strategy:
+//   - Translate: UI labels, section headers, page descriptions, action hints
+//   - Keep English: agent names, status chips, category names, model names, technical terms
 const _I18N = {
   JP: {
-    // filter tabs
-    'all':            'すべて',
-    'pending':        '保留中',
-    'running':        '実行中',
-    'done':           '完了',
-    'failed':         '失敗',
-    'ignored':        '無視',
-    // section headers
-    'channels':       'チャンネル',
-    'intensity':      '強度',
-    'queue':          'キュー',
-    'fact-checks':    'ファクトチェック',
+    // filter / status tabs
+    'all':               'すべて',
+    'pending':           '保留中',
+    'running':           '実行中',
+    'done':              '完了',
+    'failed':            '失敗',
+    'ignored':           '無視',
+    // section headers (overview)
+    'channels':          'チャンネル',
+    'intensity':         'Intensity',   // intensity mode values stay English
+    'queue':             'キュー',
+    'fact-checks':       'Fact Check',
     // placeholders
-    'search-agents':  'エージェントを検索…',
-    // KPI / stats box
-    'kpi-pending':    '保留中',
-    'kpi-running':    '実行中',
-    'kpi-completed':  '完了',
-    'kpi-failed':     '失敗',
-    'stat-agents':    'エージェント',
-    'stat-running':   '実行中',
-    'stat-failed':    '失敗',
-    'stat-enabled':   '有効',
-    'stat-pending':   '保留タスク',
-    // status chips on agent cards
-    'status-idle':    'アイドル',
-    'status-running': '実行中',
-    'status-done':    '完了',
-    'status-failed':  '失敗',
-    // category chips
-    'cat-Intelligence': 'インテリジェンス',
-    'cat-Development':  '開発',
-    'cat-Knowledge':    'ナレッジ',
-    'cat-Content':      'コンテンツ',
-    // click hint in KPI
-    'click-view':     'クリックして表示',
+    'search-agents':     'エージェントを検索…',
+    // KPI bar
+    'kpi-pending':       '保留中',
+    'kpi-running':       '実行中',
+    'kpi-completed':     '完了',
+    'kpi-failed':        '失敗',
+    'click-view':        'タップして確認',
+    // stats box
+    'stat-agents':       'Agents',      // "Agents" is universally understood in JP tech
+    'stat-running':      '実行中',
+    'stat-failed':       '失敗',
+    'stat-enabled':      '有効',
+    'stat-pending':      '保留タスク',
+    // analytics page
+    'analytics-chart':   'トークンコスト — 直近7日',
+    'analytics-costs':   '本日のコスト',
+    'analytics-priv':    'Privilege Matrix',  // technical term stays
+    'analytics-agent':   'Agent',
+    'analytics-tokens':  'Tokens',
+    'analytics-cost':    'Cost (est.)',
+    // wiki page
+    'wiki-pages-tab':    'Wikiページ',
+    'wiki-files-tab':    'ファイル',
+    'wiki-welcome':      'Wikiページを左から選択',
+    'wiki-selected':     '件選択',
+    'wiki-search':       '検索…',
+    // docs page
+    'docs-welcome':      'ドキュメントをツリーから選択',
+    // inbox
+    'inbox-sub':         'ローカルアクション待ちのアイテム',
+    // sources/knowledge
+    'src-sources':       'Sources',
+    'src-blocked':       'ブロック済み',
+    'src-followups':     'Follow-up',
+    'src-merges':        'Merges',
+    'src-vaults':        'Vaults',
+    'src-bases':         'Bases',
+    // channels page
+    'ch-routing':        'ルーティング',
+    'ch-server':         'Server channels',
+    'ch-new-folder':     '+ フォルダ',
+    'ch-new-channel':    '+ チャンネル',
+    'ch-add-tag':        '+ タグ',
+    // settings
+    'set-save':          '保存',
+    'set-cancel':        'キャンセル',
   },
   EN: {
-    'all':            'All',
-    'pending':        'Pending',
-    'running':        'Running',
-    'done':           'Done',
-    'failed':         'Failed',
-    'ignored':        'Ignored',
-    'channels':       'Channels',
-    'intensity':      'Intensity',
-    'queue':          'Orchestrator queue',
-    'fact-checks':    'Fact Checks',
-    'search-agents':  'Search agents…',
-    'kpi-pending':    'Pending',
-    'kpi-running':    'Running',
-    'kpi-completed':  'Completed',
-    'kpi-failed':     'Failed',
-    'stat-agents':    'Agents',
-    'stat-running':   'Running',
-    'stat-failed':    'Failed',
-    'stat-enabled':   'Enabled',
-    'stat-pending':   'Pending tasks',
-    'status-idle':    'idle',
-    'status-running': 'running',
-    'status-done':    'done',
-    'status-failed':  'failed',
-    'cat-Intelligence': 'Intelligence',
-    'cat-Development':  'Development',
-    'cat-Knowledge':    'Knowledge',
-    'cat-Content':      'Content',
-    'click-view':     'click to view',
+    'all':               'All',
+    'pending':           'Pending',
+    'running':           'Running',
+    'done':              'Done',
+    'failed':            'Failed',
+    'ignored':           'Ignored',
+    'channels':          'Channels',
+    'intensity':         'Intensity',
+    'queue':             'Queue',
+    'fact-checks':       'Fact Checks',
+    'search-agents':     'Search agents…',
+    'kpi-pending':       'Pending',
+    'kpi-running':       'Running',
+    'kpi-completed':     'Completed',
+    'kpi-failed':        'Failed',
+    'click-view':        'click to view',
+    'stat-agents':       'Agents',
+    'stat-running':      'Running',
+    'stat-failed':       'Failed',
+    'stat-enabled':      'Enabled',
+    'stat-pending':      'Pending tasks',
+    'analytics-chart':   'Token cost — last 7 days',
+    'analytics-costs':   'Agent costs today',
+    'analytics-priv':    'Privilege matrix',
+    'analytics-agent':   'Agent',
+    'analytics-tokens':  'Tokens',
+    'analytics-cost':    'Cost (est.)',
+    'wiki-pages-tab':    'Wiki pages',
+    'wiki-files-tab':    'Raw files',
+    'wiki-welcome':      'Select a page from the wiki',
+    'wiki-selected':     ' selected',
+    'wiki-search':       'Search…',
+    'docs-welcome':      'Select a document from the tree',
+    'inbox-sub':         'Items queued for local action',
+    'src-sources':       'Sources',
+    'src-blocked':       'Blocked',
+    'src-followups':     'Follow-ups',
+    'src-merges':        'Merges',
+    'src-vaults':        'Vaults',
+    'src-bases':         'Bases',
+    'ch-routing':        'Routing',
+    'ch-server':         'Server channels',
+    'ch-new-folder':     '+ New folder',
+    'ch-new-channel':    '+ New channel',
+    'ch-add-tag':        '+ Add tag',
+    'set-save':          'Save',
+    'set-cancel':        'Cancel',
   },
 };
 
@@ -2333,9 +2376,11 @@ function _initChannelsPage() {
   _renderRoutingTable(window._routingRows || [], window._discordChannels || []);
 }
 
-function _renderRoutingTable(rows, channels) {
+function _renderRoutingTable(rows, _channels) {
+  // Routing is now shown inline in the channel tree — store rows for re-render on guild fetch
+  window._routingRows = rows;
   const el = document.getElementById('routing-table');
-  if (!el) return;
+  if (!el) return; // element removed from HTML — routing is now integrated into channel tree
   const chKeys = [...new Set(channels.map(c => c.key).filter(Boolean))].sort();
   // Pretty task type labels
   const LABELS = {
@@ -2383,6 +2428,67 @@ async function _saveRouting(taskType, channelKey) {
   });
   if (!res.ok) showToast('Routing save failed', 'error');
   else showToast(`${taskType} → ${channelKey}`, 'success');
+}
+
+// ─── Forum channel tag management ──────────────────────────────────────────
+function _showAddTagForm(channelId) {
+  const existing = document.getElementById('tag-form-popup');
+  if (existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = 'tag-form-popup';
+  pop.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg);box-shadow:var(--sh);border-radius:12px;padding:16px;min-width:240px';
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">新しいタグを追加</div>
+    <input id="tag-name-input" class="form-input" placeholder="タグ名" style="margin-bottom:8px;font-size:12px">
+    <input id="tag-emoji-input" class="form-input" placeholder="絵文字 (例: 📌)" style="margin-bottom:12px;font-size:12px;width:100px">
+    <div style="display:flex;gap:8px">
+      <button class="save-btn" onclick="_createChannelTag('${esc(channelId)}')">追加</button>
+      <button class="refresh-btn" onclick="document.getElementById('tag-form-popup')?.remove()">キャンセル</button>
+    </div>
+    <div id="tag-form-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+  `;
+  document.body.appendChild(pop);
+  pop.querySelector('#tag-name-input').focus();
+}
+
+async function _createChannelTag(channelId) {
+  const name = document.getElementById('tag-name-input')?.value?.trim();
+  const emoji = document.getElementById('tag-emoji-input')?.value?.trim() || undefined;
+  const status = document.getElementById('tag-form-status');
+  if (!name) { if (status) status.textContent = 'タグ名を入力してください'; return; }
+  if (status) status.textContent = '追加中…';
+  const res = await fetch(apiUrl(`/api/discord/channels/${channelId}/tags`), {
+    method: 'POST',
+    headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, emoji }),
+  }).catch(() => null);
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    if (status) status.textContent = err.error || 'エラーが発生しました';
+    return;
+  }
+  document.getElementById('tag-form-popup')?.remove();
+  showToast(`タグ「${name}」を追加しました`, 'success');
+  // Refresh guild view
+  const guild = _guildsData?.find(g => g.id === _selectedGuildId);
+  if (guild) {
+    const tag = (await res.json()).tags?.find(t => t.name === name);
+    const ch = guild.channels.find(c => c.id === channelId);
+    if (ch && tag) { ch.availableTags = (ch.availableTags || []); ch.availableTags.push(tag); _renderLiveChannels(guild); }
+  }
+}
+
+async function _deleteChannelTag(channelId, tagId) {
+  const res = await fetch(apiUrl(`/api/discord/channels/${channelId}/tags/${tagId}`), {
+    method: 'DELETE', headers: _authHeaders(),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('タグ削除に失敗しました', 'error'); return; }
+  showToast('タグを削除しました', 'success');
+  const guild = _guildsData?.find(g => g.id === _selectedGuildId);
+  if (guild) {
+    const ch = guild.channels.find(c => c.id === channelId);
+    if (ch) { ch.availableTags = (ch.availableTags || []).filter(t => t.id !== tagId); _renderLiveChannels(guild); }
+  }
 }
 
 async function _fetchDiscordGuilds() {
@@ -2448,24 +2554,53 @@ function _renderLiveChannels(guild) {
   }
   const clickable = new Set([0, 5, 11, 15]);
 
+  // Build task→channel map for routing indicators
+  const routingByChKey = {};
+  for (const row of (window._routingRows || [])) {
+    if (!routingByChKey[row.channelKey]) routingByChKey[row.channelKey] = [];
+    routingByChKey[row.channelKey].push(row.taskType);
+  }
+
   function chItem(ch) {
     const icon = CH_TYPE_ICON[ch.type] || '#';
     const regCh = registeredChannelMap.get(String(ch.id));
     const isReg = !!regCh;
     const canInteract = clickable.has(ch.type);
+    const isForum = ch.type === 15;
     const cls = ['ch-tree-item', isReg ? 'registered' : ''].filter(Boolean).join(' ');
     const agents = regCh?.agents || [];
+
+    // Routing: show which task types route to this channel (via its key)
+    const chKey = regCh?.key || '';
+    const routedTasks = chKey ? (routingByChKey[chKey] || []) : [];
+    const routePills = routedTasks.length
+      ? `<div class="ch-tree-agents" style="margin-top:2px">${routedTasks.map(t=>`<span class="ch-tree-agent-pill" style="background:var(--accent-bg);color:var(--m2)">${esc(t.replace(/_/g,' '))}</span>`).join('')}</div>`
+      : '';
+
     const agentPills = agents.length
       ? `<div class="ch-tree-agents">${agents.map(a => `<span class="ch-tree-agent-pill">${esc(a.replace('-agent',''))}</span>`).join('')}</div>`
       : '';
+
+    // Forum channel: show tags + add-tag button
+    const availTags = ch.availableTags || [];
+    const tagSection = isForum
+      ? `<div class="ch-tree-agents" style="margin-top:3px">
+          ${availTags.map(tag=>`<span class="ch-tree-agent-pill" style="background:#1a1a2e;color:#a5b4fc" title="Tag ID: ${esc(tag.id)}">${tag.emoji?tag.emoji+' ':''}${esc(tag.name)}<button onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')" style="margin-left:3px;background:none;border:none;color:var(--m2);cursor:pointer;font-size:9px;padding:0" title="Remove">✕</button></span>`).join('')}
+          <button class="ch-plus-btn" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')" title="Add tag">+タグ</button>
+        </div>`
+      : '';
+
     const plusBtn = canInteract
       ? `<button class="ch-plus-btn" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)" title="Assign agents">+</button>`
       : '';
+
     return `<div class="${cls}" title="ID: ${esc(ch.id)}">
       <span style="flex-shrink:0">${icon}</span>
       <span class="ch-tree-item-name">${esc(ch.name)}</span>
-      ${isReg ? '<span class="ch-tree-check">✓</span>' : ''}
+      ${isReg ? `<span class="ch-tree-check" title="Key: ${esc(chKey)}">✓</span>` : ''}
       ${agentPills}
+      ${routePills}
+      ${tagSection}
       ${plusBtn}
     </div>`;
   }
