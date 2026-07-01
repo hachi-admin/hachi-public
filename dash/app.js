@@ -351,7 +351,8 @@ function nextRun(freq) {
 function agentChip(taskType) {
   const agentId = TASK_TO_AGENT_ID[taskType]; if (!agentId) return '';
   const reg = REGISTRY.find(r => r.id === agentId); if (!reg) return '';
-  return `<span class="agent-chip" style="border-color:${reg.colors[0]}66;color:${reg.colors[0]}">⬡ ${esc(reg.name)}</span>`;
+  const n = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp : reg.name;
+  return `<span class="agent-chip" style="border-color:${reg.colors[0]}66;color:${reg.colors[0]}">⬡ ${esc(n)}</span>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -362,16 +363,17 @@ function _renderAgentStatsBox() {
   const failed  = Object.values(DETAIL_DATA).filter(d => d.status === 'failed').length;
   const enabled = Object.values(DETAIL_DATA).filter(d => d.enabled !== false).length;
   const pending = (TASK_STATS.upcoming || []).length;
+  const t = _I18N[PROJECT_LANG] || _I18N.JP;
   document.getElementById('agent-stats-box').innerHTML = `
-    <div class="asb-stat"><div class="asb-val">${REGISTRY.length}</div><div class="asb-label">Agents</div></div>
+    <div class="asb-stat"><div class="asb-val">${REGISTRY.length}</div><div class="asb-label">${t['stat-agents']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val run">${running}</div><div class="asb-label">Running</div></div>
+    <div class="asb-stat"><div class="asb-val run">${running}</div><div class="asb-label">${t['stat-running']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val fail">${failed}</div><div class="asb-label">Failed</div></div>
+    <div class="asb-stat"><div class="asb-val fail">${failed}</div><div class="asb-label">${t['stat-failed']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val">${enabled}</div><div class="asb-label">Enabled</div></div>
+    <div class="asb-stat"><div class="asb-val">${enabled}</div><div class="asb-label">${t['stat-enabled']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val">${pending}</div><div class="asb-label">Pending tasks</div></div>
+    <div class="asb-stat"><div class="asb-val">${pending}</div><div class="asb-label">${t['stat-pending']}</div></div>
   `;
 }
 
@@ -384,6 +386,8 @@ let _catFilter = 'all', _lvFilter = null, _trigFilter = null;
 function _renderAgentGrid() {
   const grid = document.getElementById('agent-grid');
   if (!grid) return;
+  const t = _I18N[PROJECT_LANG] || _I18N.JP;
+  const isJP = PROJECT_LANG === 'JP';
   grid.innerHTML = REGISTRY.map(reg => {
     const d = DETAIL_DATA[reg.id] || {};
     const status = d.status || 'idle';
@@ -393,6 +397,10 @@ function _renderAgentGrid() {
     const costEst = (COST_BY_AGENT_7D[reg.id] || 0);
     const trig = (d.trigger || 'interactive');
     const spark = LAST_7_KEYS.map(k => (TASK_STATS.byDay?.[k]?.agentCounts?.[reg.id] || 0)).join(',');
+    const displayName = isJP && reg.nameJp ? reg.nameJp : reg.name;
+    const displayDesc = isJP && reg.descJp ? reg.descJp : (reg.desc || '');
+    const statusLabel = t[`status-${status}`] || status;
+    const catLabel    = t[`cat-${reg.category}`] || reg.category || '';
     return `<div class="acard ${status} ${enabled ? '' : 'disabled'}"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${(reg.colors || []).join('|')}"
@@ -405,11 +413,11 @@ function _renderAgentGrid() {
         <canvas class="avatar" width="${SCALE*8}" height="${SCALE*8}" style="image-rendering:pixelated"></canvas>
       </div>
       <div class="acard-info">
-        <div class="acard-name">${esc(reg.name)}</div>
-        <div class="acard-desc">${esc(reg.desc || '')}</div>
+        <div class="acard-name">${esc(displayName)}</div>
+        <div class="acard-desc">${esc(displayDesc)}</div>
         <div class="acard-chips" style="margin-top:4px">
-          <span class="chip chip-${status}">${status}</span>
-          <span class="cat-chip">${esc(reg.category || '')}</span>
+          <span class="chip chip-${status}">${esc(statusLabel)}</span>
+          <span class="cat-chip">${esc(catLabel)}</span>
         </div>
         <div class="acard-foot" style="margin-top:6px">
           <div style="flex:1">
@@ -456,7 +464,8 @@ function _startAvatarAnimations() {
         ctx.fillStyle = reg.colors[0] || '#888'; ctx.fillRect(0,0,cv.width,cv.height);
         ctx.fillStyle = '#fff'; ctx.font = `bold ${cv.width*.42}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText((reg.name||'?').slice(0,2).toUpperCase(), cv.width/2, cv.height/2);
+        const initStr = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp.slice(0,1) : (reg.name||'?').slice(0,2).toUpperCase();
+        ctx.fillText(initStr, cv.width/2, cv.height/2);
       } else {
         drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink, SCALE);
       }
@@ -495,18 +504,19 @@ function _applyAgentFilters() {
 ══════════════════════════════════════════════════════════════ */
 function _renderKpiRow() {
   const bs = ALL_BY_STATUS || {};
+  const t = _I18N[PROJECT_LANG] || _I18N.JP;
   const statuses = [
-    { s:'pending',   label:'Pending',   color:'#64748B' },
-    { s:'running',   label:'Running',   color:'#38BDF8' },
-    { s:'completed', label:'Completed', color:'#34D399' },
-    { s:'failed',    label:'Failed',    color:'#EF4444' },
+    { s:'pending',   key:'kpi-pending',   color:'#64748B' },
+    { s:'running',   key:'kpi-running',   color:'#38BDF8' },
+    { s:'completed', key:'kpi-completed', color:'#34D399' },
+    { s:'failed',    key:'kpi-failed',    color:'#EF4444' },
   ];
-  document.getElementById('kpi-row').innerHTML = statuses.map(({s,label,color}) => {
+  document.getElementById('kpi-row').innerHTML = statuses.map(({s,key,color}) => {
     const n = (bs[s] || []).length;
     return `<div class="kpi" onclick="openTaskModal('${s}')" style="border-top:2px solid ${color}">
-      <div class="kpi-label">${label}</div>
+      <div class="kpi-label">${t[key]}</div>
       <div class="kpi-value" style="color:${color}">${n}</div>
-      <div class="kpi-hint">click to view</div>
+      <div class="kpi-hint">${t['click-view']}</div>
     </div>`;
   }).join('');
 }
@@ -1220,30 +1230,73 @@ async function setIntensity(value) {
 ══════════════════════════════════════════════════════════════ */
 const _I18N = {
   JP: {
-    'all':          'すべて',
-    'pending':      '保留中',
-    'running':      '実行中',
-    'done':         '完了',
-    'failed':       '失敗',
-    'ignored':      '無視',
-    'channels':     'チャンネル',
-    'intensity':    '強度',
-    'queue':        'キュー',
-    'fact-checks':  'ファクトチェック',
-    'search-agents':'エージェントを検索…',
+    // filter tabs
+    'all':            'すべて',
+    'pending':        '保留中',
+    'running':        '実行中',
+    'done':           '完了',
+    'failed':         '失敗',
+    'ignored':        '無視',
+    // section headers
+    'channels':       'チャンネル',
+    'intensity':      '強度',
+    'queue':          'キュー',
+    'fact-checks':    'ファクトチェック',
+    // placeholders
+    'search-agents':  'エージェントを検索…',
+    // KPI / stats box
+    'kpi-pending':    '保留中',
+    'kpi-running':    '実行中',
+    'kpi-completed':  '完了',
+    'kpi-failed':     '失敗',
+    'stat-agents':    'エージェント',
+    'stat-running':   '実行中',
+    'stat-failed':    '失敗',
+    'stat-enabled':   '有効',
+    'stat-pending':   '保留タスク',
+    // status chips on agent cards
+    'status-idle':    'アイドル',
+    'status-running': '実行中',
+    'status-done':    '完了',
+    'status-failed':  '失敗',
+    // category chips
+    'cat-Intelligence': 'インテリジェンス',
+    'cat-Development':  '開発',
+    'cat-Knowledge':    'ナレッジ',
+    'cat-Content':      'コンテンツ',
+    // click hint in KPI
+    'click-view':     'クリックして表示',
   },
   EN: {
-    'all':          'All',
-    'pending':      'Pending',
-    'running':      'Running',
-    'done':         'Done',
-    'failed':       'Failed',
-    'ignored':      'Ignored',
-    'channels':     'Channels',
-    'intensity':    'Intensity',
-    'queue':        'Orchestrator queue',
-    'fact-checks':  'Fact Checks',
-    'search-agents':'Search agents…',
+    'all':            'All',
+    'pending':        'Pending',
+    'running':        'Running',
+    'done':           'Done',
+    'failed':         'Failed',
+    'ignored':        'Ignored',
+    'channels':       'Channels',
+    'intensity':      'Intensity',
+    'queue':          'Orchestrator queue',
+    'fact-checks':    'Fact Checks',
+    'search-agents':  'Search agents…',
+    'kpi-pending':    'Pending',
+    'kpi-running':    'Running',
+    'kpi-completed':  'Completed',
+    'kpi-failed':     'Failed',
+    'stat-agents':    'Agents',
+    'stat-running':   'Running',
+    'stat-failed':    'Failed',
+    'stat-enabled':   'Enabled',
+    'stat-pending':   'Pending tasks',
+    'status-idle':    'idle',
+    'status-running': 'running',
+    'status-done':    'done',
+    'status-failed':  'failed',
+    'cat-Intelligence': 'Intelligence',
+    'cat-Development':  'Development',
+    'cat-Knowledge':    'Knowledge',
+    'cat-Content':      'Content',
+    'click-view':     'click to view',
   },
 };
 
@@ -1266,6 +1319,12 @@ function _syncLangUI() {
   }
   document.documentElement.lang = PROJECT_LANG === 'JP' ? 'ja' : 'en';
   _applyI18n();
+  // Re-render dynamic content that embeds translated strings
+  if (Object.keys(DETAIL_DATA).length) {
+    _renderAgentStatsBox();
+    _renderAgentGrid();
+    _renderKpiRow();
+  }
 }
 
 async function setProjectLanguage(value) {
