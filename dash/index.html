@@ -257,6 +257,7 @@
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI Providers</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'context')">Context</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'location')">Location &amp; Flash</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">Mail</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">Admin</button>
       </nav>
 
@@ -393,6 +394,62 @@
           <div class="section-hd" style="margin-top:20px">Per-agent Flash override</div>
           <div style="font-size:11px;color:var(--m);margin-bottom:10px">Force individual agents to use Flash model regardless of global setting.</div>
           <div class="qs-card" id="settings-flash-list" style="padding:8px"></div>
+        </div>
+
+        <!-- MAIL -->
+        <div class="settings-section" id="ss-mail">
+          <div class="section-hd" style="margin-top:0">Mail Account</div>
+          <div id="mail-status-line" style="font-size:11px;color:var(--m);margin-bottom:12px">Loading…</div>
+          <div class="qs-field">
+            <label class="form-label">IMAP Host</label>
+            <input class="form-input" id="mail-host" type="text" placeholder="imap.gmail.com" autocomplete="off">
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">IMAP Port</label>
+            <input class="form-input" id="mail-port" type="number" placeholder="993" style="width:90px">
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">Email address</label>
+            <input class="form-input" id="mail-user" type="email" placeholder="you@gmail.com" autocomplete="off">
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">SMTP Host</label>
+            <input class="form-input" id="mail-smtp-host" type="text" placeholder="smtp.gmail.com" autocomplete="off">
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">SMTP Port</label>
+            <input class="form-input" id="mail-smtp-port" type="number" placeholder="587" style="width:90px">
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">Spam folder name</label>
+            <input class="form-input" id="mail-spam-folder" type="text" placeholder="Spam" style="width:160px">
+          </div>
+          <div class="qs-field" style="margin-top:14px">
+            <label class="form-label">Active window (UTC hours)</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+              <input class="form-input" id="mail-start-utc" type="number" min="0" max="23" placeholder="22" style="width:70px">
+              <span style="font-size:11px;color:var(--m)">to</span>
+              <input class="form-input" id="mail-end-utc" type="number" min="0" max="23" placeholder="13" style="width:70px">
+            </div>
+            <div style="font-size:10px;color:var(--m);margin-top:4px">Default 22–13 UTC = JST 7:00–22:00. Checks outside this window are skipped.</div>
+          </div>
+          <div class="qs-field" style="margin-top:10px">
+            <label class="form-label">Check every N hours</label>
+            <input class="form-input" id="mail-interval" type="number" min="1" max="24" placeholder="4" style="width:70px">
+          </div>
+          <button class="save-btn" style="margin-top:16px" onclick="saveMailConfig()">Save</button>
+          <div id="mail-save-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+          <div class="section-hd" style="margin-top:24px">Gmail App Password Setup</div>
+          <div style="font-size:11px;color:var(--m);line-height:1.7">
+            <ol style="padding-left:16px;margin:6px 0">
+              <li>Enable IMAP in Gmail: Settings → See all settings → Forwarding and POP/IMAP → Enable IMAP</li>
+              <li>Create an App Password: Google Account → Security → 2-Step Verification → App passwords</li>
+              <li>Store the password in GCP Secret Manager as <code>HACHI_MAIL_PASSWORD</code></li>
+              <li>Set Cloud Run env vars: <code>MAIL_HOST=imap.gmail.com</code>, <code>MAIL_USER=hachiproject888@gmail.com</code>, <code>MAIL_SMTP_HOST=smtp.gmail.com</code></li>
+              <li>Redeploy after updating secrets</li>
+            </ol>
+            <div style="margin-top:8px">Financial emails are posted to the <strong>billing-and-expenses</strong> Discord channel. Reply suggestions appear in <strong>mails</strong>.</div>
+          </div>
         </div>
 
         <!-- ADMIN -->

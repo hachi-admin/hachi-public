@@ -832,6 +832,68 @@ function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
   if (id === 'location') _renderSettingsLocation();
+  if (id === 'mail') _loadMailConfig();
+}
+
+async function _loadMailConfig() {
+  const status = document.getElementById('mail-status-line');
+  if (status) status.textContent = 'Loading…';
+  try {
+    const res = await fetch(apiUrl('/api/mail/config'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
+    set('mail-host',       d.host);
+    set('mail-port',       d.port);
+    set('mail-user',       d.user);
+    set('mail-smtp-host',  d.smtpHost);
+    set('mail-smtp-port',  d.smtpPort);
+    set('mail-spam-folder',d.spamFolder);
+    set('mail-start-utc',  d.activeStartUtc);
+    set('mail-end-utc',    d.activeEndUtc);
+    set('mail-interval',   d.intervalHours);
+    if (status) {
+      const configured = d.configured;
+      const lastScan = d.lastScanAt ? new Date(d.lastScanAt._seconds ? d.lastScanAt._seconds * 1000 : d.lastScanAt).toLocaleString() : 'Never';
+      status.innerHTML = configured
+        ? `<span style="color:var(--grn)">Connected</span> — ${esc(d.user)} · Last scan: ${esc(lastScan)}`
+        : '<span style="color:var(--red)">Not configured</span> — set MAIL_HOST and MAIL_USER below, then store App Password in Secret Manager';
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+async function saveMailConfig() {
+  const get = id => document.getElementById(id)?.value.trim();
+  const body = {
+    host:           get('mail-host')        || undefined,
+    port:           Number(get('mail-port'))|| undefined,
+    user:           get('mail-user')        || undefined,
+    smtpHost:       get('mail-smtp-host')   || undefined,
+    smtpPort:       Number(get('mail-smtp-port')) || undefined,
+    spamFolder:     get('mail-spam-folder') || undefined,
+    activeStartUtc: Number(get('mail-start-utc')),
+    activeEndUtc:   Number(get('mail-end-utc')),
+    intervalHours:  Number(get('mail-interval')) || undefined,
+  };
+  // Strip undefined/NaN
+  for (const k of Object.keys(body)) { if (body[k] === undefined || Number.isNaN(body[k])) delete body[k]; }
+  const s = document.getElementById('mail-save-status');
+  if (s) s.textContent = 'Saving…';
+  try {
+    const res = await fetch(apiUrl('/api/mail/config'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.status); }
+    if (s) s.textContent = 'Saved.';
+    showToast('Mail config saved.', 'success');
+    await _loadMailConfig();
+  } catch (e) {
+    if (s) s.textContent = 'Error: ' + e.message;
+    showToast('Save failed: ' + e.message, 'error');
+  }
 }
 
 function _renderSettingsLocation() {
