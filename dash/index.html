@@ -81,8 +81,8 @@
 
     <!-- Filter bar -->
     <div class="filter-bar">
-      <input class="filter-search" id="agent-search" placeholder="Search agents…" oninput="filterAgents()">
-      <button class="cat-tab active" data-cat="all" onclick="setCatFilter(this,'all')">All</button>
+      <input class="filter-search" id="agent-search" placeholder="エージェントを検索…" data-i18n-ph="search-agents" oninput="filterAgents()">
+      <button class="cat-tab active" data-cat="all" onclick="setCatFilter(this,'all')" data-i18n="all">すべて</button>
       <button class="cat-tab" data-cat="Intelligence" onclick="setCatFilter(this,'Intelligence')">Intelligence</button>
       <button class="cat-tab" data-cat="Knowledge" onclick="setCatFilter(this,'Knowledge')">Knowledge</button>
       <button class="cat-tab" data-cat="Development" onclick="setCatFilter(this,'Development')">Dev</button>
@@ -100,7 +100,7 @@
 
     <!-- Cost + intensity strip -->
     <div class="cost-strip" style="margin-top:20px">
-      <span class="cs-label">Intensity</span>
+      <span class="cs-label" data-i18n="intensity">強度</span>
       <select class="intensity-select" id="intensity-select" onchange="setIntensity(this.value)">
         <option value="conservative">Conservative</option>
         <option value="balanced" selected>Balanced</option>
@@ -113,7 +113,7 @@
     <div id="kpi-row" class="kpi-row" style="margin-top:16px"></div>
 
     <!-- Channel cards -->
-    <div class="section-hd">Channels</div>
+    <div class="section-hd" data-i18n="channels">チャンネル</div>
     <div id="channel-cards" class="channel-cards"></div>
 
   </section>
@@ -123,17 +123,17 @@
     <div class="page-hd">
       <div>
         <div class="page-title">タスク</div>
-        <div class="page-sub">Orchestrator queue</div>
+        <div class="page-sub" data-i18n="queue">キュー</div>
       </div>
     </div>
 
     <!-- Filters -->
     <div class="filter-bar" style="margin-bottom:10px">
-      <button class="qcat active" data-status="all" onclick="setTaskFilter(this,'all')">All</button>
-      <button class="qcat" data-status="pending" onclick="setTaskFilter(this,'pending')">Pending</button>
-      <button class="qcat" data-status="running" onclick="setTaskFilter(this,'running')">Running</button>
-      <button class="qcat" data-status="completed" onclick="setTaskFilter(this,'completed')">Done</button>
-      <button class="qcat" data-status="failed" onclick="setTaskFilter(this,'failed')">Failed</button>
+      <button class="qcat active" data-status="all" onclick="setTaskFilter(this,'all')" data-i18n="all">すべて</button>
+      <button class="qcat" data-status="pending" onclick="setTaskFilter(this,'pending')" data-i18n="pending">保留中</button>
+      <button class="qcat" data-status="running" onclick="setTaskFilter(this,'running')" data-i18n="running">実行中</button>
+      <button class="qcat" data-status="completed" onclick="setTaskFilter(this,'completed')" data-i18n="done">完了</button>
+      <button class="qcat" data-status="failed" onclick="setTaskFilter(this,'failed')" data-i18n="failed">失敗</button>
     </div>
 
     <div id="task-feed" class="feed-box"></div>
@@ -147,16 +147,16 @@
     </div>
 
     <div class="tab-bar">
-      <button class="tab-btn active" data-itab="pending" onclick="setITab(this,'pending')">Pending</button>
-      <button class="tab-btn" data-itab="done" onclick="setITab(this,'done')">Done</button>
-      <button class="tab-btn" data-itab="ignored" onclick="setITab(this,'ignored')">Ignored</button>
+      <button class="tab-btn active" data-itab="pending" onclick="setITab(this,'pending')" data-i18n="pending">保留中</button>
+      <button class="tab-btn" data-itab="done" onclick="setITab(this,'done')" data-i18n="done">完了</button>
+      <button class="tab-btn" data-itab="ignored" onclick="setITab(this,'ignored')" data-i18n="ignored">無視</button>
     </div>
     <div class="tab-content">
       <div id="inbox-list"></div>
     </div>
 
     <!-- Fact checks -->
-    <div class="section-hd" style="margin-top:24px">Fact Checks</div>
+    <div class="section-hd" style="margin-top:24px" data-i18n="fact-checks">ファクトチェック</div>
     <div id="factcheck-list"></div>
   </section>
 

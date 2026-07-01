@@ -1216,18 +1216,56 @@ async function setIntensity(value) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   PROJECT LANGUAGE
+   PROJECT LANGUAGE + I18N
 ══════════════════════════════════════════════════════════════ */
+const _I18N = {
+  JP: {
+    'all':          'すべて',
+    'pending':      '保留中',
+    'running':      '実行中',
+    'done':         '完了',
+    'failed':       '失敗',
+    'ignored':      '無視',
+    'channels':     'チャンネル',
+    'intensity':    '強度',
+    'queue':        'キュー',
+    'fact-checks':  'ファクトチェック',
+    'search-agents':'エージェントを検索…',
+  },
+  EN: {
+    'all':          'All',
+    'pending':      'Pending',
+    'running':      'Running',
+    'done':         'Done',
+    'failed':       'Failed',
+    'ignored':      'Ignored',
+    'channels':     'Channels',
+    'intensity':    'Intensity',
+    'queue':        'Orchestrator queue',
+    'fact-checks':  'Fact Checks',
+    'search-agents':'Search agents…',
+  },
+};
+
+function _applyI18n() {
+  const t = _I18N[PROJECT_LANG] || _I18N.JP;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const v = t[el.dataset.i18n];
+    if (v !== undefined) el.textContent = v;
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    const v = t[el.dataset.i18nPh];
+    if (v !== undefined) el.placeholder = v;
+  });
+}
+
 function _syncLangUI() {
   for (const id of ['lang-select-s', 'lang-select-h']) {
     const sel = document.getElementById(id);
     if (sel) sel.value = PROJECT_LANG;
   }
-  document.documentElement.lang = PROJECT_LANG === 'JP' ? 'ja'
-    : PROJECT_LANG === 'PT' ? 'pt'
-    : PROJECT_LANG === 'ES' ? 'es'
-    : PROJECT_LANG === 'FR' ? 'fr'
-    : 'en';
+  document.documentElement.lang = PROJECT_LANG === 'JP' ? 'ja' : 'en';
+  _applyI18n();
 }
 
 async function setProjectLanguage(value) {
