@@ -83,10 +83,10 @@
     <div class="filter-bar">
       <input class="filter-search" id="agent-search" placeholder="エージェントを検索…" data-i18n-ph="search-agents" oninput="filterAgents()">
       <button class="cat-tab active" data-cat="all" onclick="setCatFilter(this,'all')" data-i18n="all">すべて</button>
-      <button class="cat-tab" data-cat="Intelligence" onclick="setCatFilter(this,'Intelligence')">Intelligence</button>
-      <button class="cat-tab" data-cat="Knowledge" onclick="setCatFilter(this,'Knowledge')">Knowledge</button>
-      <button class="cat-tab" data-cat="Development" onclick="setCatFilter(this,'Development')">Dev</button>
-      <button class="cat-tab" data-cat="Content" onclick="setCatFilter(this,'Content')">Content</button>
+      <button class="cat-tab" data-cat="Intelligence" onclick="setCatFilter(this,'Intelligence')" data-i18n="cat-intelligence">インテリジェンス</button>
+      <button class="cat-tab" data-cat="Knowledge" onclick="setCatFilter(this,'Knowledge')" data-i18n="cat-knowledge">ナレッジ</button>
+      <button class="cat-tab" data-cat="Development" onclick="setCatFilter(this,'Development')" data-i18n="cat-development">開発</button>
+      <button class="cat-tab" data-cat="Content" onclick="setCatFilter(this,'Content')" data-i18n="cat-content">コンテンツ</button>
       <span style="margin-left:auto"></span>
       <div class="av-theme-bar">
         <button class="av-theme-btn active" onclick="setAvTheme('classic',this)">Classic</button>
@@ -102,9 +102,9 @@
     <div class="cost-strip" style="margin-top:20px">
       <span class="cs-label" data-i18n="intensity">強度</span>
       <select class="intensity-select" id="intensity-select" onchange="setIntensity(this.value)">
-        <option value="conservative">Conservative</option>
-        <option value="balanced" selected>Balanced</option>
-        <option value="aggressive">Aggressive</option>
+        <option value="conservative">控えめ</option>
+        <option value="balanced" selected>バランス</option>
+        <option value="aggressive">積極的</option>
       </select>
       <span id="day-cost-label" class="cs-note"></span>
     </div>
@@ -193,10 +193,10 @@
     </div>
     <!-- Multi-select toolbar (hidden by default) -->
     <div class="wiki-select-bar" id="wiki-select-bar" style="display:none">
-      <span id="wiki-select-count">0 selected</span>
-      <button class="save-btn" onclick="showWikiMultiPrompt('quiz')">✏️ Quiz prompt</button>
-      <button class="save-btn" onclick="showWikiMultiPrompt('vocab')">📖 Vocab prompt</button>
-      <button class="refresh-btn" onclick="toggleWikiSelect()">✕ Cancel</button>
+      <span id="wiki-select-count">0件選択</span>
+      <button class="save-btn" onclick="showWikiMultiPrompt('quiz')">✏️ クイズプロンプト</button>
+      <button class="save-btn" onclick="showWikiMultiPrompt('vocab')">📖 ボキャブラリープロンプト</button>
+      <button class="refresh-btn" onclick="toggleWikiSelect()">✕ キャンセル</button>
     </div>
   </section>
 
@@ -207,12 +207,12 @@
     </div>
 
     <div class="tab-bar" role="tablist">
-      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')" data-i18n="src-sources">Sources</button>
+      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')" data-i18n="src-sources">ソース</button>
       <button class="tab-btn" data-ktab="blocked" onclick="setKTab(this,'blocked')" data-i18n="src-blocked">ブロック済み</button>
-      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')" data-i18n="src-followups">Follow-up</button>
-      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">Merges</button>
-      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">Vaults</button>
-      <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')" data-i18n="src-bases">Bases</button>
+      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')" data-i18n="src-followups">フォローアップ</button>
+      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">マージ</button>
+      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">ヴォールト</button>
+      <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')" data-i18n="src-bases">ベース</button>
     </div>
 
     <div class="tab-content">
@@ -275,7 +275,7 @@
         <!-- GENERAL -->
         <div class="settings-section active" id="ss-general">
           <div class="section-hd" style="margin-top:0">一般設定</div>
-          <div class="qs-card">
+          <div class="qs-card" style="flex-direction:column">
             <div class="qs-field">
               <label class="form-label" for="intensity-select-s">強度</label>
               <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
@@ -283,20 +283,20 @@
                 <option value="balanced" selected>Balanced</option>
                 <option value="aggressive">Aggressive</option>
               </select>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">Controls agent review thresholds and task approval flow.</div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">エージェントのレビュー閾値とタスク承認フローを制御します。</div>
             </div>
-            <div class="qs-field" style="margin-top:14px">
-              <label class="form-label">Content language</label>
+            <div class="qs-field">
+              <label class="form-label">コンテンツ言語</label>
               <select class="form-select" id="lang-select-s" onchange="setProjectLanguage(this.value)">
                 <option value="JP">Japanese（日本語）</option>
                 <option value="EN">English</option>
               </select>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">Default output language for AI-generated content (news, wiki, summaries). Per-user <code>/lang</code> overrides this.</div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">AI生成コンテンツ（ニュース・Wiki・要約）のデフォルト出力言語。ユーザーごとに <code>/lang</code> で上書き可能。</div>
             </div>
-            <div class="qs-field" style="margin-top:14px">
+            <div class="qs-field">
               <label class="form-label">Flash オーバーライド</label>
               <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">Forces all agents to use Flash model regardless of per-agent setting.</div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">全エージェントをエージェント個別設定に関わらず Flash モデルで動作させます。</div>
             </div>
           </div>
         </div>
@@ -304,156 +304,156 @@
         <!-- AI PROVIDERS -->
         <div class="settings-section" id="ss-providers">
           <div class="section-hd" style="margin-top:0">プロバイダー</div>
-          <div class="qs-card">
+          <div class="qs-card" style="flex-direction:column">
             <div class="qs-field">
-              <label class="form-label">Provider</label>
+              <label class="form-label">プロバイダー</label>
               <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)">
                 <option value="gemini">Google Gemini</option>
                 <option value="claude">Anthropic Claude</option>
               </select>
             </div>
-            <div class="qs-field" style="margin-top:10px">
-              <label class="form-label">API key override (Firestore, for testing)</label>
+            <div class="qs-field">
+              <label class="form-label">API キーの上書き (Firestore・テスト用)</label>
               <div style="display:flex;gap:8px;align-items:center">
-                <input class="form-input" id="provider-key-input" type="password" placeholder="Paste key to override…" autocomplete="new-password" style="flex:1;font-size:11px">
-                <button class="save-btn" onclick="saveProviderKey()">Save</button>
+                <input class="form-input" id="provider-key-input" type="password" placeholder="キーを貼り付けて上書き…" autocomplete="new-password" style="flex:1;font-size:11px">
+                <button class="save-btn" onclick="saveProviderKey()">保存</button>
               </div>
               <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
             </div>
             <div id="provider-key-hint" style="font-size:10px;color:var(--m);margin-top:6px;padding-top:6px;border-top:1px solid var(--div)">
-              Key saved here overrides GCP Secret Manager (stored in Firestore, auth-gated). For production keys, rotate in Secret Manager below.
+              ここで保存したキーは GCP Secret Manager を上書きします（Firestore に保存・認証必須）。本番キーは以下の Secret Manager で更新してください。
             </div>
           </div>
 
           <div class="section-hd" style="margin-top:20px">GCP Secret Manager</div>
           <div style="font-size:11px;color:var(--m);margin-bottom:10px;line-height:1.6">
-            Production keys live in GCP Secret Manager. Changes there take effect on next Cloud Run revision.
-            <a href="https://console.cloud.google.com/security/secret-manager" target="_blank" rel="noopener" style="color:var(--acc);display:inline-block;margin-top:4px">&#8594; Open GCP Secret Manager</a>
+            本番キーは GCP Secret Manager に保管されています。変更は次回の Cloud Run デプロイ時に反映されます。
+            <a href="https://console.cloud.google.com/security/secret-manager" target="_blank" rel="noopener" style="color:var(--acc);display:inline-block;margin-top:4px">&#8594; GCP Secret Manager を開く</a>
           </div>
           <div class="qs-card" style="display:flex;flex-direction:column;gap:0">
             <div style="padding-bottom:12px">
               <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">GEMINI_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">All Gemini agents (Pro &amp; Flash). Rotate at Google AI Studio.</div>
+              <div style="font-size:11px;color:var(--m)">全 Gemini エージェント (Pro &amp; Flash)。Google AI Studio でローテーション。</div>
             </div>
             <div style="border-top:1px solid var(--div);padding-top:12px;padding-bottom:12px">
               <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">ANTHROPIC_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">Active when Claude is the selected provider. Rotate at Anthropic Console.</div>
+              <div style="font-size:11px;color:var(--m)">Claude を選択プロバイダーとして使用中に有効。Anthropic Console でローテーション。</div>
             </div>
             <div style="border-top:1px solid var(--div);padding-top:12px" id="provider-agents-list">
-              <div style="font-size:11px;color:var(--m)">Per-agent model assignments shown in Overview cards.</div>
+              <div style="font-size:11px;color:var(--m)">エージェントごとのモデル割り当ては概要カードに表示されます。</div>
             </div>
           </div>
         </div>
 
         <!-- CONTEXT WINDOW -->
         <div class="settings-section" id="ss-context">
-          <div class="section-hd" style="margin-top:0">Context Window</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:12px">Global defaults. Per-channel context can be adjusted in the Channels page.</div>
-          <div class="qs-card" id="context-settings-card">
+          <div class="section-hd" style="margin-top:0">コンテキストウィンドウ</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:12px">グローバル設定。チャンネルごとのコンテキストはチャンネルページで調整できます。</div>
+          <div class="qs-card" style="flex-direction:column" id="context-settings-card">
             <div class="qs-field">
-              <label class="form-label">Max messages retained</label>
+              <label class="form-label">最大保持メッセージ数</label>
               <div style="display:flex;gap:10px;align-items:center">
                 <input type="range" id="ctx-max-messages" min="5" max="100" step="5" value="20"
                   style="flex:1" oninput="document.getElementById('ctx-max-label').textContent=this.value">
                 <span id="ctx-max-label" style="font-size:12px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">20</span>
               </div>
-              <div style="font-size:10px;color:var(--m);margin-top:3px">Messages loaded per chat context window. Lower = cheaper, higher = more memory.</div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">チャットコンテキストウィンドウに読み込むメッセージ数。少ないほどコスト削減、多いほど長期記憶が向上します。</div>
             </div>
-            <div class="qs-field" style="margin-top:12px">
-              <label class="form-label">Context compression</label>
+            <div class="qs-field">
+              <label class="form-label">コンテキスト圧縮</label>
               <div style="display:flex;align-items:center;gap:10px">
                 <button class="flash-toggle inactive" id="ctx-compress-btn" onclick="toggleContextCompression()">Off</button>
                 <select class="form-select" id="ctx-compress-model" style="width:auto;font-size:11px" onchange="saveContextSettings()">
-                  <option value="flash">Flash (fast + cheap)</option>
-                  <option value="pro">Pro (richer summary)</option>
+                  <option value="flash">Flash (高速・低コスト)</option>
+                  <option value="pro">Pro (高品質な要約)</option>
                 </select>
               </div>
-              <div style="font-size:10px;color:var(--m);margin-top:3px">Summarizes older messages with AI before injecting into context. Reduces token cost on long conversations.</div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">古いメッセージを AI で要約してからコンテキストに注入します。長い会話のトークンコストを削減します。</div>
             </div>
-            <button class="save-btn" style="margin-top:12px" onclick="saveContextSettings()">Save</button>
+            <button class="save-btn" style="margin-top:12px" onclick="saveContextSettings()">保存</button>
             <div id="ctx-save-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
           </div>
         </div>
 
         <!-- LOCATION & FLASH -->
         <div class="settings-section" id="ss-location">
-          <div class="section-hd" style="margin-top:0">Location</div>
-          <div class="qs-card">
-            <div id="settings-loc-detail" style="font-size:12px;color:var(--m);margin-bottom:12px;line-height:1.5">Loading…</div>
+          <div class="section-hd" style="margin-top:0">位置情報</div>
+          <div class="qs-card" style="flex-direction:column">
+            <div id="settings-loc-detail" style="font-size:12px;color:var(--m);margin-bottom:12px;line-height:1.5">読み込み中…</div>
             <div class="form-grid" style="margin-bottom:0">
               <div class="qs-field">
-                <label class="form-label">City override</label>
-                <input class="form-input" id="settings-loc-city" placeholder="e.g. Tokyo" style="font-size:11px">
+                <label class="form-label">都市の上書き</label>
+                <input class="form-input" id="settings-loc-city" placeholder="例: Tokyo" style="font-size:11px">
               </div>
               <div class="qs-field">
-                <label class="form-label">Country code</label>
-                <input class="form-input" id="settings-loc-country" placeholder="e.g. JP" style="font-size:11px">
+                <label class="form-label">国コード</label>
+                <input class="form-input" id="settings-loc-country" placeholder="例: JP" style="font-size:11px">
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
-              <button class="save-btn" onclick="saveLocationOverrideSettings()">Save override</button>
-              <button class="refresh-btn" onclick="clearLocationOverride()">Clear override</button>
+              <button class="save-btn" onclick="saveLocationOverrideSettings()">上書きを保存</button>
+              <button class="refresh-btn" onclick="clearLocationOverride()">上書きをクリア</button>
             </div>
           </div>
 
-          <div class="section-hd" style="margin-top:20px">Per-agent Flash override</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:10px">Force individual agents to use Flash model regardless of global setting.</div>
+          <div class="section-hd" style="margin-top:20px">エージェントごとの Flash 上書き</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:10px">個別エージェントをグローバル設定に関わらず Flash モデルで動作させます。</div>
           <div class="qs-card" id="settings-flash-list" style="padding:8px"></div>
         </div>
 
         <!-- MAIL -->
         <div class="settings-section" id="ss-mail">
-          <div class="section-hd" style="margin-top:0">Mail Account</div>
-          <div id="mail-status-line" style="font-size:11px;color:var(--m);margin-bottom:12px">Loading…</div>
+          <div class="section-hd" style="margin-top:0">メールアカウント</div>
+          <div id="mail-status-line" style="font-size:11px;color:var(--m);margin-bottom:12px">読み込み中…</div>
           <div class="qs-field">
-            <label class="form-label">IMAP Host</label>
+            <label class="form-label">IMAP ホスト</label>
             <input class="form-input" id="mail-host" type="text" placeholder="imap.gmail.com" autocomplete="off">
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">IMAP Port</label>
+            <label class="form-label">IMAP ポート</label>
             <input class="form-input" id="mail-port" type="number" placeholder="993" style="width:90px">
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">Email address</label>
+            <label class="form-label">メールアドレス</label>
             <input class="form-input" id="mail-user" type="email" placeholder="you@gmail.com" autocomplete="off">
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP Host</label>
+            <label class="form-label">SMTP ホスト</label>
             <input class="form-input" id="mail-smtp-host" type="text" placeholder="smtp.gmail.com" autocomplete="off">
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP Port</label>
+            <label class="form-label">SMTP ポート</label>
             <input class="form-input" id="mail-smtp-port" type="number" placeholder="587" style="width:90px">
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">Spam folder name</label>
+            <label class="form-label">スパムフォルダ名</label>
             <input class="form-input" id="mail-spam-folder" type="text" placeholder="Spam" style="width:160px">
           </div>
           <div class="qs-field" style="margin-top:14px">
-            <label class="form-label">Active window (UTC hours)</label>
+            <label class="form-label">稼働時間帯 (UTC)</label>
             <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
               <input class="form-input" id="mail-start-utc" type="number" min="0" max="23" placeholder="22" style="width:70px">
-              <span style="font-size:11px;color:var(--m)">to</span>
+              <span style="font-size:11px;color:var(--m)">〜</span>
               <input class="form-input" id="mail-end-utc" type="number" min="0" max="23" placeholder="13" style="width:70px">
             </div>
-            <div style="font-size:10px;color:var(--m);margin-top:4px">Default 22–13 UTC = JST 7:00–22:00. Checks outside this window are skipped.</div>
+            <div style="font-size:10px;color:var(--m);margin-top:4px">デフォルト 22〜13 UTC = JST 7:00〜22:00。この時間帯外のチェックはスキップされます。</div>
           </div>
           <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">Check every N hours</label>
+            <label class="form-label">チェック間隔 (N時間)</label>
             <input class="form-input" id="mail-interval" type="number" min="1" max="24" placeholder="4" style="width:70px">
           </div>
-          <button class="save-btn" style="margin-top:16px" onclick="saveMailConfig()">Save</button>
+          <button class="save-btn" style="margin-top:16px" onclick="saveMailConfig()">保存</button>
           <div id="mail-save-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
-          <div class="section-hd" style="margin-top:24px">Gmail App Password Setup</div>
+          <div class="section-hd" style="margin-top:24px">Gmail アプリパスワードの設定</div>
           <div style="font-size:11px;color:var(--m);line-height:1.7">
             <ol style="padding-left:16px;margin:6px 0">
-              <li>Enable IMAP in Gmail: Settings → See all settings → Forwarding and POP/IMAP → Enable IMAP</li>
-              <li>Create an App Password: Google Account → Security → 2-Step Verification → App passwords</li>
-              <li>Store the password in GCP Secret Manager as <code>HACHI_MAIL_PASSWORD</code></li>
-              <li>Set Cloud Run env vars: <code>MAIL_HOST=imap.gmail.com</code>, <code>MAIL_USER=hachiproject888@gmail.com</code>, <code>MAIL_SMTP_HOST=smtp.gmail.com</code></li>
-              <li>Redeploy after updating secrets</li>
+              <li>Gmail で IMAP を有効化: 設定 → すべての設定を表示 → メール転送と POP/IMAP → IMAP を有効にする</li>
+              <li>アプリパスワードを作成: Google アカウント → セキュリティ → 2段階認証 → アプリパスワード</li>
+              <li>パスワードを GCP Secret Manager に <code>HACHI_MAIL_PASSWORD</code> として保存</li>
+              <li>Cloud Run 環境変数を設定: <code>MAIL_HOST=imap.gmail.com</code>, <code>MAIL_USER=hachiproject888@gmail.com</code>, <code>MAIL_SMTP_HOST=smtp.gmail.com</code></li>
+              <li>シークレット更新後に再デプロイ</li>
             </ol>
-            <div style="margin-top:8px">Financial emails are posted to the <strong>billing-and-expenses</strong> Discord channel. Reply suggestions appear in <strong>mails</strong>.</div>
+            <div style="margin-top:8px">金融関連メールは <strong>billing-and-expenses</strong> Discord チャンネルに投稿されます。返信候補は <strong>mails</strong> に表示されます。</div>
           </div>
         </div>
 
@@ -461,18 +461,18 @@
         <div class="settings-section" id="ss-admin">
           <div class="section-hd" style="margin-top:0">ダッシュボードアクセス</div>
           <div class="qs-card" id="access-card">
-            <div style="font-size:11px;color:var(--m);margin-bottom:10px">GitHub accounts that can log into this dashboard. You cannot remove yourself.</div>
+            <div style="font-size:11px;color:var(--m);margin-bottom:10px">このダッシュボードにログインできる GitHub アカウント。自分自身は削除できません。</div>
             <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
             <div style="display:flex;gap:8px;align-items:center">
               <input class="form-input" id="access-add-input" type="text" placeholder="github-username" autocomplete="off" style="flex:1;font-size:12px"
                 onkeydown="if(event.key==='Enter')addDashboardUser()">
-              <button class="save-btn" onclick="addDashboardUser()">Add</button>
+              <button class="save-btn" onclick="addDashboardUser()">追加</button>
             </div>
             <div id="access-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
           </div>
-          <div class="section-hd" style="margin-top:24px">Admin</div>
-          <p class="admin-hint">All changes go through the API at the URL configured on page load.</p>
-          <button class="save-btn" onclick="resetDashLayout()">&#8635; Reset dashboard layout</button>
+          <div class="section-hd" style="margin-top:24px">管理操作</div>
+          <p class="admin-hint">すべての変更はページ読み込み時に設定された API URL を経由します。</p>
+          <button class="save-btn" onclick="resetDashLayout()">&#8635; ダッシュボードレイアウトをリセット</button>
         </div>
 
       </div><!-- end settings-panel -->
@@ -492,19 +492,19 @@
     <!-- Bot permissions info -->
     <details style="background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;padding:12px 14px;margin-bottom:16px">
       <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--txt);cursor:pointer">
-        Bot visibility — required Discord permissions
+        Bot の表示範囲 — 必要な Discord 権限
         <span style="color:var(--m);font-size:10px;font-weight:400">&#9660;</span>
       </summary>
       <div style="margin-top:10px;font-size:11px;color:var(--m);line-height:1.7">
-        <strong style="color:var(--txt)">Problem:</strong> the bot only sees channels its role can access.<br>
-        <strong style="color:var(--txt)">Fix:</strong>
+        <strong style="color:var(--txt)">問題:</strong> Bot はロールがアクセスできるチャンネルのみ表示されます。<br>
+        <strong style="color:var(--txt)">解決方法:</strong>
         <ol style="margin:4px 0 8px 16px">
-          <li>Server Settings &#8594; Roles &#8594; create role "Bot"</li>
-          <li>Enable: View Channels, Read Message History, Send Messages, Send in Threads, Embed Links, Manage Channels, Manage Messages</li>
-          <li>Assign this role to your bot in Server Members</li>
-          <li>For private channels: add the Bot role in that channel's Permission Overrides</li>
+          <li>サーバー設定 &#8594; ロール &#8594; 「Bot」ロールを作成</li>
+          <li>有効化: View Channels, Read Message History, Send Messages, Send in Threads, Embed Links, Manage Channels, Manage Messages</li>
+          <li>サーバーメンバーで Bot にこのロールを割り当て</li>
+          <li>プライベートチャンネルの場合: そのチャンネルの権限オーバーライドに Bot ロールを追加</li>
         </ol>
-        <strong style="color:var(--txt)">Required permissions (integer: 3271745):</strong>
+        <strong style="color:var(--txt)">必要な権限 (integer: 3271745):</strong>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
           <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">View Channels</span>
           <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Read Message History</span>
@@ -522,7 +522,7 @@
 
     <!-- Guild picker (populated after fetch) -->
     <div id="guild-picker" style="display:none;margin-bottom:12px">
-      <label class="form-label">Server</label>
+      <label class="form-label">サーバー</label>
       <select class="form-select" id="guild-select" onchange="_onGuildSelect(this.value)" style="max-width:300px"></select>
     </div>
 
@@ -533,52 +533,52 @@
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()" data-i18n="ch-new-folder">+ フォルダ</button>
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()" data-i18n="ch-new-channel">+ チャンネル</button>
       </div>
-      <div style="font-size:10px;color:var(--m);margin-bottom:8px">Green channels are registered. Click <strong>+</strong> to assign agents — each agent posts to one channel only.</div>
+      <div style="font-size:10px;color:var(--m);margin-bottom:8px">緑色のチャンネルは登録済みです。<strong>+</strong> をクリックしてエージェントを割り当てます。各エージェントは1チャンネルにのみ投稿します。</div>
       <div id="live-channel-tree" class="ch-tree"></div>
 
       <!-- New category (folder) form -->
       <div id="create-cat-form" style="display:none;margin-top:10px;padding:12px;background:var(--bg);box-shadow:var(--sh-press);border-radius:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px">New category</div>
-        <input class="form-input" id="new-cat-name" placeholder="Category name (e.g. BOT CHANNELS)" style="margin-bottom:8px;font-size:11px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px">新しいカテゴリ</div>
+        <input class="form-input" id="new-cat-name" placeholder="カテゴリ名 (例: BOT CHANNELS)" style="margin-bottom:8px;font-size:11px">
         <div style="display:flex;gap:6px">
-          <button class="save-btn" onclick="createDiscordCategory()" id="create-cat-btn">Create folder</button>
-          <button class="refresh-btn" onclick="document.getElementById('create-cat-form').style.display='none'">Cancel</button>
+          <button class="save-btn" onclick="createDiscordCategory()" id="create-cat-btn">フォルダを作成</button>
+          <button class="refresh-btn" onclick="document.getElementById('create-cat-form').style.display='none'">キャンセル</button>
         </div>
         <div id="create-cat-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
       </div>
 
       <!-- New channel form -->
       <div id="create-ch-form" style="display:none;margin-top:10px;padding:14px;background:var(--bg);box-shadow:var(--sh-press);border-radius:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:10px">New channel</div>
-        <input class="form-input" id="new-discord-ch-name" placeholder="Channel name (letters, numbers, dashes)" style="margin-bottom:8px;font-size:11px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:10px">新しいチャンネル</div>
+        <input class="form-input" id="new-discord-ch-name" placeholder="チャンネル名 (英数字・ハイフン)" style="margin-bottom:8px;font-size:11px">
         <div class="form-grid" style="margin-bottom:8px">
           <div>
-            <label class="form-label">Type</label>
+            <label class="form-label">種別</label>
             <select class="form-select" id="new-discord-ch-type" style="font-size:11px">
-              <option value="0">Text channel</option>
-              <option value="2">Voice channel</option>
-              <option value="5">Announcement</option>
-              <option value="11">Thread channel</option>
-              <option value="15">Forum channel</option>
+              <option value="0">テキストチャンネル</option>
+              <option value="2">ボイスチャンネル</option>
+              <option value="5">アナウンス</option>
+              <option value="11">スレッドチャンネル</option>
+              <option value="15">フォーラムチャンネル</option>
             </select>
           </div>
           <div>
-            <label class="form-label">Category (folder)</label>
+            <label class="form-label">カテゴリ (フォルダ)</label>
             <select class="form-select" id="new-discord-ch-parent" style="font-size:11px">
-              <option value="">— no category —</option>
+              <option value="">— カテゴリなし —</option>
             </select>
           </div>
         </div>
         <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:10px">
-          <input type="checkbox" id="new-discord-ch-private"> Private channel (visible to selected roles only)
+          <input type="checkbox" id="new-discord-ch-private"> プライベートチャンネル (選択したロールのみ表示)
         </label>
         <div style="margin-bottom:10px">
-          <label class="form-label">Map agents to this channel</label>
+          <label class="form-label">このチャンネルにエージェントを割り当て</label>
           <div id="new-ch-bot-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
-          <button class="save-btn" onclick="createDiscordChannel()" id="create-discord-ch-btn">Create in Discord</button>
-          <button class="refresh-btn" onclick="document.getElementById('create-ch-form').style.display='none'">Cancel</button>
+          <button class="save-btn" onclick="createDiscordChannel()" id="create-discord-ch-btn">Discord に作成</button>
+          <button class="refresh-btn" onclick="document.getElementById('create-ch-form').style.display='none'">キャンセル</button>
         </div>
         <div id="create-discord-ch-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
       </div>
@@ -600,40 +600,40 @@
     <div class="page-hd">
       <div>
         <div class="page-title">GitHub リポジトリ</div>
-        <div class="page-sub">Search, browse, and create repositories</div>
+        <div class="page-sub">リポジトリの検索・閲覧・作成</div>
       </div>
     </div>
 
     <!-- Create repo form (collapsed by default) -->
     <details class="wiki-cat-group" id="new-repo-details" style="margin-bottom:16px">
-      <summary style="font-size:12px;font-weight:700;color:var(--acc)">➕ New repository</summary>
+      <summary style="font-size:12px;font-weight:700;color:var(--acc)">➕ 新しいリポジトリ</summary>
       <div class="qs-card" style="margin-top:8px">
         <div class="qs-field">
-          <input class="form-input" id="new-repo-name" placeholder="Repository name" style="margin-bottom:6px;font-size:11px">
-          <input class="form-input" id="new-repo-desc" placeholder="Description (optional)" style="margin-bottom:6px;font-size:11px">
+          <input class="form-input" id="new-repo-name" placeholder="リポジトリ名" style="margin-bottom:6px;font-size:11px">
+          <input class="form-input" id="new-repo-desc" placeholder="説明 (任意)" style="margin-bottom:6px;font-size:11px">
           <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
             <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
-              <input type="checkbox" id="new-repo-private" checked> Private
+              <input type="checkbox" id="new-repo-private" checked> プライベート
             </label>
             <label style="font-size:11px;color:var(--m);cursor:pointer;display:flex;align-items:center;gap:4px">
-              <input type="checkbox" id="new-repo-init" checked> Initialize with README
+              <input type="checkbox" id="new-repo-init" checked> README で初期化
             </label>
           </div>
-          <button class="save-btn" onclick="createRepo()" id="create-repo-btn">Create repository</button>
+          <button class="save-btn" onclick="createRepo()" id="create-repo-btn">リポジトリを作成</button>
           <div id="create-repo-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
         </div>
       </div>
     </details>
 
     <!-- Pinned repos -->
-    <div class="section-hd">Your repos</div>
+    <div class="section-hd">マイリポジトリ</div>
     <div id="pinned-repos" style="margin-bottom:16px"></div>
 
     <!-- Search bar -->
-    <div class="section-hd" style="margin-top:20px">All repositories</div>
+    <div class="section-hd" style="margin-top:20px">すべてのリポジトリ</div>
     <div class="filter-bar" style="margin-bottom:12px">
-      <input class="filter-search" id="repo-search" placeholder="Search repos…" oninput="_debouncedRepoSearch()" style="flex:1">
-      <button class="save-btn" onclick="_loadRepos()">↻ Refresh</button>
+      <input class="filter-search" id="repo-search" placeholder="リポジトリを検索…" oninput="_debouncedRepoSearch()" style="flex:1">
+      <button class="save-btn" onclick="_loadRepos()">↻ 更新</button>
     </div>
 
     <!-- Repo list -->
@@ -648,25 +648,25 @@
 <nav class="mob-tab-bar" role="tablist">
   <button class="mob-tab active" data-page="overview" onclick="navTo('overview')">
     <i class="ni ni-agents" aria-hidden="true"></i>
-    <span>Agents</span>
+    <span>エージェント</span>
   </button>
   <button class="mob-tab" data-page="tasks" onclick="navTo('tasks')">
     <i class="ni ni-tasks" aria-hidden="true"></i>
-    <span>Tasks</span>
+    <span>タスク</span>
     <span id="mob-tasks-badge" class="mob-tab-badge" style="display:none"></span>
   </button>
   <button class="mob-tab" data-page="inbox" onclick="navTo('inbox')">
     <i class="ni ni-inbox" aria-hidden="true"></i>
-    <span>Inbox</span>
+    <span>受信箱</span>
     <span id="mob-inbox-badge" class="mob-tab-badge warn" style="display:none"></span>
   </button>
   <button class="mob-tab" data-page="docs" onclick="navTo('docs')">
     <i class="ni ni-docs" aria-hidden="true"></i>
-    <span>Docs</span>
+    <span>ドキュメント</span>
   </button>
   <button class="mob-tab" data-page="more" onclick="openMoreSheet()">
     <i class="ni ni-more" aria-hidden="true"></i>
-    <span>More</span>
+    <span>その他</span>
   </button>
 </nav>
 
@@ -676,7 +676,7 @@
 <div class="mob-more-sheet" id="mob-more-sheet" onclick="closeMoreSheet(event)">
   <div class="mob-more-inner">
     <div class="mob-more-header">
-      <span class="mob-more-title">More</span>
+      <span class="mob-more-title">メニュー</span>
       <button class="hbtn" onclick="closeMoreSheet()">✕</button>
     </div>
 
@@ -694,8 +694,8 @@
 
     <div class="mob-more-sep"></div>
 
-    <button class="mob-more-opt" onclick="loadDashboard();closeMoreSheet()">↺ Refresh</button>
-    <button class="mob-more-opt" onclick="toggleTheme();closeMoreSheet()"><i class="ni ni-theme" aria-hidden="true"></i> Theme</button>
+    <button class="mob-more-opt" onclick="loadDashboard();closeMoreSheet()">↺ 更新</button>
+    <button class="mob-more-opt" onclick="toggleTheme();closeMoreSheet()"><i class="ni ni-theme" aria-hidden="true"></i> テーマ</button>
   </div>
 </div>
 
@@ -715,7 +715,7 @@
 <div class="overlay" id="loc-overlay" onclick="closeLocOverlay(event)">
   <div class="panel" style="max-width:360px">
     <button class="p-close" onclick="closeLocOverlay()">✕</button>
-    <div class="p-title">Location Profile</div>
+    <div class="p-title">位置情報プロフィール</div>
     <div id="loc-modal-content" style="margin-top:14px"></div>
   </div>
 </div>

@@ -89,7 +89,7 @@ header{margin:12px;padding:10px 16px}
 .hbtn.pill{border-radius:8px;width:auto;padding:0 10px;font-size:.75rem;height:36px}
 
 /* Dropdown overrides */
-.ndrop-panel{right:0;width:200px;overflow:hidden;top:calc(100% + 8px)}
+.ndrop-panel{right:0;width:200px;overflow-y:auto;max-height:360px;top:calc(100% + 8px)}
 .ndrop-badge{
   font-size:.65rem;padding:1px 5px;border-radius:99px;
   background:var(--yel);color:#fff;font-weight:700;min-width:16px;text-align:center
@@ -583,7 +583,7 @@ header{margin:12px;padding:10px 16px}
   padding:8px 10px;border-radius:7px;font-size:13px;outline:none;min-height:40px;
   font-family:inherit;cursor:pointer;
 }
-.form-label{font-size:11px;color:var(--m);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;display:block}
+.form-label{font-size:11px;color:var(--m);font-weight:600;margin-bottom:4px;display:block}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .form-panel{
   background:var(--bg);box-shadow:var(--sh-press);border-radius:10px;
@@ -666,9 +666,9 @@ header{margin:12px;padding:10px 16px}
 ══════════════════════════════════════════════════════════════ */
 .qs-card{
   background:var(--bg);box-shadow:var(--sh);border-radius:12px;
-  padding:14px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;
+  padding:14px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;
 }
-.qs-field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px}
+.qs-field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
 
 /* ══════════════════════════════════════════════════════════════
    DOCS VIEWER

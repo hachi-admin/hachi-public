@@ -67,10 +67,10 @@ function _handleForbidden(msg) {
   document.body.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:14px;background:var(--bg);font-family:inherit;text-align:center;padding:24px">
       <div style="font-size:2.5rem">🚫</div>
-      <div style="font-weight:800;color:var(--txt);font-size:1.1rem">Access denied</div>
-      <div style="color:var(--m);font-size:13px;max-width:340px">${esc(msg || 'You are not authorized to access this dashboard.')}</div>
-      <div style="color:var(--m2);font-size:11px">Ask the dashboard owner to add your GitHub username to the allowlist.</div>
-      <button onclick="logoutUser()" style="margin-top:8px;padding:10px 22px;border-radius:10px;border:none;background:var(--surf);box-shadow:var(--sh-sm);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">Sign in with a different account</button>
+      <div style="font-weight:800;color:var(--txt);font-size:1.1rem">アクセス拒否</div>
+      <div style="color:var(--m);font-size:13px;max-width:340px">${esc(msg || 'このダッシュボードへのアクセス権がありません。')}</div>
+      <div style="color:var(--m2);font-size:11px">ダッシュボードのオーナーに GitHub ユーザー名を許可リストへ追加するよう依頼してください。</div>
+      <button onclick="logoutUser()" style="margin-top:8px;padding:10px 22px;border-radius:10px;border:none;background:var(--surf);box-shadow:var(--sh-sm);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">別のアカウントでサインイン</button>
     </div>`;
 }
 
@@ -99,7 +99,7 @@ async function _ensureAuth() {
 function _handleUnauthorized() {
   localStorage.removeItem('dash-jwt');
   if (API_BASE) {
-    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);font-family:inherit;color:var(--m);font-size:13px">Session expired — redirecting to login…</div>`;
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);font-family:inherit;color:var(--m);font-size:13px">セッションが期限切れです — ログインページへ移動します…</div>`;
     setTimeout(() => { window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`; }, 1200);
   }
 }
@@ -147,7 +147,7 @@ async function loadDashboard() {
     loader.id = loaderId;
     loader.className = 'dash-loading';
     loader.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);opacity:.85';
-    loader.innerHTML = '<div class="dash-loading-spinner"></div><div class="dash-loading-text">Loading…</div>';
+    loader.innerHTML = '<div class="dash-loading-spinner"></div><div class="dash-loading-text">読み込み中…</div>';
     document.body.appendChild(loader);
   }
   loader.style.display = 'flex';
@@ -169,13 +169,13 @@ async function loadDashboard() {
     const errEl = document.querySelector('.page.active') || document.querySelector('.page');
     if (errEl) errEl.innerHTML = `
       <div class="dash-error">
-        <div class="dash-error-title">Failed to load dashboard</div>
+        <div class="dash-error-title">ダッシュボードの読み込みに失敗しました</div>
         <div class="dash-error-msg">${esc(err.message)}</div>
         <div class="dash-error-hint">
-          Check that the backend is reachable at <code>${API_BASE}</code>.<br>
-          To use a different backend, add <code>?api=https://your-cloud-run-url</code> to the URL.
+          バックエンド <code>${API_BASE}</code> に接続できることを確認してください。<br>
+          別のバックエンドを使用する場合は <code>?api=https://your-cloud-run-url</code> をURLに追加してください。
         </div>
-        <button class="save-btn" style="margin-top:14px" onclick="loadDashboard()">Retry</button>
+        <button class="save-btn" style="margin-top:14px" onclick="loadDashboard()">再試行</button>
       </div>`;
   } finally {
     if (loader) loader.style.display = 'none';
@@ -398,8 +398,8 @@ function _renderAgentGrid() {
     const spark = LAST_7_KEYS.map(k => (TASK_STATS.byDay?.[k]?.agentCounts?.[reg.id] || 0)).join(',');
     const displayName = reg.name; // agent names stay English — natural in JP tech context
     const displayDesc = isJP && reg.descJp ? reg.descJp : (reg.desc || '');
-    const statusLabel = status; // status chips stay English (idle/running/done/failed)
-    const catLabel    = reg.category || ''; // category stays English
+    const statusLabel = t[status] || status;
+    const catLabel    = t['cat-' + (reg.category || '').toLowerCase()] || reg.category || '';
     return `<div class="acard ${status} ${enabled ? '' : 'disabled'}"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${(reg.colors || []).join('|')}"
@@ -426,7 +426,7 @@ function _renderAgentGrid() {
           <div class="card-cost">${costEst > 0 ? '$'+(costEst).toFixed(3) : ''}</div>
         </div>
       </div>
-      <button class="agent-toggle ${enabled ? 'on' : ''}" onclick="toggleAgent('${reg.id}',event)" title="${enabled ? 'Disable':'Enable'}">
+      <button class="agent-toggle ${enabled ? 'on' : ''}" onclick="toggleAgent('${reg.id}',event)" title="${enabled ? t['lbl-disable']:t['lbl-enable']}">
         ${enabled ? '●' : '○'}
       </button>
     </div>`;
@@ -638,7 +638,7 @@ function _buildSourceRows(sources) {
 }
 
 function _buildBlockedSourceRows(blocked) {
-  if (!blocked || !blocked.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">No blocked sources.</div>`;
+  const t=_I18N[PROJECT_LANG]||_I18N.JP; if (!blocked || !blocked.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-blocked']}</div>`;
   return blocked.map(s => `<div class="src-row" data-id="${s.id}">
     <div class="src-toggle blocked"></div>
     <div class="src-body">
@@ -650,15 +650,15 @@ function _buildBlockedSourceRows(blocked) {
 }
 
 function _buildMergeSuggestionRows(items) {
-  if (!items || !items.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">No flagged duplicates.</div>`;
+  const t=_I18N[PROJECT_LANG]||_I18N.JP; if (!items || !items.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-merges']}</div>`;
   return items.map(m => {
     const pct = (Number(m.similarity) * 100).toFixed(1);
     return `<div class="src-row" data-merge-id="${esc(m.id)}" style="display:block;padding:6px 8px;border-left:3px solid #FBBF24">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <div style="flex:1"><div class="src-name">${esc(m.slugAName||m.slugA)} ⇔ ${esc(m.slugBName||m.slugB)}</div>
-          <div style="font-size:10px;color:var(--m)">${pct}% similar</div></div>
+          <div style="font-size:10px;color:var(--m)">${pct}${(_I18N[PROJECT_LANG]||_I18N.JP)['lbl-similar']}</div></div>
         <div style="display:flex;gap:6px">
-          <button class="act-btn resume" onclick="markMerged('${esc(m.id)}')" style="font-size:9px;padding:3px 9px">✓ Merged</button>
+          <button class="act-btn resume" onclick="markMerged('${esc(m.id)}')" style="font-size:9px;padding:3px 9px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-merged']}</button>
           <button class="act-btn cancel" onclick="dismissMerge('${esc(m.id)}')" style="font-size:9px;padding:3px 8px">✕</button>
         </div>
       </div>
@@ -671,11 +671,11 @@ function _buildSuggestedFollowupRows(items) {
   const byPage = {};
   for (const it of items) (byPage[it.pageSlug] ??= { pageName: it.pageName, items:[] }).items.push(it);
   return Object.entries(byPage).map(([slug, g]) => `<div class="src-row" style="display:block;padding:6px 8px;border-left:3px solid #A78BFA">
-    <div class="src-name">from <span style="color:var(--acc)">${esc(g.pageName)}</span></div>
+    <div class="src-name">${(_I18N[PROJECT_LANG]||_I18N.JP)['src-from']} <span style="color:var(--acc)">${esc(g.pageName)}</span></div>
     ${g.items.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--div)">
       <div style="font-size:10px;color:var(--txt);flex:1">${esc(it.question)}</div>
       <div style="display:flex;gap:4px">
-        <button class="act-btn resume" onclick="researchFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 9px">🔬 Research</button>
+        <button class="act-btn resume" onclick="researchFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 9px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-research']}</button>
         <button class="act-btn cancel" onclick="dismissFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 8px">✕</button>
       </div>
     </div>`).join('')}
@@ -685,16 +685,16 @@ function _buildSuggestedFollowupRows(items) {
 function _buildVaultRows(vaults, pendingVaultTasks) {
   const pending = (pendingVaultTasks || []).map(p => `<div class="src-row" style="display:block;border-left:3px solid #F97316;padding:6px 8px">
     <div class="src-name">${esc(p.vaultId)} → ${esc(p.repoName)}</div>
-    <div style="font-size:10px;color:var(--m)">awaiting approval · ${p.visibility}</div>
+    <div style="font-size:10px;color:var(--m)">承認待ち · ${p.visibility}</div>
   </div>`).join('');
-  if (!vaults || !vaults.length) return pending + `<div style="color:var(--m);font-size:11px;padding:8px 0">No vaults registered.</div>`;
+  if (!vaults || !vaults.length) return pending + `<div style="color:var(--m);font-size:11px;padding:8px 0">${(_I18N[PROJECT_LANG]||_I18N.JP)['empty-vaults']}</div>`;
   return pending + vaults.slice().sort((a,b) => (b.is_default?1:0)-(a.is_default?1:0)).map(v => {
     const vc = v.visibility === 'confidential' ? '#EF4444' : v.visibility === 'internal' ? '#F97316' : '#34D399';
-    const db = v.is_default ? `<span style="background:color-mix(in srgb,var(--grn) 14%,transparent);color:var(--grn);padding:1px 5px;border-radius:3px;font-size:9px">DEFAULT</span> ` : '';
+    const db = v.is_default ? `<span style="background:color-mix(in srgb,var(--grn) 14%,transparent);color:var(--grn);padding:1px 5px;border-radius:3px;font-size:9px">デフォルト</span> ` : '';
     return `<div class="src-row" style="display:block;padding:6px 8px;border-left:3px solid ${vc}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <div><div class="src-name">${db}${esc(v.id)}</div>
-          <div style="font-size:10px;color:var(--m)">${esc(v.categories?.join(', ') || '(any)')} · ${v.pageCount||0} pages</div></div>
+          <div style="font-size:10px;color:var(--m)">${esc(v.categories?.join(', ') || '(任意)')} · ${v.pageCount||0} ページ</div></div>
         <div style="display:flex;gap:6px">
           ${!v.is_default ? `<button class="act-btn cancel" onclick="deleteVault('${esc(v.id)}')" style="font-size:9px;padding:3px 8px">✕</button>` : ''}
         </div>
@@ -704,12 +704,12 @@ function _buildVaultRows(vaults, pendingVaultTasks) {
 }
 
 function _buildBasesRows(bases) {
-  if (!bases || !bases.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">No saved bases.</div>`;
+  const t=_I18N[PROJECT_LANG]||_I18N.JP; if (!bases || !bases.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-bases']}</div>`;
   return bases.map(b => `<div class="src-row base-row" data-base-slug="${esc(b.id)}" style="display:block;padding:6px 8px;border-left:3px solid #6366F1">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <div><div class="src-name">${esc(b.name)}</div>${b.description?`<div style="font-size:10px;color:var(--m)">${esc(b.description)}</div>`:''}</div>
       <div style="display:flex;gap:6px">
-        <button class="act-btn resume" onclick="runBase('${esc(b.id)}')" style="font-size:9px;padding:3px 10px">Run</button>
+        <button class="act-btn resume" onclick="runBase('${esc(b.id)}')" style="font-size:9px;padding:3px 10px">${t['act-run']}</button>
         <button class="act-btn cancel" onclick="deleteBase('${esc(b.id)}')" style="font-size:9px;padding:3px 8px">✕</button>
       </div>
     </div>
@@ -749,8 +749,8 @@ function _renderInboxList(status) {
       <div class="inbox-why">${esc(it.reason)}</div>
       ${cmdEl ? `<div class="inbox-cmd">${cmdEl}</div>` : ''}
       <div class="inbox-foot">
-        ${status === 'pending' ? `<button class="act-btn resume" onclick="inboxDone('${esc(it.id)}')" style="font-size:9px;padding:3px 10px">✓ Done</button>
-          <button class="act-btn cancel" onclick="inboxIgnore('${esc(it.id)}')" style="font-size:9px;padding:3px 10px">✕ Ignore</button>` : ''}
+        ${status === 'pending' ? `<button class="act-btn resume" onclick="inboxDone('${esc(it.id)}')" style="font-size:9px;padding:3px 10px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-done']}</button>
+          <button class="act-btn cancel" onclick="inboxIgnore('${esc(it.id)}')" style="font-size:9px;padding:3px 10px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-ignore']}</button>` : ''}
         ${it.occurrences > 1 ? `<span style="font-size:9px;color:var(--warn)">×${it.occurrences}</span>` : ''}
         <span class="inbox-time">${ago}</span>
       </div>
@@ -800,7 +800,7 @@ function _renderAnalytics() {
 function _renderCostTable() {
   const tbody = document.getElementById('cost-table-body'); if (!tbody) return;
   const entries = Object.entries(COSTS).sort((a,b) => b[1].estimatedCost - a[1].estimatedCost);
-  if (!entries.length) { tbody.innerHTML = `<tr><td colspan="4" style="color:var(--m);font-size:11px;padding:8px">No data yet.</td></tr>`; return; }
+  const t=_I18N[PROJECT_LANG]||_I18N.JP; if (!entries.length) { tbody.innerHTML = `<tr><td colspan="4" style="color:var(--m);font-size:11px;padding:8px">${t['empty-cost']}</td></tr>`; return; }
   tbody.innerHTML = entries.map(([agentId, c]) => {
     const reg = REGISTRY.find(r => r.id === agentId);
     const model = reg ? reg.model : agentId;
@@ -848,7 +848,7 @@ function setSettingsSection(btn, id) {
 
 async function _loadMailConfig() {
   const status = document.getElementById('mail-status-line');
-  if (status) status.textContent = 'Loading…';
+  if (status) status.textContent = '読み込み中…';
   try {
     const res = await fetch(apiUrl('/api/mail/config'), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
@@ -891,15 +891,15 @@ async function saveMailConfig() {
   // Strip undefined/NaN
   for (const k of Object.keys(body)) { if (body[k] === undefined || Number.isNaN(body[k])) delete body[k]; }
   const s = document.getElementById('mail-save-status');
-  if (s) s.textContent = 'Saving…';
+  if (s) s.textContent = '保存中…';
   try {
     const res = await fetch(apiUrl('/api/mail/config'), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.status); }
-    if (s) s.textContent = 'Saved.';
-    showToast('Mail config saved.', 'success');
+    if (s) s.textContent = '保存しました。';
+    showToast('メール設定を保存しました。', 'success');
     await _loadMailConfig();
   } catch (e) {
     if (s) s.textContent = 'Error: ' + e.message;
@@ -924,13 +924,13 @@ function _renderSettingsLocation() {
 async function saveLocationOverrideSettings() {
   const city = document.getElementById('settings-loc-city')?.value.trim();
   const cc   = document.getElementById('settings-loc-country')?.value.trim().toUpperCase();
-  if (!city) { showToast('City is required.', 'warn'); return; }
+  if (!city) { showToast('都市を入力してください。', 'warn'); return; }
   const res = await fetch(apiUrl('/api/project/location'), {
     method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
     body: JSON.stringify({ city, countryCode: cc || null, userOverride: true })
   });
   if (!res.ok) { showToast('Save failed: ' + res.status, 'error'); return; }
-  showToast('Location override saved.', 'success');
+  showToast('位置情報のオーバーライドを保存しました。', 'success');
   loadDashboard();
 }
 
@@ -952,7 +952,7 @@ async function setActiveProvider(value) {
 
 async function saveProviderKey() {
   const key = document.getElementById('provider-key-input')?.value.trim();
-  if (!key) { showToast('Paste an API key first.', 'warn'); return; }
+  if (!key) { showToast('APIキーを貼り付けてください。', 'warn'); return; }
   const btn = document.querySelector('[onclick="saveProviderKey()"]');
   const statusEl = document.getElementById('provider-key-status');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
@@ -963,8 +963,8 @@ async function saveProviderKey() {
     });
     if (!res.ok) throw new Error(res.status);
     document.getElementById('provider-key-input').value = '';
-    if (statusEl) statusEl.textContent = `✓ Key saved for ${ACTIVE_PROVIDER}. Restart Cloud Run if overriding env var.`;
-    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 2000); }
+    if (statusEl) statusEl.textContent = `✓ ${ACTIVE_PROVIDER} のキーを保存しました。環境変数を上書きする場合は Cloud Run を再起動してください。`;
+    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '保存'; btn.disabled = false; }, 2000); }
   } catch (e) {
     if (statusEl) statusEl.textContent = `Failed: ${e.message}`;
     if (btn) { btn.textContent = 'ERR'; setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 2000); }
@@ -1042,7 +1042,7 @@ async function registerDiscordChannel() {
   const id  = document.getElementById('reg-ch-id')?.value.trim();
   const asThread  = document.getElementById('reg-ch-thread')?.checked || false;
   const threadName = document.getElementById('reg-ch-threadname')?.value.trim() || undefined;
-  if (!key || !id) { showToast('Key and Channel ID are required.', 'warn'); return; }
+  if (!key || !id) { showToast('キーとチャンネルIDは必須です。', 'warn'); return; }
   const res = await fetch(apiUrl('/api/channels'), {
     method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
     body: JSON.stringify({ key, id, asThread, ...(threadName ? { threadName } : {}) })
@@ -1050,7 +1050,7 @@ async function registerDiscordChannel() {
   if (res.ok) {
     ['reg-ch-key','reg-ch-id','reg-ch-threadname'].forEach(eId => { const e = document.getElementById(eId); if (e) e.value = ''; });
     const cb = document.getElementById('reg-ch-thread'); if (cb) cb.checked = false;
-    showToast(`Channel "${key}" registered.`, 'success');
+    showToast(`チャンネル「${key}」を登録しました。`, 'success');
     _loadDiscordChannels();
   } else showToast('Failed to save: ' + res.status, 'error');
 }
@@ -1060,18 +1060,18 @@ async function addDiscordChannel() { return registerDiscordChannel(); }
 
 function removeDiscordChannel(key) {
   const row = document.querySelector(`[data-ch-key="${CSS.escape(key)}"]`);
-  showConfirm(`Remove channel "${key}"?`, async () => {
+  showConfirm(`チャンネル「${key}」を削除しますか？`, async () => {
     if (row) row.style.opacity = '0.3';
     const res = await fetch(apiUrl(`/api/channels/${encodeURIComponent(key)}`), {
       method:'DELETE', headers:_authHeaders()
     });
-    if (res.ok) { showToast(`Channel "${key}" removed.`, 'success'); _loadDiscordChannels(); }
+    if (res.ok) { showToast(`チャンネル「${key}」を削除しました。`, 'success'); _loadDiscordChannels(); }
     else { if (row) row.style.opacity = ''; showToast('Failed: ' + res.status, 'error'); }
   }, row);
 }
 
 function resetDashLayout() {
-  showConfirm('Reset panel layout back to defaults?', async () => {
+  showConfirm('レイアウトをデフォルトに戻しますか？', async () => {
     await fetch(apiUrl('/api/dashboard/prefs'), { method:'DELETE', headers:_authHeaders() }).catch(()=>{});
     loadDashboard();
   }, document.querySelector('[onclick="resetDashLayout()"]'));
@@ -1119,7 +1119,7 @@ async function addDashboardUser() {
 
 async function removeDashboardUser(login) {
   const statusEl = document.getElementById('access-status');
-  showConfirm(`Remove "${login}" from dashboard access?`, async () => {
+  showConfirm(`「${login}」のアクセス権を削除しますか？`, async () => {
     try {
       const res = await fetch(apiUrl('/api/dashboard/access'), {
         method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
@@ -1127,7 +1127,7 @@ async function removeDashboardUser(login) {
       });
       const data = await res.json();
       if (!res.ok) { if (statusEl) statusEl.textContent = data.error || 'Error'; return; }
-      if (statusEl) statusEl.textContent = `Removed ${login}.`;
+      if (statusEl) statusEl.textContent = `${login} を削除しました。`;
       _loadAccessUsers();
     } catch (e) { if (statusEl) statusEl.textContent = e.message; }
   });
@@ -1161,7 +1161,7 @@ async function saveLocationOverride() {
 }
 
 function clearLocationOverride() {
-  showConfirm('Clear manual override? Auto-inference will resume.', async () => {
+  showConfirm('手動オーバーライドをクリアしますか？自動推論が再開されます。', async () => {
     await fetch(apiUrl('/api/project/location'), {
       method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
       body: JSON.stringify({ clearOverride:true })
@@ -1241,9 +1241,9 @@ const _I18N = {
     'ignored':           '無視',
     // section headers (overview)
     'channels':          'チャンネル',
-    'intensity':         'Intensity',   // intensity mode values stay English
+    'intensity':         '強度',
     'queue':             'キュー',
-    'fact-checks':       'Fact Check',  // "Fact Check" is commonly used in Japanese too
+    'fact-checks':       'ファクトチェック',
     // placeholders
     'search-agents':     'エージェントを検索…',
     // KPI bar
@@ -1253,7 +1253,7 @@ const _I18N = {
     'kpi-failed':        '失敗',
     'click-view':        'タップして確認',
     // stats box
-    'stat-agents':       'Agents',      // "Agents" is universally understood in JP tech
+    'stat-agents':       'エージェント',
     'stat-running':      '実行中',
     'stat-failed':       '失敗',
     'stat-enabled':      '有効',
@@ -1261,30 +1261,39 @@ const _I18N = {
     // analytics page
     'analytics-chart':   'トークンコスト — 直近7日',
     'analytics-costs':   '本日のコスト',
-    'analytics-priv':    'Privilege Matrix',  // technical term stays
-    'analytics-agent':   'Agent',
-    'analytics-tokens':  'Tokens',
-    'analytics-cost':    'Cost (est.)',
+    'analytics-priv':    '権限マトリクス',
+    'analytics-agent':   'エージェント',
+    'analytics-tokens':  'トークン',
+    'analytics-cost':    'コスト (概算)',
     // wiki page
     'wiki-pages-tab':    'Wikiページ',
     'wiki-files-tab':    'ファイル',
     'wiki-welcome':      'Wikiページを左から選択',
     'wiki-selected':     '件選択',
     'wiki-search':       '検索…',
+    'wiki-no-pages':     'ページが見つかりません',
+    'wiki-no-files':     'ファイルが見つかりません',
+    'wiki-pages-label':  'ページ',
+    'wiki-cats-label':   'カテゴリ',
+    'wiki-recent-label': '最近',
+    'wiki-files-label':  'ファイル',
+    'wiki-types-label':  '種別',
+    'wiki-results-label':'件',
     // docs page
     'docs-welcome':      'ドキュメントをツリーから選択',
     // inbox
     'inbox-sub':         'ローカルアクション待ちのアイテム',
     // sources/knowledge
-    'src-sources':       'Sources',
+    'src-sources':       'ソース',
     'src-blocked':       'ブロック済み',
-    'src-followups':     'Follow-up',
-    'src-merges':        'Merges',
-    'src-vaults':        'Vaults',
-    'src-bases':         'Bases',
+    'src-followups':     'フォローアップ',
+    'src-merges':        'マージ',
+    'src-vaults':        'ヴォールト',
+    'src-bases':         'ベース',
+    'src-from':          '出典:',
     // channels page
     'ch-routing':        'ルーティング',
-    'ch-server':         'Server channels',
+    'ch-server':         'サーバーチャンネル',
     'ch-new-folder':     '+ フォルダ',
     'ch-new-channel':    '+ チャンネル',
     'ch-add-tag':        '+ タグ',
@@ -1295,10 +1304,62 @@ const _I18N = {
     'empty-tasks':       'タスクなし',
     'empty-inbox':       'アイテムなし — オーケストレーターは待機中です',
     'empty-items':       'アイテムなし',
-    'empty-factchecks':  'Fact Checkの実行記録がありません',
+    'empty-factchecks':  'ファクトチェックの実行記録がありません',
     'empty-sources':     'ソースなし',
     'empty-followups':   'フォローアップなし',
     'empty-channels':    'チャンネルなし',
+    'empty-blocked':     'ブロック済みのソースはありません',
+    'empty-merges':      '重複フラグなし',
+    'empty-vaults':      'ヴォールト未登録',
+    'empty-bases':       '保存済みのベースはありません',
+    'empty-cost':        'データなし',
+    'empty-repos':       'リポジトリなし',
+    // agent detail overlay labels
+    'lbl-description':   '説明',
+    'lbl-model':         'モデル',
+    'lbl-level':         'レベル',
+    'lbl-status':        'ステータス',
+    'lbl-enabled':       '有効',
+    'lbl-disabled':      '無効',
+    'lbl-disable':       '無効化',
+    'lbl-enable':        '有効化',
+    'lbl-next-run':      '次回実行',
+    'lbl-token-budget':  'トークン予算',
+    'lbl-in-flows':      'フロー',
+    'lbl-tools':         'ツール',
+    'lbl-last-task':     '最終タスク',
+    'lbl-created':       '作成',
+    'lbl-updated':       '更新',
+    // task detail labels
+    'lbl-goal':          '目標',
+    'lbl-priority':      '優先度',
+    'lbl-review':        'レビュー',
+    'lbl-result':        '結果',
+    'lbl-error':         'エラー',
+    'lbl-branch':        'ブランチ',
+    'lbl-pr':            'PR',
+    // action buttons (dynamic)
+    'act-cancel':        '✕ キャンセル',
+    'act-stop':          '⏹ 停止',
+    'act-resume':        '↻ 再実行',
+    'act-run':           '実行',
+    'act-queuing':       '…追加中',
+    'act-queued':        '✓ 追加済み',
+    'act-research':      '🔬 調査',
+    'act-merged':        '✓ マージ済み',
+    'act-done':          '✓ 処理済み',
+    'act-ignore':        '✕ 無視',
+    'lbl-similar':       '% 類似度',
+    // agent card chips
+    'idle':              '待機中',
+    'cat-intelligence':  'インテリジェンス',
+    'cat-knowledge':     'ナレッジ',
+    'cat-development':   '開発',
+    'cat-content':       'コンテンツ',
+    // wiki file type group labels
+    'ext-txt':           'テキスト',
+    'ext-scripts':       'スクリプト',
+    'ext-other':         'その他',
   },
   EN: {
     'all':               'All',
@@ -1355,6 +1416,64 @@ const _I18N = {
     'empty-sources':     'No sources yet.',
     'empty-followups':   'No pending follow-ups.',
     'empty-channels':    'No channels found.',
+    'wiki-no-pages':     'No pages found.',
+    'wiki-no-files':     'No files found.',
+    'wiki-pages-label':  'pages',
+    'wiki-cats-label':   'categories',
+    'wiki-recent-label': 'Recent',
+    'wiki-files-label':  'files',
+    'wiki-types-label':  'types',
+    'wiki-results-label':'result(s)',
+    'src-from':          'from',
+    'empty-blocked':     'No blocked sources.',
+    'empty-merges':      'No flagged duplicates.',
+    'empty-vaults':      'No vaults registered.',
+    'empty-bases':       'No saved bases.',
+    'empty-cost':        'No data yet.',
+    'empty-repos':       'No repositories found.',
+    'lbl-description':   'Description',
+    'lbl-model':         'Model',
+    'lbl-level':         'Level',
+    'lbl-status':        'Status',
+    'lbl-enabled':       'ENABLED',
+    'lbl-disabled':      'DISABLED',
+    'lbl-disable':       'Disable',
+    'lbl-enable':        'Enable',
+    'lbl-next-run':      'Next Run',
+    'lbl-token-budget':  'Token budget',
+    'lbl-in-flows':      'In Flows',
+    'lbl-tools':         'Tools',
+    'lbl-last-task':     'Last task',
+    'lbl-created':       'Created',
+    'lbl-updated':       'Updated',
+    'lbl-goal':          'Goal',
+    'lbl-priority':      'Priority',
+    'lbl-review':        'Review',
+    'lbl-result':        'Result',
+    'lbl-error':         'Error',
+    'lbl-branch':        'Branch',
+    'lbl-pr':            'PR',
+    'act-cancel':        '✕ Cancel',
+    'act-stop':          '⏹ Stop',
+    'act-resume':        '↻ Resume',
+    'act-run':           'Run',
+    'act-queuing':       '…queuing',
+    'act-queued':        '✓ queued',
+    'act-research':      '🔬 Research',
+    'act-merged':        '✓ Merged',
+    'act-done':          '✓ Done',
+    'act-ignore':        '✕ Ignore',
+    'lbl-similar':       '% similar',
+    // agent card chips
+    'idle':              'idle',
+    'cat-intelligence':  'Intelligence',
+    'cat-knowledge':     'Knowledge',
+    'cat-development':   'Development',
+    'cat-content':       'Content',
+    // wiki file type group labels
+    'ext-txt':           'Text',
+    'ext-scripts':       'Scripts',
+    'ext-other':         'Other',
   },
 };
 
@@ -1392,10 +1511,10 @@ async function setProjectLanguage(value) {
     headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ language: value }),
   }).catch(() => null);
-  if (!res?.ok) { showToast('Language update failed', 'error'); return; }
+  if (!res?.ok) { showToast('言語設定の更新に失敗しました', 'error'); return; }
   PROJECT_LANG = value;
   _syncLangUI();
-  showToast('Content language updated', 'success');
+  showToast('コンテンツ言語を更新しました', 'success');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1407,6 +1526,7 @@ function openDetail(id) {
   const bc = pct > 80 ? '#EF4444' : pct > 50 ? '#FBBF24' : reg.colors[0];
   const lc = LV_COLORS[d.level || 1];
   const myFlows = FLOWS.filter(f => f.agents.includes(id));
+  const t = _I18N[PROJECT_LANG]||_I18N.JP;
 
   document.getElementById('detail-content').innerHTML = `
     <div class="p-header">
@@ -1416,27 +1536,27 @@ function openDetail(id) {
         <div class="p-sub">${esc(d.category||'')} · ${esc(d.agentType||'')} · Lv.${d.level||1} ${LV_NAMES[d.level]||''}</div>
       </div>
     </div>
-    <div class="p-section"><div class="p-label">Description</div><div class="p-value">${esc(d.fullDesc||d.desc||'')}</div></div>
+    <div class="p-section"><div class="p-label">${t['lbl-description']}</div><div class="p-value">${esc(d.fullDesc||d.desc||'')}</div></div>
     <div class="p-row">
-      <div class="p-stat"><div class="s-label">Model</div><div class="s-value" style="font-size:9px">${esc(d.model||reg.model||'')}</div></div>
-      <div class="p-stat"><div class="s-label">Level</div><div class="s-value" style="color:${lc}">Lv.${d.level||1}</div></div>
-      <div class="p-stat"><div class="s-label">Status</div><div class="s-value" style="color:${d.enabled!==false?'#34D399':'#EF4444'};font-size:9px">
-        ${d.enabled!==false?'ENABLED':'DISABLED'}
-        <button class="act-btn ${d.enabled!==false?'cancel':'resume'}" onclick="toggleAgent('${id}',event)" style="font-size:9px;padding:2px 8px;margin-left:4px">${d.enabled!==false?'Disable':'Enable'}</button>
+      <div class="p-stat"><div class="s-label">${t['lbl-model']}</div><div class="s-value" style="font-size:9px">${esc(d.model||reg.model||'')}</div></div>
+      <div class="p-stat"><div class="s-label">${t['lbl-level']}</div><div class="s-value" style="color:${lc}">Lv.${d.level||1}</div></div>
+      <div class="p-stat"><div class="s-label">${t['lbl-status']}</div><div class="s-value" style="color:${d.enabled!==false?'#34D399':'#EF4444'};font-size:9px">
+        ${d.enabled!==false?t['lbl-enabled']:t['lbl-disabled']}
+        <button class="act-btn ${d.enabled!==false?'cancel':'resume'}" onclick="toggleAgent('${id}',event)" style="font-size:9px;padding:2px 8px;margin-left:4px">${d.enabled!==false?t['lbl-disable']:t['lbl-enable']}</button>
       </div></div>
-      <div class="p-stat"><div class="s-label">Next Run</div><div class="s-value" style="font-size:9px">${esc(nextRun(d.frequency||reg.frequency||''))}</div></div>
+      <div class="p-stat"><div class="s-label">${t['lbl-next-run']}</div><div class="s-value" style="font-size:9px">${esc(nextRun(d.frequency||reg.frequency||''))}</div></div>
     </div>
     <div class="p-section">
-      <div class="p-label">Token budget</div>
+      <div class="p-label">${t['lbl-token-budget']}</div>
       <div class="p-bar-wrap"><div class="p-bar-fill" style="width:${pct}%;background:${bc}"></div></div>
       <div style="font-size:10px;color:var(--m);margin-top:3px">
         ${d.tokensUsed>=1000?(d.tokensUsed/1000).toFixed(1)+'k':d.tokensUsed||0} / ${((d.tokenLimit||0)/1000).toFixed(0)}k (${pct}%)
         ${d.estimatedCost>0?` · ≈$${d.estimatedCost.toFixed(4)}`:'' }
       </div>
     </div>
-    ${myFlows.length ? `<div class="p-section"><div class="p-label">In Flows</div>${myFlows.map(f=>`<div style="font-size:9px;margin-top:4px;color:${f.color}">${esc(f.name)}: ${f.agents.map(a=>{const r=REGISTRY.find(x=>x.id===a);return a===id?`<b>[${esc(r?.name||a)}]</b>`:`<span style="color:var(--m)">${esc(r?.name||a)}</span>`;}).join(' → ')}</div>`).join('')}</div>` : ''}
-    ${(d.tools||reg.tools||[]).length ? `<div class="p-section"><div class="p-label">Tools</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${(d.tools||reg.tools||[]).map(t=>`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(t)}</span>`).join('')}</div></div>` : ''}
-    ${d.task ? `<div class="p-task" style="margin-top:12px"><div class="t-label">Last task</div><div class="t-value">[${(d.task.status||'').toUpperCase()}] ${esc(d.task.goal||'—')}</div><div class="t-value" style="margin-top:3px;color:var(--m)">Created: ${fmtDate(d.task.createdAt)} · Updated: ${fmtDate(d.task.updatedAt)}</div>${d.task.error?`<div style="color:var(--error);font-size:10px;margin-top:4px">${esc(d.task.error.substring(0,150))}</div>`:''}</div>` : ''}
+    ${myFlows.length ? `<div class="p-section"><div class="p-label">${t['lbl-in-flows']}</div>${myFlows.map(f=>`<div style="font-size:9px;margin-top:4px;color:${f.color}">${esc(f.name)}: ${f.agents.map(a=>{const r=REGISTRY.find(x=>x.id===a);return a===id?`<b>[${esc(r?.name||a)}]</b>`:`<span style="color:var(--m)">${esc(r?.name||a)}</span>`;}).join(' → ')}</div>`).join('')}</div>` : ''}
+    ${(d.tools||reg.tools||[]).length ? `<div class="p-section"><div class="p-label">${t['lbl-tools']}</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${(d.tools||reg.tools||[]).map(tl=>`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(tl)}</span>`).join('')}</div></div>` : ''}
+    ${d.task ? `<div class="p-task" style="margin-top:12px"><div class="t-label">${t['lbl-last-task']}</div><div class="t-value">[${(d.task.status||'').toUpperCase()}] ${esc(d.task.goal||'—')}</div><div class="t-value" style="margin-top:3px;color:var(--m)">${t['lbl-created']}: ${fmtDate(d.task.createdAt)} · ${t['lbl-updated']}: ${fmtDate(d.task.updatedAt)}</div>${d.task.error?`<div style="color:var(--error);font-size:10px;margin-top:4px">${esc(d.task.error.substring(0,150))}</div>`:''}</div>` : ''}
   `;
 
   // Draw avatar
@@ -1480,6 +1600,7 @@ function openTaskDetail(taskId) {
   const all = [...(TASK_STATS.recent||[]), ...(TASK_STATS.upcoming||[]), ...Object.values(ALL_BY_STATUS).flat()];
   const t = all.find(x => x.id === taskId); if (!t) return;
   const colors = { completed:'#34D399', running:'#22D3EE', failed:'#EF4444', pending:'#64748B', cancelled:'#6B7280' };
+  const i18n = _I18N[PROJECT_LANG]||_I18N.JP;
   document.getElementById('detail-content').innerHTML = `
     <div class="p-header">
       <div style="width:12px;height:12px;border-radius:50%;background:${colors[t.status]||'#64748B'};flex-shrink:0;margin-top:4px"></div>
@@ -1488,21 +1609,21 @@ function openTaskDetail(taskId) {
         <div class="p-sub">${agentChip(t.type)} ${t.id ? t.id.substring(0,12) : ''}</div>
       </div>
     </div>
-    <div class="p-section"><div class="p-label">Goal</div><div class="p-value">${esc(t.goal||'—')}</div></div>
+    <div class="p-section"><div class="p-label">${i18n['lbl-goal']}</div><div class="p-value">${esc(t.goal||'—')}</div></div>
     <div class="p-row">
-      ${t.priority!=null?`<div class="p-stat"><div class="s-label">Priority</div><div class="s-value">P${t.priority}</div></div>`:''}
-      ${t.createdAt?`<div class="p-stat"><div class="s-label">Created</div><div class="s-value" style="font-size:9px">${fmtDate(t.createdAt)}</div></div>`:''}
-      ${t.updatedAt?`<div class="p-stat"><div class="s-label">Updated</div><div class="s-value" style="font-size:9px">${fmtDate(t.updatedAt)}</div></div>`:''}
-      ${t.reviewScore!=null?`<div class="p-stat"><div class="s-label">Review</div><div class="s-value" style="color:var(--grn)">${t.reviewScore}/10</div></div>`:''}
+      ${t.priority!=null?`<div class="p-stat"><div class="s-label">${i18n['lbl-priority']}</div><div class="s-value">P${t.priority}</div></div>`:''}
+      ${t.createdAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-created']}</div><div class="s-value" style="font-size:9px">${fmtDate(t.createdAt)}</div></div>`:''}
+      ${t.updatedAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-updated']}</div><div class="s-value" style="font-size:9px">${fmtDate(t.updatedAt)}</div></div>`:''}
+      ${t.reviewScore!=null?`<div class="p-stat"><div class="s-label">${i18n['lbl-review']}</div><div class="s-value" style="color:var(--grn)">${t.reviewScore}/10</div></div>`:''}
     </div>
-    ${t.result?`<div class="p-section"><div class="p-label">Result</div><div class="p-value" style="white-space:pre-wrap;font-size:11px">${esc(t.result.substring(0,500))}</div></div>`:''}
-    ${t.error?`<div class="p-section"><div class="p-label" style="color:var(--error)">Error</div><div class="p-value" style="color:var(--error)">${esc(t.error)}</div></div>`:''}
-    ${t.branch?`<div class="p-section"><div class="p-label">Branch</div><div class="p-value" style="font-family:monospace">${esc(t.branch)}</div></div>`:''}
-    ${t.prUrl?`<div class="p-section"><div class="p-label">PR</div><div class="p-value"><a href="${esc(t.prUrl)}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(t.prUrl)}</a></div></div>`:''}
+    ${t.result?`<div class="p-section"><div class="p-label">${i18n['lbl-result']}</div><div class="p-value" style="white-space:pre-wrap;font-size:11px">${esc(t.result.substring(0,500))}</div></div>`:''}
+    ${t.error?`<div class="p-section"><div class="p-label" style="color:var(--error)">${i18n['lbl-error']}</div><div class="p-value" style="color:var(--error)">${esc(t.error)}</div></div>`:''}
+    ${t.branch?`<div class="p-section"><div class="p-label">${i18n['lbl-branch']}</div><div class="p-value" style="font-family:monospace">${esc(t.branch)}</div></div>`:''}
+    ${t.prUrl?`<div class="p-section"><div class="p-label">${i18n['lbl-pr']}</div><div class="p-value"><a href="${esc(t.prUrl)}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(t.prUrl)}</a></div></div>`:''}
     <div style="display:flex;gap:8px;margin-top:16px">
-      ${t.status==='pending'?`<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">✕ Cancel</button>`:''}
-      ${t.status==='running'?`<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">⏹ Stop</button>`:''}
-      ${(t.status==='failed'||t.status==='cancelled')?`<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻ Resume</button>`:''}
+      ${t.status==='pending'?`<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">${i18n['act-cancel']}</button>`:''}
+      ${t.status==='running'?`<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">${i18n['act-stop']}</button>`:''}
+      ${(t.status==='failed'||t.status==='cancelled')?`<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">${i18n['act-resume']}</button>`:''}
     </div>`;
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -1543,22 +1664,22 @@ async function toggleSource(id, enabled) {
 
 function blockSource(id) {
   const row = document.querySelector(`.src-row[data-id="${id}"]`);
-  showConfirm('Block this source?', async () => {
+  showConfirm('このソースをブロックしますか？', async () => {
     if (row) row.style.opacity = '0.3';
     await fetch(apiUrl(`/api/sources/${id}/block`), {
       method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
       body: JSON.stringify({ reason: 'manually blocked' })
     }).catch(()=>{});
-    showToast('Source blocked.', 'success');
+    showToast('ソースをブロックしました。', 'success');
     loadDashboard();
   }, row);
 }
 
 function unblockSource(id) {
   const row = document.querySelector(`.src-row[data-id="${id}"]`);
-  showConfirm('Unblock this source?', async () => {
+  showConfirm('このソースのブロックを解除しますか？', async () => {
     await fetch(apiUrl(`/api/sources/${id}/unblock`), { method:'POST', headers:_authHeaders() }).catch(()=>{});
-    showToast('Source unblocked.', 'success');
+    showToast('ソースのブロックを解除しました。', 'success');
     loadDashboard();
   }, row);
 }
@@ -1571,7 +1692,7 @@ async function inboxDone(id) {
 
 function inboxIgnore(id) {
   const row = document.querySelector(`[data-id="${id}"]`);
-  showConfirm('Dismiss without resolving?', async () => {
+  showConfirm('解決せずに閉じますか？', async () => {
     if (row) row.style.opacity = '0.3';
     await fetch(apiUrl(`/api/inbox/${id}/ignore`), { method:'POST', headers:_authHeaders() }).catch(()=>{});
     row?.remove();
@@ -1580,7 +1701,7 @@ function inboxIgnore(id) {
 
 function markMerged(id) {
   const row = document.querySelector(`[data-merge-id="${id}"]`);
-  showConfirm('Mark as merged?', async () => {
+  showConfirm('マージ済みとしてマークしますか？', async () => {
     const res = await fetch(apiUrl(`/api/merges/${encodeURIComponent(id)}/mark-merged`), { method:'POST', headers:_authHeaders() });
     if (res.ok) row?.remove();
   }, row);
@@ -1588,7 +1709,7 @@ function markMerged(id) {
 
 function dismissMerge(id) {
   const row = document.querySelector(`[data-merge-id="${id}"]`);
-  showConfirm('Dismiss this suggestion?', async () => {
+  showConfirm('この提案を無視しますか？', async () => {
     const res = await fetch(apiUrl(`/api/merges/${encodeURIComponent(id)}/dismiss`), { method:'POST', headers:_authHeaders() });
     if (res.ok) row?.remove();
   }, row);
@@ -1614,7 +1735,7 @@ async function dismissFollowup(pageSlug, question, btn) {
 
 function deleteVault(id) {
   const row = document.querySelector(`[data-vault-id="${id}"]`);
-  showConfirm(`Remove vault "${id}"? GitHub repo is NOT deleted.`, async () => {
+  showConfirm(`ヴォールト「${id}」を削除しますか？GitHubリポジトリは削除されません。`, async () => {
     const res = await fetch(apiUrl(`/api/vaults/${encodeURIComponent(id)}`), { method:'DELETE', headers:_authHeaders() });
     if (res.ok) row?.remove();
     else showToast('Delete failed: ' + res.status, 'error');
@@ -1632,7 +1753,7 @@ async function runBase(id) {
 
 function deleteBase(id) {
   const row = document.querySelector(`[data-base-slug="${id}"]`);
-  showConfirm(`Delete base "${id}"?`, async () => {
+  showConfirm(`ベース「${id}」を削除しますか？`, async () => {
     const res = await fetch(apiUrl(`/api/bases/${encodeURIComponent(id)}`), { method:'DELETE', headers:_authHeaders() });
     if (res.ok) row?.remove();
     else showToast('Delete failed: ' + res.status, 'error');
@@ -1797,7 +1918,7 @@ async function _initDocsIfNeeded() {
   if (_docsInited || !API_BASE) return;
   _docsInited = true;
   const el = document.getElementById('docs-tree');
-  if (el) el.innerHTML = '<div class="docs-welcome" style="font-size:11px">Loading…</div>';
+  if (el) el.innerHTML = '<div class="docs-welcome" style="font-size:11px">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl('/api/docs/list'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
@@ -1812,7 +1933,7 @@ async function loadDoc(btn, path, label) {
   if (!path) return;
   document.querySelectorAll('.docs-tree-item').forEach(b => b.classList.toggle('active', b === btn));
   const reader = document.getElementById('docs-reader');
-  reader.innerHTML = '<div class="docs-loading">Loading…</div>';
+  reader.innerHTML = '<div class="docs-loading">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl(`/api/docs/file?slug=${encodeURIComponent(path)}`), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
@@ -1838,7 +1959,7 @@ async function _initWikiIfNeeded() {
   if (_wikiInited || !API_BASE) return;
   _wikiInited = true;
   const treeEl = document.getElementById('wiki-tree');
-  if (treeEl) treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">Loading…</div>';
+  if (treeEl) treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl('/api/wiki/pages'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
@@ -1913,7 +2034,7 @@ function _wikiToggleSel(id) {
   if (_wikiSelected.has(id)) _wikiSelected.delete(id);
   else _wikiSelected.add(id);
   const countEl = document.getElementById('wiki-select-count');
-  if (countEl) countEl.textContent = `${_wikiSelected.size} selected`;
+  if (countEl) { const t=_I18N[PROJECT_LANG]||_I18N.JP; countEl.textContent = `${_wikiSelected.size}${t['wiki-selected']}`; }
   document.querySelectorAll(`[data-wiki-sel="${CSS.escape(id)}"]`).forEach(el => {
     el.classList.toggle('wiki-sel-active', _wikiSelected.has(id));
     const cb = el.querySelector('.wiki-sel-cb');
@@ -1929,7 +2050,7 @@ function toggleWikiSelect() {
   const fab = document.getElementById('wiki-fab');
   if (fab) { fab.textContent = _wikiSelectMode ? '✕' : '＋'; fab.title = _wikiSelectMode ? 'Cancel selection' : 'Select multiple files'; }
   const countEl = document.getElementById('wiki-select-count');
-  if (countEl) countEl.textContent = '0 selected';
+  if (countEl) { const t=_I18N[PROJECT_LANG]||_I18N.JP; countEl.textContent = `0${t['wiki-selected']}`; }
   if (_wikiTab === 'pages') _renderWikiTree(_wikiPages);
   else _renderWikiFiles(_wikiFiles);
 }
@@ -1939,22 +2060,23 @@ function _renderWikiTree(pages) {
   // Preserve fab button
   const fab = document.getElementById('wiki-fab');
   if (!pages.length) {
-    treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">No pages found.</div>';
+    treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px">${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-no-pages']}</div>`;
     if (fab) treeEl.appendChild(fab);
     return;
   }
 
   if (_wikiQuery) {
-    treeEl.innerHTML = `<div class="wiki-count">${pages.length} result${pages.length===1?'':'s'}</div>` +
+    treeEl.innerHTML = `<div class="wiki-count">${pages.length}${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-results-label']}</div>` +
       pages.map(p => _wikiItemBtn(p.slug, p.title, p.category, false)).join('');
   } else {
     const recent = pages.slice(0, 10);
     const groups = {};
     for (const p of pages) { const c = p.category||'General'; (groups[c]||(groups[c]=[])).push(p); }
     const catCount = Object.keys(groups).length;
+    const _wt=_I18N[PROJECT_LANG]||_I18N.JP;
     treeEl.innerHTML =
-      `<div class="wiki-count">${pages.length} pages · ${catCount} categories</div>` +
-      `<div class="docs-section"><div class="docs-section-label">Recent</div>${recent.map(p=>_wikiItemBtn(p.slug,p.title,p.category,false)).join('')}</div>` +
+      `<div class="wiki-count">${pages.length} ${_wt['wiki-pages-label']} · ${catCount} ${_wt['wiki-cats-label']}</div>` +
+      `<div class="docs-section"><div class="docs-section-label">${_wt['wiki-recent-label']}</div>${recent.map(p=>_wikiItemBtn(p.slug,p.title,p.category,false)).join('')}</div>` +
       Object.entries(groups).map(([cat,ps])=>`<details class="wiki-cat-group">
         <summary class="docs-section-label wiki-cat-summary">${esc(cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
         ${ps.map(p=>_wikiItemBtn(p.slug,p.title,'',false)).join('')}
@@ -1967,19 +2089,21 @@ function _renderWikiFiles(files) {
   const treeEl = document.getElementById('wiki-tree'); if (!treeEl) return;
   const fab = document.getElementById('wiki-fab');
   if (!files.length) {
-    treeEl.innerHTML = '<div class="docs-welcome" style="font-size:11px">No files found.</div>';
+    treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px">${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-no-files']}</div>`;
     if (fab) treeEl.appendChild(fab);
     return;
   }
   // Group by ext type: md, json, other
-  const EXT_LABEL = { md:'Markdown', json:'JSON', txt:'Text', yaml:'YAML', yml:'YAML', js:'Scripts', ts:'Scripts', py:'Python' };
+  const _xt = _I18N[PROJECT_LANG] || _I18N.JP;
+  const EXT_LABEL = { md:'Markdown', json:'JSON', txt:_xt['ext-txt'], yaml:'YAML', yml:'YAML', js:_xt['ext-scripts'], ts:_xt['ext-scripts'], py:'Python' };
   const groups = {};
   for (const f of files) {
-    const grp = EXT_LABEL[f.ext] || (f.dir ? f.dir.split('/')[0] : 'Other');
+    const grp = EXT_LABEL[f.ext] || (f.dir ? f.dir.split('/')[0] : _xt['ext-other']);
     (groups[grp]||(groups[grp]=[])).push(f);
   }
+  const _wf=_I18N[PROJECT_LANG]||_I18N.JP;
   treeEl.innerHTML =
-    `<div class="wiki-count">${files.length} files · ${Object.keys(groups).length} types</div>` +
+    `<div class="wiki-count">${files.length} ${_wf['wiki-files-label']} · ${Object.keys(groups).length} ${_wf['wiki-types-label']}</div>` +
     Object.entries(groups).map(([grp,fs])=>`<details class="wiki-cat-group" ${grp==='Markdown'?'open':''}>
       <summary class="docs-section-label wiki-cat-summary">${esc(grp)} <span class="wiki-cat-count">${fs.length}</span></summary>
       ${fs.map(f=>_wikiItemBtn(f.path, f.name, f.dir||'', true)).join('')}
@@ -1990,7 +2114,7 @@ function _renderWikiFiles(files) {
 async function loadWikiFile(btn, path) {
   if (!path) return;
   const reader = document.getElementById('wiki-reader');
-  reader.innerHTML = '<div class="docs-loading">Loading…</div>';
+  reader.innerHTML = '<div class="docs-loading">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(path)}`), { headers: _authHeaders() });
     if (!res.ok) {
@@ -2013,7 +2137,7 @@ async function loadWikiPage(btn, slug, title) {
   if (!slug) return;
   document.querySelectorAll('#wiki-tree .docs-tree-item').forEach(b => b.classList.toggle('active', b === btn));
   const reader = document.getElementById('wiki-reader');
-  reader.innerHTML = '<div class="docs-loading">Loading…</div>';
+  reader.innerHTML = '<div class="docs-loading">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(slug)}`), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
@@ -2030,11 +2154,11 @@ async function loadWikiPage(btn, slug, title) {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
           ${tags ? `<div class="wiki-tags" style="margin:0">${tags}</div>` : ''}
           ${ghLink}
-          <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">✏️ Quiz prompt</button>
-          <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">📖 Vocab prompt</button>
+          <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">✏️ クイズ</button>
+          <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">📖 ボキャブラリー</button>
         </div>
         ${_markdownToHtml(storeContent)}
-        ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">Suggested follow-ups</div>${qs}</div>` : ''}
+        ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">フォローアップ候補</div>${qs}</div>` : ''}
       </div>`;
     if (window.mermaid) {
       const nodes = reader.querySelectorAll('.mermaid');
@@ -2048,14 +2172,14 @@ async function loadWikiPage(btn, slug, title) {
 async function queueWikiFollowup(pageSlug, btn) {
   const q = btn.dataset.q;
   if (!q) return;
-  btn.disabled = true; btn.textContent = '…queuing';
+  btn.disabled = true; btn.textContent = (_I18N[PROJECT_LANG]||_I18N.JP)['act-queuing'];
   try {
     const res = await fetch(apiUrl('/api/wiki/followup'), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ pageSlug, question: q, mode: 'queue' }),
     });
     if (!res.ok) throw new Error(res.status);
-    btn.textContent = '✓ queued';
+    btn.textContent = (_I18N[PROJECT_LANG]||_I18N.JP)['act-queued'];
   } catch { btn.disabled = false; btn.textContent = q; }
 }
 
@@ -2110,12 +2234,12 @@ Rules:
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
   modal.innerHTML = `
     <div style="background:var(--bg);box-shadow:var(--sh-lg);border-radius:16px;width:min(640px,95vw);max-height:85vh;display:flex;flex-direction:column;padding:20px;gap:12px;position:relative">
-      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ Quiz prompt' : '📖 Vocab prompt'} — ${esc(title)}</div>
-      <div style="font-size:11px;color:var(--m)">Copy this prompt and run it with Gemini CLI or Claude Code to generate content.</div>
+      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ クイズプロンプト' : '📖 ボキャブラリープロンプト'} — ${esc(title)}</div>
+      <div style="font-size:11px;color:var(--m)">このプロンプトをコピーして Gemini CLI または Claude Code で実行してください。</div>
       <textarea id="wiki-prompt-text" style="flex:1;min-height:280px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
       <div style="display:flex;gap:8px">
-        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
-        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">Close</button>
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ コピー済み';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
+        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">閉じる</button>
       </div>
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
@@ -2187,12 +2311,12 @@ Rules:
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
   modal.innerHTML = `
     <div style="background:var(--bg);box-shadow:var(--sh-lg);border-radius:16px;width:min(680px,95vw);max-height:85vh;display:flex;flex-direction:column;padding:20px;gap:12px">
-      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ Quiz prompt' : '📖 Vocab prompt'} — ${_wikiSelected.size} pages</div>
-      <div style="font-size:11px;color:var(--m)">Pages: ${esc(pages.join(' · '))}. Copy and run locally with Gemini CLI or Claude Code.</div>
+      <div style="font-weight:700;font-size:14px;color:var(--txt)">${isQuiz ? '✏️ クイズプロンプト' : '📖 ボキャブラリープロンプト'} — ${_wikiSelected.size} ページ</div>
+      <div style="font-size:11px;color:var(--m)">対象ページ: ${esc(pages.join(' · '))}。コピーして Gemini CLI または Claude Code でローカル実行してください。</div>
       <textarea id="wiki-prompt-text" style="flex:1;min-height:300px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
       <div style="display:flex;gap:8px">
-        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
-        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">Close</button>
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ コピー済み';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
+        <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">閉じる</button>
       </div>
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
@@ -2601,7 +2725,7 @@ function _renderLiveChannels(guild) {
     const tagSection = isForum
       ? `<div class="ch-tree-agents" style="margin-top:3px">
           ${availTags.map(tag=>`<span class="ch-tree-agent-pill" style="background:#1a1a2e;color:#a5b4fc" title="Tag ID: ${esc(tag.id)}">${tag.emoji?tag.emoji+' ':''}${esc(tag.name)}<button onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')" style="margin-left:3px;background:none;border:none;color:var(--m2);cursor:pointer;font-size:9px;padding:0" title="Remove">✕</button></span>`).join('')}
-          <button class="ch-plus-btn" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')" title="Add tag">+タグ</button>
+          <button class="ch-plus-btn" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')" title="Add tag">${(_I18N[PROJECT_LANG]||_I18N.JP)['ch-add-tag']}</button>
         </div>`
       : '';
 
@@ -2759,9 +2883,9 @@ async function createDiscordCategory() {
   const name = document.getElementById('new-cat-name')?.value.trim();
   const statusEl = document.getElementById('create-cat-status');
   const btn = document.getElementById('create-cat-btn');
-  if (!name) { showToast('Category name is required.', 'warn'); return; }
-  if (!_selectedGuildId) { showToast('Fetch from Discord first.', 'warn'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  if (!name) { showToast('カテゴリー名を入力してください。', 'warn'); return; }
+  if (!_selectedGuildId) { showToast('先にDiscordから取得してください。', 'warn'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
   if (statusEl) statusEl.textContent = '';
   try {
     const res = await fetch(apiUrl('/api/discord/channels/create'), {
@@ -2770,13 +2894,13 @@ async function createDiscordCategory() {
     });
     const data = await res.json();
     if (!res.ok) { if (statusEl) statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
-    if (statusEl) statusEl.textContent = `✓ Created folder "${data.channel.name}"`;
+    if (statusEl) statusEl.textContent = `✓ フォルダ「${data.channel.name}」を作成しました`;
     document.getElementById('new-cat-name').value = '';
     await _fetchDiscordGuilds();
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Error: ' + e.message;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Create folder'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'フォルダを作成'; }
   }
 }
 
@@ -2801,10 +2925,10 @@ async function createDiscordChannel() {
   const statusEl = document.getElementById('create-discord-ch-status');
   const btn = document.getElementById('create-discord-ch-btn');
 
-  if (!name) { showToast('Channel name is required.', 'warn'); return; }
-  if (!_selectedGuildId) { showToast('Fetch from Discord first to select a server.', 'warn'); return; }
+  if (!name) { showToast('チャンネル名を入力してください。', 'warn'); return; }
+  if (!_selectedGuildId) { showToast('先にDiscordからサーバーを取得してください。', 'warn'); return; }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
   if (statusEl) statusEl.textContent = '';
 
   try {
@@ -2817,7 +2941,7 @@ async function createDiscordChannel() {
     });
     const data = await res.json();
     if (!res.ok) { if (statusEl) statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
-    if (statusEl) statusEl.textContent = `✓ Created #${data.channel.name} (${data.channel.id}) — register it below.`;
+    if (statusEl) statusEl.textContent = `✓ #${data.channel.name} (${data.channel.id}) を作成しました — 下で登録してください。`;
     // Auto-register bots selected in the bot list
     const botChecks = document.querySelectorAll('.new-ch-bot-check:checked');
     const channelKey = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
@@ -2832,7 +2956,7 @@ async function createDiscordChannel() {
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Error: ' + e.message;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Create in Discord'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Discordに作成'; }
   }
 }
 
@@ -2883,13 +3007,13 @@ async function saveContextSettings() {
   const compressionModel = model?.value || 'flash';
   const contextCompression = !!_ctxSettings.contextCompression;
 
-  if (statusEl) statusEl.textContent = 'Saving…';
+  if (statusEl) statusEl.textContent = '保存中…';
   try {
     const res = await fetch(apiUrl('/api/project/context-settings'), {
       method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
       body: JSON.stringify({ maxContextMessages, contextCompression, compressionModel })
     });
-    if (statusEl) statusEl.textContent = res.ok ? '✓ Saved' : 'Error: ' + res.status;
+    if (statusEl) statusEl.textContent = res.ok ? '✓ 保存しました' : 'Error: ' + res.status;
     if (res.ok) _ctxSettings = { maxContextMessages, contextCompression, compressionModel };
     setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
   } catch (e) {
@@ -2939,7 +3063,7 @@ function _debouncedRepoSearch() {
 async function _loadRepos() {
   const q = document.getElementById('repo-search')?.value.trim() || '';
   const listEl = document.getElementById('repo-list'); if (!listEl) return;
-  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">Loading…</div>';
+  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
 
   try {
     const res = await fetch(apiUrl(`/api/github/repos${q ? '?q=' + encodeURIComponent(q) : ''}`), { headers: _authHeaders() });
@@ -2955,7 +3079,7 @@ async function _loadRepos() {
     const data = await res.json();
     const repos = data.repos || [];
     if (!repos.length) {
-      listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">No repositories found.</div>';
+      listEl.innerHTML = `<div style="font-size:11px;color:var(--m);padding:12px">${(_I18N[PROJECT_LANG]||_I18N.JP)['empty-repos']}</div>`;
       return;
     }
     listEl.innerHTML = repos.map(_repoRow).join('');
@@ -2990,18 +3114,18 @@ function _repoRow(repo) {
 
 async function _viewCollaborators(fullName) {
   const [owner, repo] = fullName.split('/');
-  document.getElementById('detail-content').innerHTML = `<div class="p-title">Collaborators — ${esc(fullName)}</div><div style="padding:12px;color:var(--m);font-size:11px">Loading…</div>`;
+  document.getElementById('detail-content').innerHTML = `<div class="p-title">コラボレーター — ${esc(fullName)}</div><div style="padding:12px;color:var(--m);font-size:11px">読み込み中…</div>`;
   document.getElementById('detail-overlay').classList.add('open');
   try {
     const res = await fetch(apiUrl(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators`), { headers: _authHeaders() });
     const data = await res.json();
     if (data.limited) {
-      document.getElementById('detail-content').innerHTML = `<div class="p-title">Collaborators — ${esc(fullName)}</div><div style="padding:12px;color:var(--m);font-size:11px">Collaborator access requires organization admin permissions on the token.</div>`;
+      document.getElementById('detail-content').innerHTML = `<div class="p-title">コラボレーター — ${esc(fullName)}</div><div style="padding:12px;color:var(--m);font-size:11px">コラボレーターの参照にはOrganizationの管理者権限が必要です。</div>`;
       return;
     }
     const collabs = data.collaborators || [];
     document.getElementById('detail-content').innerHTML = `
-      <div class="p-title">Collaborators — ${esc(fullName)}</div>
+      <div class="p-title">コラボレーター — ${esc(fullName)}</div>
       <div style="margin-top:12px">
         ${collabs.length ? collabs.map(u => `
           <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--div)">
@@ -3010,7 +3134,7 @@ async function _viewCollaborators(fullName) {
               <a href="${esc(u.url)}" target="_blank" rel="noopener" style="color:var(--acc);font-size:12px">${esc(u.login)}</a>
             </div>
             <span style="font-size:10px;color:var(--m)">${esc(u.role || 'write')}</span>
-          </div>`).join('') : '<div style="color:var(--m);font-size:11px">No collaborators found.</div>'}
+          </div>`).join('') : '<div style="color:var(--m);font-size:11px">コラボレーターが見つかりません。</div>'}
       </div>`;
   } catch (e) {
     document.getElementById('detail-content').innerHTML = `<div class="p-title">Error</div><div style="color:var(--error);font-size:11px;padding:12px">${esc(e.message)}</div>`;
