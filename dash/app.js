@@ -1302,7 +1302,7 @@ const _I18N = {
     'set-cancel':        'キャンセル',
     // empty states (dynamic JS strings)
     'empty-tasks':       'タスクなし',
-    'empty-inbox':       'アイテムなし — オーケストレーターは待機中です',
+    'empty-inbox':       'アイテムなし — オーケストレーターは稼働中です',
     'empty-items':       'アイテムなし',
     'empty-factchecks':  'ファクトチェックの実行記録がありません',
     'empty-sources':     'ソースなし',
@@ -1341,7 +1341,7 @@ const _I18N = {
     // action buttons (dynamic)
     'act-cancel':        '✕ キャンセル',
     'act-stop':          '⏹ 停止',
-    'act-resume':        '↻ 再実行',
+    'act-resume':        '↻ 再開',
     'act-run':           '実行',
     'act-queuing':       '…追加中',
     'act-queued':        '✓ 追加済み',

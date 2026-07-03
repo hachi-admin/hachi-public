@@ -279,9 +279,9 @@
             <div class="qs-field">
               <label class="form-label" for="intensity-select-s">強度</label>
               <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
-                <option value="conservative">Conservative</option>
-                <option value="balanced" selected>Balanced</option>
-                <option value="aggressive">Aggressive</option>
+                <option value="conservative">控えめ</option>
+                <option value="balanced" selected>バランス</option>
+                <option value="aggressive">積極的</option>
               </select>
               <div style="font-size:10px;color:var(--m);margin-top:4px">エージェントのレビュー閾値とタスク承認フローを制御します。</div>
             </div>
@@ -294,7 +294,7 @@
               <div style="font-size:10px;color:var(--m);margin-top:4px">AI生成コンテンツ（ニュース・Wiki・要約）のデフォルト出力言語。ユーザーごとに <code>/lang</code> で上書き可能。</div>
             </div>
             <div class="qs-field">
-              <label class="form-label">Flash オーバーライド</label>
+              <label class="form-label">Flash 上書き</label>
               <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
               <div style="font-size:10px;color:var(--m);margin-top:4px">全エージェントをエージェント個別設定に関わらず Flash モデルで動作させます。</div>
             </div>
@@ -337,7 +337,7 @@
             </div>
             <div style="border-top:1px solid var(--div);padding-top:12px;padding-bottom:12px">
               <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">ANTHROPIC_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">Claude を選択プロバイダーとして使用中に有効。Anthropic Console でローテーション。</div>
+              <div style="font-size:11px;color:var(--m)">Claude プロバイダー選択時に有効。Anthropic Console でローテーション。</div>
             </div>
             <div style="border-top:1px solid var(--div);padding-top:12px" id="provider-agents-list">
               <div style="font-size:11px;color:var(--m)">エージェントごとのモデル割り当ては概要カードに表示されます。</div>
