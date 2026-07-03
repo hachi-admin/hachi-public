@@ -125,9 +125,21 @@ footer a{color:var(--acc)}
 @keyframes ndropIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 @keyframes vtfade{to{opacity:0}}
 
+/* Cross-document view transitions — page-to-page navigations feel like SPA */
+@view-transition{navigation:auto}
+
 @media (prefers-reduced-motion:no-preference){
   ::view-transition-old(root){animation:vtfade .26s ease both}
   ::view-transition-new(root){animation:vtfade .34s cubic-bezier(.22,1,.36,1) reverse both}
+}
+
+/* Skeleton shimmer base — used by loading placeholders across all pages */
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.skel-line{
+  border-radius:6px;
+  background:linear-gradient(90deg,var(--div) 25%,color-mix(in srgb,var(--div) 60%,var(--bg)) 50%,var(--div) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s infinite;
 }
 @media (prefers-reduced-motion:reduce){
   *,::before,::after{animation-duration:.001ms!important;transition-duration:.001ms!important}

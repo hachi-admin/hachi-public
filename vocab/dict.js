@@ -100,17 +100,27 @@ function startQuiz() {
   if (pool.length < 4) return;
   vqList = shuffle(pool).slice(0, Math.min(12, pool.length));
   vqi = 0; vqScore = 0;
-  document.querySelector('.hero').style.display = 'none';
-  document.querySelector('.controls').style.display = 'none';
-  document.getElementById('results').style.display = 'none';
-  document.getElementById('quiz').style.display = 'block';
-  renderVQ();
+  const swap = () => {
+    document.querySelector('.hero').style.display = 'none';
+    document.querySelector('.controls').style.display = 'none';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('quiz').style.display = 'block';
+    renderVQ();
+  };
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    document.startViewTransition(swap);
+  } else { swap(); }
 }
 function exitQuiz() {
-  document.getElementById('quiz').style.display = 'none';
-  document.querySelector('.hero').style.display = '';
-  document.querySelector('.controls').style.display = '';
-  document.getElementById('results').style.display = '';
+  const swap = () => {
+    document.getElementById('quiz').style.display = 'none';
+    document.querySelector('.hero').style.display = '';
+    document.querySelector('.controls').style.display = '';
+    document.getElementById('results').style.display = '';
+  };
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    document.startViewTransition(swap);
+  } else { swap(); }
 }
 function renderVQ() {
   vqAnswered = false;

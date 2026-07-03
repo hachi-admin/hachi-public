@@ -139,18 +139,18 @@ async function loadDashboard() {
   if (!await _ensureAuth()) return;
   _renderUserPill();
 
-  // Show a loading indicator without destroying the DOM
   const loaderId = '_dash-load-overlay';
-  let loader = document.getElementById(loaderId);
-  if (!loader) {
-    loader = document.createElement('div');
-    loader.id = loaderId;
-    loader.className = 'dash-loading';
-    loader.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);opacity:.85';
-    loader.innerHTML = '<div class="dash-loading-spinner"></div><div class="dash-loading-text">読み込み中…</div>';
-    document.body.appendChild(loader);
+  const isInitial = !document.getElementById(loaderId);
+
+  if (isInitial) {
+    // First load — show skeleton placeholders so the page feels populated immediately
+    _renderLoadingSkeletons();
+  } else {
+    // Re-fetch — show a subtle full-page overlay that fades out on completion
+    const loader = document.getElementById(loaderId);
+    loader.style.opacity = '.85';
+    loader.style.display = 'flex';
   }
-  loader.style.display = 'flex';
 
   try {
     const res = await fetch(apiUrl('/api/dashboard-data'), { headers: _authHeaders() });
@@ -164,8 +164,17 @@ async function loadDashboard() {
     const data = await res.json();
     _applyData(data);
     _renderAll(data);
+
+    // Create the re-fetch overlay now (hidden); it won't appear until next loadDashboard()
+    if (isInitial && !document.getElementById(loaderId)) {
+      const loader = document.createElement('div');
+      loader.id = loaderId;
+      loader.className = 'dash-loading';
+      loader.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);display:none';
+      loader.innerHTML = '<div class="dash-loading-spinner"></div><div class="dash-loading-text">読み込み中…</div>';
+      document.body.appendChild(loader);
+    }
   } catch (err) {
-    // Show error in the active page
     const errEl = document.querySelector('.page.active') || document.querySelector('.page');
     if (errEl) errEl.innerHTML = `
       <div class="dash-error">
@@ -178,7 +187,32 @@ async function loadDashboard() {
         <button class="save-btn" style="margin-top:14px" onclick="loadDashboard()">再試行</button>
       </div>`;
   } finally {
-    if (loader) loader.style.display = 'none';
+    // Fade out the re-fetch overlay smoothly
+    const loader = document.getElementById(loaderId);
+    if (loader && loader.style.display !== 'none') {
+      loader.style.opacity = '0';
+      setTimeout(() => { loader.style.display = 'none'; loader.style.opacity = '.85'; }, 320);
+    }
+  }
+}
+
+function _renderLoadingSkeletons() {
+  const grid = document.getElementById('agent-grid');
+  if (grid) {
+    grid.classList.remove('loaded');
+    grid.innerHTML = Array.from({length: 8}, () =>
+      `<div class="acard skel"><div class="skel-av"></div>` +
+      `<div class="skel-line" style="height:11px;width:65%;margin:10px auto 6px"></div>` +
+      `<div class="skel-line" style="height:9px;width:45%;margin:0 auto 4px"></div></div>`
+    ).join('');
+  }
+  const kpi = document.getElementById('kpi-row');
+  if (kpi) {
+    kpi.innerHTML = Array.from({length: 4}, () =>
+      `<div class="kpi-card skel">` +
+      `<div class="skel-line" style="height:11px;width:55%;margin-bottom:8px"></div>` +
+      `<div class="skel-line" style="height:22px;width:40%"></div></div>`
+    ).join('');
   }
 }
 
@@ -215,6 +249,7 @@ function _applyData(d) {
 function _renderAll(d) {
   _renderAgentStatsBox();
   _renderAgentGrid();
+  document.getElementById('agent-grid')?.classList.add('loaded');
   _renderKpiRow();
   _renderChannelCards(d.channels || []);
   if (d.routing) _renderRoutingTable(d.routing.rows || [], d.channels || []);
@@ -240,16 +275,23 @@ let _activePage = 'overview';
 
 function navTo(pageId) {
   _activePage = pageId;
-  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageId));
-  document.querySelectorAll('.nav-pill').forEach(p => p.classList.toggle('active', p.dataset.page === pageId));
-  document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
+  const swap = () => {
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageId));
+    document.querySelectorAll('.nav-pill').forEach(p => p.classList.toggle('active', p.dataset.page === pageId));
+    document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
+    window.scrollTo({ top:0, behavior:'instant' });
+  };
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    document.startViewTransition(swap);
+  } else {
+    swap();
+  }
   if (pageId === 'analytics') _initCharts();
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); }
   if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); }
   if (pageId === 'repos') _initReposPage();
-  window.scrollTo({ top:0, behavior:'instant' });
 }
 
 document.querySelectorAll('.nav-pill').forEach(p => p.addEventListener('click', () => navTo(p.dataset.page)));

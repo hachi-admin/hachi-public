@@ -811,11 +811,45 @@ header{margin:12px;padding:10px 16px}
 .ch-agent-assign-btn.active{box-shadow:var(--sh-press);color:var(--acc);font-weight:600}
 
 /* ══════════════════════════════════════════════════════════════
-   LOADING STATE
+   LOADING STATE — skeleton + refresh overlay
 ══════════════════════════════════════════════════════════════ */
+
+/* Skeleton avatar circle — used inside .acard.skel */
+.skel-av{
+  width:44px;height:44px;border-radius:50%;margin:0 auto 4px;
+  background:linear-gradient(90deg,var(--div) 25%,color-mix(in srgb,var(--div) 60%,var(--bg)) 50%,var(--div) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s infinite;
+}
+/* Skeleton agent card */
+.acard.skel{
+  animation:none!important;
+  pointer-events:none;cursor:default;
+  opacity:.65;
+}
+/* Skeleton KPI card */
+.kpi-card.skel{
+  animation:none;pointer-events:none;cursor:default;
+  display:flex;flex-direction:column;justify-content:center;padding:16px;
+}
+
+/* Staggered entry animation when agent grid is first populated */
+@media(prefers-reduced-motion:no-preference){
+  .agent-grid.loaded .acard{animation:riseIn .4s cubic-bezier(.22,1,.36,1) backwards}
+  .agent-grid.loaded .acard:nth-child(2){animation-delay:.04s}
+  .agent-grid.loaded .acard:nth-child(3){animation-delay:.08s}
+  .agent-grid.loaded .acard:nth-child(4){animation-delay:.12s}
+  .agent-grid.loaded .acard:nth-child(5){animation-delay:.16s}
+  .agent-grid.loaded .acard:nth-child(6){animation-delay:.20s}
+  .agent-grid.loaded .acard:nth-child(7){animation-delay:.24s}
+  .agent-grid.loaded .acard:nth-child(n+8){animation-delay:.28s}
+}
+
+/* Re-fetch overlay (shown on refresh, not on initial load) */
 .dash-loading{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   min-height:60vh;gap:16px;color:var(--m);
+  transition:opacity .3s ease;
 }
 .dash-loading-spinner{
   width:40px;height:40px;border-radius:50%;
