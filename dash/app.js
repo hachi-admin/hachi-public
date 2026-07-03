@@ -1532,11 +1532,11 @@ function openDetail(id) {
     <div class="p-header">
       <canvas id="detailCanvas" width="${DS*8}" height="${DS*8}" style="image-rendering:pixelated;flex-shrink:0"></canvas>
       <div>
-        <div class="p-title">${esc(id.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
+        <div class="p-title">${esc(PROJECT_LANG==='JP'&&reg.nameJp?reg.nameJp:id.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
         <div class="p-sub">${esc(d.category||'')} · ${esc(d.agentType||'')} · Lv.${d.level||1} ${LV_NAMES[d.level]||''}</div>
       </div>
     </div>
-    <div class="p-section"><div class="p-label">${t['lbl-description']}</div><div class="p-value">${esc(d.fullDesc||d.desc||'')}</div></div>
+    <div class="p-section"><div class="p-label">${t['lbl-description']}</div><div class="p-value">${esc((PROJECT_LANG==='JP'&&reg.fullDescJp)||d.fullDesc||d.desc||'')}</div></div>
     <div class="p-row">
       <div class="p-stat"><div class="s-label">${t['lbl-model']}</div><div class="s-value" style="font-size:9px">${esc(d.model||reg.model||'')}</div></div>
       <div class="p-stat"><div class="s-label">${t['lbl-level']}</div><div class="s-value" style="color:${lc}">Lv.${d.level||1}</div></div>
