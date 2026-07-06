@@ -213,6 +213,7 @@ function _applyData(d) {
 }
 
 function _renderAll(d) {
+  window._allChannels = d.channels || [];
   _renderAgentStatsBox();
   _renderAgentGrid();
   _renderKpiRow();
@@ -243,11 +244,11 @@ function navTo(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageId));
   document.querySelectorAll('.nav-pill').forEach(p => p.classList.toggle('active', p.dataset.page === pageId));
   document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
-  if (pageId === 'analytics') _initCharts();
+  if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
-  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); }
-  if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); }
+  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
+  if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); _renderChannelCtxList(); }
   if (pageId === 'repos') _initReposPage();
   window.scrollTo({ top:0, behavior:'instant' });
 }
@@ -842,7 +843,7 @@ function _renderSettings(channels) {
 function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
-  if (id === 'location') _renderSettingsLocation();
+  if (id === 'general') _renderSettingsLocation();
   if (id === 'mail') _loadMailAccounts();
   if (id === 'providers') _loadProviders();
 }
@@ -890,6 +891,7 @@ function _renderMailAccountCard(a) {
     </div>
     <div style="display:flex;gap:6px">
       ${!a.active ? `<button class="save-btn" style="font-size:10px;padding:4px 10px" onclick="setMailAccountActive('${esc(a.id)}')">アクティブに設定</button>` : ''}
+      <button class="save-btn" style="font-size:10px;padding:4px 10px;background:var(--bg2);color:var(--txt)" onclick="openMailRules('${esc(a.id)}','${esc(a.email)}')">&#9776; ルール</button>
       <button class="refresh-btn" style="font-size:10px;padding:4px 10px" onclick="removeMailAccount('${esc(a.id)}', '${esc(a.email)}')">削除</button>
     </div>
   </div>`;
@@ -959,6 +961,129 @@ async function removeMailAccount(id, email) {
     if (!res.ok) throw new Error(res.status);
     showToast(`${email} を削除しました。`, 'success');
     await _loadMailAccounts();
+    // Also hide rules panel if showing this account's rules
+    const rulesSec = document.getElementById('mail-rules-section');
+    if (rulesSec) rulesSec.style.display = 'none';
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+/* ── Mail rules ─────────────────────────────────────────── */
+let _currentRulesAccountId = null;
+
+async function openMailRules(accountId, email) {
+  _currentRulesAccountId = accountId;
+  const sec = document.getElementById('mail-rules-section');
+  const label = document.getElementById('mail-rules-account-label');
+  if (sec) sec.style.display = 'block';
+  if (label) label.textContent = email;
+  await _loadMailRules(accountId);
+}
+
+async function _loadMailRules(accountId) {
+  const list = document.getElementById('mail-rules-list'); if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${accountId}/rules`), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const { rules } = await res.json();
+    if (!rules.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--m)">ルールなし</div>';
+      return;
+    }
+    list.innerHTML = rules.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:8px">
+      <span style="font-size:10px;color:var(--acc);font-weight:700;min-width:40px">${esc(r.field)}</span>
+      <span style="font-size:10px;color:var(--m);min-width:50px">${esc(r.matchType)}</span>
+      <span style="font-size:11px;color:var(--txt);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.pattern)}</span>
+      ${r.folder ? `<span style="font-size:10px;color:var(--m)">→ ${esc(r.folder)}</span>` : ''}
+      ${r.classification ? `<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:var(--accent-bg);color:var(--acc)">${esc(r.classification)}</span>` : ''}
+      <button class="refresh-btn" style="font-size:9px;padding:2px 7px" onclick="deleteMailRule('${esc(accountId)}','${esc(r.id)}')">削除</button>
+    </div>`).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function showAddRuleForm() {
+  const f = document.getElementById('mail-rule-add-form'); if (f) f.style.display = 'block';
+}
+function hideAddRuleForm() {
+  const f = document.getElementById('mail-rule-add-form'); if (f) f.style.display = 'none';
+}
+
+async function saveMailRule() {
+  if (!_currentRulesAccountId) { showToast('アカウントを先に選択してください', 'warn'); return; }
+  const get = id => document.getElementById(id)?.value.trim();
+  const body = {
+    field: get('rule-field') || 'from',
+    matchType: get('rule-match-type') || 'contains',
+    pattern: get('rule-pattern'),
+    folder: get('rule-folder') || null,
+    classification: get('rule-classification') || null,
+  };
+  if (!body.pattern) { showToast('パターンを入力してください', 'warn'); return; }
+  const s = document.getElementById('mail-rule-status');
+  if (s) s.textContent = '保存中…';
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${_currentRulesAccountId}/rules`), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error||res.status); }
+    hideAddRuleForm();
+    if (s) s.textContent = '';
+    document.getElementById('rule-pattern').value = '';
+    showToast('ルールを追加しました', 'success');
+    await _loadMailRules(_currentRulesAccountId);
+  } catch (e) {
+    if (s) s.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function deleteMailRule(accountId, ruleId) {
+  try {
+    await fetch(apiUrl(`/api/mail/accounts/${accountId}/rules/${ruleId}`), { method:'DELETE', headers:_authHeaders() });
+    showToast('削除しました', 'success');
+    await _loadMailRules(accountId);
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+/* ── Channel per-channel context window ─────────────────── */
+
+function _renderChannelCtxList() {
+  const list = document.getElementById('channel-ctx-list'); if (!list) return;
+  // Use the channels already loaded (from dashboard data)
+  const chans = (window._allChannels || []).filter(c => c.key);
+  if (!chans.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--m)">登録済みチャンネルがありません。チャンネルを登録するとここに表示されます。</div>';
+    return;
+  }
+  list.innerHTML = chans.map(c => {
+    const cur = c.maxContextMessages ?? 20;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border-radius:8px">
+      <span style="font-size:12px;color:var(--txt);font-weight:600;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.key)}</span>
+      <input type="range" min="5" max="100" step="5" value="${cur}"
+        style="flex:1" id="ctx-ch-${esc(c.channelId)}"
+        oninput="document.getElementById('ctx-ch-label-${esc(c.channelId)}').textContent=this.value">
+      <span id="ctx-ch-label-${esc(c.channelId)}" style="font-size:11px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">${cur}</span>
+      <button class="save-btn" style="font-size:10px;padding:3px 10px" onclick="saveChannelCtx('${esc(c.channelId)}','${esc(c.key)}')">保存</button>
+    </div>`;
+  }).join('');
+}
+
+async function saveChannelCtx(channelId, key) {
+  const val = Number(document.getElementById(`ctx-ch-${channelId}`)?.value);
+  if (!val) return;
+  try {
+    const res = await fetch(apiUrl('/api/channels'), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify({ channelId, key, maxContextMessages: val }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    showToast(`${key}: コンテキスト ${val} 件に設定しました`, 'success');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');
   }
@@ -1928,6 +2053,102 @@ function _initCharts() {
   if (!document.getElementById('cost-chart')) return;
   _buildDays();
   drawCostChart();
+}
+
+async function _loadAnalytics() {
+  try {
+    const res = await fetch(apiUrl('/api/analytics'), { headers: _authHeaders() });
+    if (!res.ok) return;
+    const d = await res.json();
+
+    // KPIs
+    const today = d.today || new Date().toISOString().split('T')[0];
+    const todayTasks = (d.byDay?.[today]?.total) ?? 0;
+    const todayFail  = (d.byDay?.[today]?.failed) ?? 0;
+    const newsTotal  = (d.newsHistory || []).reduce((s, n) => s + n.count, 0);
+    _setText('kpi-tasks-today', todayTasks);
+    _setText('kpi-tasks-fail', todayFail > 0 ? `${todayFail} 件失敗` : '');
+    _setText('kpi-queue', TASK_STATS?.byStatus ? ((TASK_STATS.byStatus.pending||0) + (TASK_STATS.byStatus.running||0)) : '—');
+    _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(4)}`);
+    _setText('kpi-news', newsTotal);
+
+    // Task activity chart
+    _drawTaskChart(d.byDay || {});
+
+    // Task type breakdown
+    const typeList = document.getElementById('task-type-list');
+    if (typeList) {
+      const entries = Object.entries(d.byType || {}).sort((a,b) => b[1]-a[1]).slice(0, 12);
+      const max = Math.max(1, ...entries.map(([,v]) => v));
+      typeList.innerHTML = entries.map(([type, cnt]) => {
+        const pct = Math.round(cnt/max*100);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <span style="font-size:10px;color:var(--m);width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(type)}</span>
+          <div style="flex:1;background:var(--div);border-radius:3px;height:6px"><div style="width:${pct}%;height:6px;border-radius:3px;background:var(--acc)"></div></div>
+          <span style="font-size:10px;color:var(--txt);min-width:24px;text-align:right">${cnt}</span>
+        </div>`;
+      }).join('') || '<div style="font-size:11px;color:var(--m)">データなし</div>';
+    }
+
+    // Mail run log
+    const mailLog = document.getElementById('mail-run-log');
+    if (mailLog) {
+      if (!d.mailRuns?.length) {
+        mailLog.innerHTML = '<div style="font-size:11px;color:var(--m)">メールタスク実行記録なし</div>';
+      } else {
+        mailLog.innerHTML = d.mailRuns.slice(0, 8).map(r => {
+          const dt = new Date(r.date).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          const ok = r.status === 'completed';
+          const badge = ok
+            ? '<span style="color:#4caf50;font-size:9px;font-weight:700">●</span>'
+            : '<span style="color:var(--red);font-size:9px;font-weight:700">●</span>';
+          const msg = ok ? (r.result || 'OK').slice(0, 60) : (r.error || 'failed').slice(0, 60);
+          return `<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 0;border-bottom:1px solid var(--div)">
+            <div style="padding-top:2px">${badge}</div>
+            <div><div style="font-size:10px;color:var(--m)">${dt}</div><div style="font-size:11px;color:var(--txt);line-height:1.4">${esc(msg)}</div></div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch { /* silent */ }
+}
+
+function _setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+
+function _drawTaskChart(byDay) {
+  const canvas = document.getElementById('task-chart'); if (!canvas) return;
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() - i*86400000);
+    const key = d.toISOString().split('T')[0];
+    const label = ['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+    days.push({ key, label, completed: byDay[key]?.completed||0, failed: byDay[key]?.failed||0, total: byDay[key]?.total||0 });
+  }
+  const dpr = window.devicePixelRatio||1;
+  const par = canvas.parentElement;
+  const W = par ? par.clientWidth - 28 : 300, H = 140, PL=32, PR=8, PT=8, PB=28;
+  canvas.width = W*dpr; canvas.height = H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+  const CT = _chartTheme();
+  ctx.fillStyle = CT.bg; ctx.fillRect(0,0,W,H);
+  const CW = W-PL-PR, CH = H-PT-PB;
+  const n = days.length, gap = CW/n, barW = Math.max(4, gap*.6);
+  const maxV = Math.max(1, ...days.map(d=>d.total));
+  days.forEach((d, i) => {
+    const x = PL + i*gap + gap/2 - barW/2;
+    const bh = (d.total/maxV)*CH;
+    ctx.fillStyle = '#34D39966'; ctx.fillRect(x, PT+CH-bh, barW, bh);
+    const fh = (d.failed/maxV)*CH;
+    if (fh>0) { ctx.fillStyle = '#EF444466'; ctx.fillRect(x, PT+CH-fh, barW, fh); }
+    ctx.fillStyle = CT.label; ctx.font = '9px Courier New'; ctx.textAlign='center';
+    ctx.fillText(d.label, x+barW/2, H-PB+13);
+    if (d.total>0) { ctx.fillStyle=CT.axis; ctx.font='8px Courier New'; ctx.fillText(d.total, x+barW/2, PT+CH-bh-2); }
+  });
+  [0,.5,1].forEach(r => {
+    const y = PT+CH*(1-r); ctx.fillStyle=CT.label; ctx.font='8px Courier New'; ctx.textAlign='right';
+    ctx.fillText(Math.round(maxV*r), PL-3, y+3);
+    ctx.strokeStyle=CT.grid; ctx.lineWidth=.5; ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+  });
 }
 
 function _buildDays() {
