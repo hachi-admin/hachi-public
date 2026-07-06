@@ -303,44 +303,28 @@
 
         <!-- AI PROVIDERS -->
         <div class="settings-section" id="ss-providers">
-          <div class="section-hd" style="margin-top:0">プロバイダー</div>
-          <div class="qs-card" style="flex-direction:column">
+          <div class="section-hd" style="margin-top:0">AI プロバイダー</div>
+          <div id="providers-list" style="display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
+          </div>
+
+          <div class="section-hd" style="margin-top:24px">アクティブプロバイダーの切替</div>
+          <div class="qs-card" style="flex-direction:column;gap:12px">
             <div class="qs-field">
-              <label class="form-label">プロバイダー</label>
-              <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)">
+              <label class="form-label">デフォルトプロバイダー</label>
+              <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)" style="width:auto">
                 <option value="gemini">Google Gemini</option>
                 <option value="claude">Anthropic Claude</option>
               </select>
             </div>
             <div class="qs-field">
-              <label class="form-label">API キーの上書き (Firestore・テスト用)</label>
+              <label class="form-label">API キー上書き (Firestore・テスト用)</label>
               <div style="display:flex;gap:8px;align-items:center">
                 <input class="form-input" id="provider-key-input" type="password" placeholder="キーを貼り付けて上書き…" autocomplete="new-password" style="flex:1;font-size:11px">
                 <button class="save-btn" onclick="saveProviderKey()">保存</button>
               </div>
               <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
-            </div>
-            <div id="provider-key-hint" style="font-size:10px;color:var(--m);margin-top:6px;padding-top:6px;border-top:1px solid var(--div)">
-              ここで保存したキーは GCP Secret Manager を上書きします（Firestore に保存・認証必須）。本番キーは以下の Secret Manager で更新してください。
-            </div>
-          </div>
-
-          <div class="section-hd" style="margin-top:20px">GCP Secret Manager</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:10px;line-height:1.6">
-            本番キーは GCP Secret Manager に保管されています。変更は次回の Cloud Run デプロイ時に反映されます。
-            <a href="https://console.cloud.google.com/security/secret-manager" target="_blank" rel="noopener" style="color:var(--acc);display:inline-block;margin-top:4px">&#8594; GCP Secret Manager を開く</a>
-          </div>
-          <div class="qs-card" style="display:flex;flex-direction:column;gap:0">
-            <div style="padding-bottom:12px">
-              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">GEMINI_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">全 Gemini エージェント (Pro &amp; Flash)。Google AI Studio でローテーション。</div>
-            </div>
-            <div style="border-top:1px solid var(--div);padding-top:12px;padding-bottom:12px">
-              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">ANTHROPIC_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">Claude プロバイダー選択時に有効。Anthropic Console でローテーション。</div>
-            </div>
-            <div style="border-top:1px solid var(--div);padding-top:12px" id="provider-agents-list">
-              <div style="font-size:11px;color:var(--m)">エージェントごとのモデル割り当ては概要カードに表示されます。</div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">Firestore に保存されたキーは GCP Secret Manager より優先されます（テスト用のみ）。</div>
             </div>
           </div>
         </div>
@@ -401,59 +385,79 @@
           <div class="qs-card" id="settings-flash-list" style="padding:8px"></div>
         </div>
 
-        <!-- MAIL -->
+        <!-- MAIL ACCOUNTS -->
         <div class="settings-section" id="ss-mail">
-          <div class="section-hd" style="margin-top:0">メールアカウント</div>
-          <div id="mail-status-line" style="font-size:11px;color:var(--m);margin-bottom:12px">読み込み中…</div>
-          <div class="qs-field">
-            <label class="form-label">IMAP ホスト</label>
-            <input class="form-input" id="mail-host" type="text" placeholder="imap.gmail.com" autocomplete="off">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="section-hd" style="margin-top:0;margin-bottom:0">Gmail アカウント</div>
+            <button class="save-btn" onclick="showAddMailAccountModal()" style="font-size:11px;padding:5px 12px">＋ 追加</button>
           </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">IMAP ポート</label>
-            <input class="form-input" id="mail-port" type="number" placeholder="993" style="width:90px">
+          <div id="mail-accounts-list" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
           </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">メールアドレス</label>
-            <input class="form-input" id="mail-user" type="email" placeholder="you@gmail.com" autocomplete="off">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP ホスト</label>
-            <input class="form-input" id="mail-smtp-host" type="text" placeholder="smtp.gmail.com" autocomplete="off">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP ポート</label>
-            <input class="form-input" id="mail-smtp-port" type="number" placeholder="587" style="width:90px">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">スパムフォルダ名</label>
-            <input class="form-input" id="mail-spam-folder" type="text" placeholder="Spam" style="width:160px">
-          </div>
-          <div class="qs-field" style="margin-top:14px">
-            <label class="form-label">稼働時間帯 (UTC)</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-              <input class="form-input" id="mail-start-utc" type="number" min="0" max="23" placeholder="22" style="width:70px">
-              <span style="font-size:11px;color:var(--m)">〜</span>
-              <input class="form-input" id="mail-end-utc" type="number" min="0" max="23" placeholder="13" style="width:70px">
+          <div id="mail-accounts-status" style="font-size:10px;color:var(--m);margin-top:8px"></div>
+
+          <!-- Add account form (hidden by default) -->
+          <div id="mail-add-form" style="display:none;margin-top:16px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--div)">
+            <div class="section-hd" style="margin-top:0;margin-bottom:10px;font-size:12px">新しいアカウントを追加</div>
+            <div class="qs-field">
+              <label class="form-label">メールアドレス</label>
+              <input class="form-input" id="add-mail-email" type="email" placeholder="you@gmail.com" autocomplete="off">
             </div>
-            <div style="font-size:10px;color:var(--m);margin-top:4px">デフォルト 22〜13 UTC = JST 7:00〜22:00。この時間帯外のチェックはスキップされます。</div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">IMAP ホスト</label>
+                <input class="form-input" id="add-mail-host" type="text" value="imap.gmail.com" autocomplete="off">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">IMAP ポート</label>
+                <input class="form-input" id="add-mail-port" type="number" value="993" style="width:80px">
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">SMTP ホスト</label>
+                <input class="form-input" id="add-mail-smtp-host" type="text" value="smtp.gmail.com" autocomplete="off">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">SMTP ポート</label>
+                <input class="form-input" id="add-mail-smtp-port" type="number" value="587" style="width:80px">
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">スパムフォルダ</label>
+                <input class="form-input" id="add-mail-spam" type="text" value="Spam" style="width:110px">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">チェック間隔 (h)</label>
+                <input class="form-input" id="add-mail-interval" type="number" min="1" max="24" value="4" style="width:70px">
+              </div>
+            </div>
+            <div class="qs-field" style="margin-top:10px">
+              <label class="form-label">稼働時間帯 UTC (開始〜終了)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-input" id="add-mail-start-utc" type="number" min="0" max="23" value="22" style="width:65px">
+                <span style="font-size:11px;color:var(--m)">〜</span>
+                <input class="form-input" id="add-mail-end-utc" type="number" min="0" max="23" value="13" style="width:65px">
+              </div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">22〜13 UTC = JST 7:00〜22:00</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <button class="save-btn" onclick="addMailAccount()">保存</button>
+              <button class="refresh-btn" onclick="hideAddMailAccountModal()">キャンセル</button>
+            </div>
+            <div id="mail-add-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
           </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">チェック間隔 (N時間)</label>
-            <input class="form-input" id="mail-interval" type="number" min="1" max="24" placeholder="4" style="width:70px">
-          </div>
-          <button class="save-btn" style="margin-top:16px" onclick="saveMailConfig()">保存</button>
-          <div id="mail-save-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
-          <div class="section-hd" style="margin-top:24px">Gmail アプリパスワードの設定</div>
+
+          <div class="section-hd" style="margin-top:24px">OAuth2 セットアップ</div>
           <div style="font-size:11px;color:var(--m);line-height:1.7">
             <ol style="padding-left:16px;margin:6px 0">
-              <li>Gmail で IMAP を有効化: 設定 → すべての設定を表示 → メール転送と POP/IMAP → IMAP を有効にする</li>
-              <li>アプリパスワードを作成: Google アカウント → セキュリティ → 2段階認証 → アプリパスワード</li>
-              <li>パスワードを GCP Secret Manager に <code>HACHI_MAIL_PASSWORD</code> として保存</li>
-              <li>Cloud Run 環境変数を設定: <code>MAIL_HOST=imap.gmail.com</code>, <code>MAIL_USER=hachiproject888@gmail.com</code>, <code>MAIL_SMTP_HOST=smtp.gmail.com</code></li>
-              <li>シークレット更新後に再デプロイ</li>
+              <li>Gmail で IMAP を有効化: 設定 → すべての設定 → メール転送と POP/IMAP → IMAP を有効にする</li>
+              <li>GCP Console で OAuth2 デスクトップクライアントを作成し、クライアント ID / シークレットを <code>hachi-sec-017/018</code> に保存</li>
+              <li><code>node scripts/gmail-oauth-setup.js</code> をローカルで実行し、リフレッシュトークンを <code>hachi-sec-019</code> に保存</li>
+              <li>Cloud Run に <code>--update-secrets HACHI_SEC_017=hachi-sec-017:latest ...</code> を追加して再デプロイ</li>
             </ol>
-            <div style="margin-top:8px">金融関連メールは <strong>billing-and-expenses</strong> Discord チャンネルに投稿されます。返信候補は <strong>mails</strong> に表示されます。</div>
+            <div style="margin-top:6px">OAuth2 設定後はアカウントカードの OAuth バッジが <span style="color:#4caf50">●</span> に変わります。</div>
           </div>
         </div>
 

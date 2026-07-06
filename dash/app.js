@@ -843,67 +843,124 @@ function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
   if (id === 'location') _renderSettingsLocation();
-  if (id === 'mail') _loadMailConfig();
+  if (id === 'mail') _loadMailAccounts();
+  if (id === 'providers') _loadProviders();
 }
 
-async function _loadMailConfig() {
-  const status = document.getElementById('mail-status-line');
-  if (status) status.textContent = '読み込み中…';
+/* ── Mail accounts ─────────────────────────────────────────── */
+
+async function _loadMailAccounts() {
+  const list = document.getElementById('mail-accounts-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
   try {
-    const res = await fetch(apiUrl('/api/mail/config'), { headers: _authHeaders() });
+    const res = await fetch(apiUrl('/api/mail/accounts'), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
-    const d = await res.json();
-    const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
-    set('mail-host',       d.host);
-    set('mail-port',       d.port);
-    set('mail-user',       d.user);
-    set('mail-smtp-host',  d.smtpHost);
-    set('mail-smtp-port',  d.smtpPort);
-    set('mail-spam-folder',d.spamFolder);
-    set('mail-start-utc',  d.activeStartUtc);
-    set('mail-end-utc',    d.activeEndUtc);
-    set('mail-interval',   d.intervalHours);
-    if (status) {
-      const configured = d.configured;
-      const lastScan = d.lastScanAt ? new Date(d.lastScanAt._seconds ? d.lastScanAt._seconds * 1000 : d.lastScanAt).toLocaleString() : 'Never';
-      status.innerHTML = configured
-        ? `<span style="color:var(--grn)">Connected</span> — ${esc(d.user)} · Last scan: ${esc(lastScan)}`
-        : '<span style="color:var(--red)">Not configured</span> — set MAIL_HOST and MAIL_USER below, then store App Password in Secret Manager';
+    const { accounts } = await res.json();
+    if (!accounts.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--m)">アカウントがありません。「＋ 追加」でGmailを追加してください。</div>';
+      return;
     }
+    list.innerHTML = accounts.map(a => _renderMailAccountCard(a)).join('');
   } catch (e) {
-    if (status) status.textContent = 'Failed to load: ' + e.message;
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
   }
 }
 
-async function saveMailConfig() {
+function _renderMailAccountCard(a) {
+  const lastScan = a.lastScanAt
+    ? new Date(a.lastScanAt._seconds ? a.lastScanAt._seconds * 1000 : a.lastScanAt).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+    : 'なし';
+  const oauthBadge = a.authType === 'oauth2' || a.oauthConfigured
+    ? '<span style="color:#4caf50;font-size:10px;font-weight:700">● OAuth2</span>'
+    : '<span style="color:var(--m);font-size:10px">● パスワード</span>';
+  const activeBadge = a.active
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    : '';
+  return `<div style="padding:12px 14px;background:var(--bg2);border-radius:10px;border:1px solid ${a.active ? 'var(--acc)' : 'var(--div)'}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:700;color:var(--txt);flex:1">${esc(a.email)}</span>
+      ${activeBadge}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--m);margin-bottom:8px">
+      <span>${oauthBadge}</span>
+      <span>IMAP: ${esc(a.host)}:${a.port}</span>
+      <span>間隔: ${a.intervalHours}h</span>
+      <span>最終スキャン: ${lastScan}</span>
+    </div>
+    <div style="display:flex;gap:6px">
+      ${!a.active ? `<button class="save-btn" style="font-size:10px;padding:4px 10px" onclick="setMailAccountActive('${esc(a.id)}')">アクティブに設定</button>` : ''}
+      <button class="refresh-btn" style="font-size:10px;padding:4px 10px" onclick="removeMailAccount('${esc(a.id)}', '${esc(a.email)}')">削除</button>
+    </div>
+  </div>`;
+}
+
+function showAddMailAccountModal() {
+  const f = document.getElementById('mail-add-form');
+  if (f) f.style.display = 'block';
+  document.getElementById('add-mail-email')?.focus();
+}
+
+function hideAddMailAccountModal() {
+  const f = document.getElementById('mail-add-form');
+  if (f) f.style.display = 'none';
+}
+
+async function addMailAccount() {
   const get = id => document.getElementById(id)?.value.trim();
+  const email = get('add-mail-email');
+  if (!email || !email.includes('@')) { showToast('有効なメールアドレスを入力してください。', 'warn'); return; }
   const body = {
-    host:           get('mail-host')        || undefined,
-    port:           Number(get('mail-port'))|| undefined,
-    user:           get('mail-user')        || undefined,
-    smtpHost:       get('mail-smtp-host')   || undefined,
-    smtpPort:       Number(get('mail-smtp-port')) || undefined,
-    spamFolder:     get('mail-spam-folder') || undefined,
-    activeStartUtc: Number(get('mail-start-utc')),
-    activeEndUtc:   Number(get('mail-end-utc')),
-    intervalHours:  Number(get('mail-interval')) || undefined,
+    email,
+    host:           get('add-mail-host')        || 'imap.gmail.com',
+    port:           Number(get('add-mail-port')) || 993,
+    smtpHost:       get('add-mail-smtp-host')    || 'smtp.gmail.com',
+    smtpPort:       Number(get('add-mail-smtp-port')) || 587,
+    spamFolder:     get('add-mail-spam')         || 'Spam',
+    intervalHours:  Number(get('add-mail-interval')) || 4,
+    activeStartUtc: Number(get('add-mail-start-utc')),
+    activeEndUtc:   Number(get('add-mail-end-utc')),
   };
-  // Strip undefined/NaN
-  for (const k of Object.keys(body)) { if (body[k] === undefined || Number.isNaN(body[k])) delete body[k]; }
-  const s = document.getElementById('mail-save-status');
+  const s = document.getElementById('mail-add-status');
   if (s) s.textContent = '保存中…';
   try {
-    const res = await fetch(apiUrl('/api/mail/config'), {
-      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    const res = await fetch(apiUrl('/api/mail/accounts'), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
       body: JSON.stringify(body),
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.status); }
-    if (s) s.textContent = '保存しました。';
-    showToast('メール設定を保存しました。', 'success');
-    await _loadMailConfig();
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || res.status); }
+    hideAddMailAccountModal();
+    if (s) s.textContent = '';
+    showToast(`${email} を追加しました。`, 'success');
+    await _loadMailAccounts();
   } catch (e) {
     if (s) s.textContent = 'Error: ' + e.message;
-    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function setMailAccountActive(id) {
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${id}`), {
+      method:'PATCH', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify({ active: true }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    showToast('アクティブアカウントを変更しました。', 'success');
+    await _loadMailAccounts();
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function removeMailAccount(id, email) {
+  if (!confirm(`${email} を削除しますか？`)) return;
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${id}`), { method:'DELETE', headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    showToast(`${email} を削除しました。`, 'success');
+    await _loadMailAccounts();
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
   }
 }
 
@@ -937,6 +994,80 @@ async function saveLocationOverrideSettings() {
 /* ═══════════════════════════════════════════════════════════
    AI PROVIDER MANAGEMENT
 ══════════════════════════════════════════════════════════════ */
+
+async function _loadProviders() {
+  const list = document.getElementById('providers-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/project/providers'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const sel = document.getElementById('provider-select');
+    if (sel) sel.value = data.activeProvider || 'gemini';
+    list.innerHTML = data.providers.map(p => _renderProviderCard(p, data.activeProvider)).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function _renderProviderCard(p, activeProvider) {
+  const isActive = p.id === activeProvider;
+  const keyBadge = p.keyConfigured
+    ? '<span style="color:#4caf50;font-size:10px;font-weight:700">● キー設定済</span>'
+    : '<span style="color:var(--red);font-size:10px;font-weight:700">● キー未設定</span>';
+  const overrideBadge = p.keyOverrideInFirestore
+    ? '<span style="color:#ff9800;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(255,152,0,.15);font-weight:600">Firestoreキー</span>'
+    : '';
+  const activeBadge = isActive
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    : '';
+  const modelsText = p.models.join(', ');
+  const rotateLink = p.rotationUrl
+    ? `<a href="${p.rotationUrl}" target="_blank" rel="noopener" style="font-size:10px;color:var(--acc)">キーをローテーション →</a>`
+    : '';
+  const secretText = p.secretName ? `<div style="font-size:10px;color:var(--m);margin-top:2px">Secret: ${esc(p.secretName)}</div>` : '';
+  return `<div style="padding:14px;background:var(--bg2);border-radius:10px;border:1px solid ${isActive ? 'var(--acc)' : 'var(--div)'}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--txt);flex:1">${esc(p.name)}</span>
+      ${activeBadge}
+      ${overrideBadge}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--m);margin-bottom:8px">
+      <span>${keyBadge}</span>
+      ${p.agentCount ? `<span>エージェント: ${p.agentCount}</span>` : ''}
+      <span style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">モデル: ${esc(modelsText)}</span>
+    </div>
+    ${secretText}
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <button class="save-btn" style="font-size:10px;padding:4px 10px" onclick="testProvider('${esc(p.id)}', this)">接続テスト</button>
+      ${rotateLink}
+    </div>
+    <div id="provider-test-${esc(p.id)}" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+  </div>`;
+}
+
+async function testProvider(id, btn) {
+  const statusEl = document.getElementById(`provider-test-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (statusEl) statusEl.textContent = 'テスト中…';
+  try {
+    const res = await fetch(apiUrl(`/api/project/providers/${id}/test`), {
+      method:'POST', headers: _authHeaders(),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:#4caf50">✓ 接続成功</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${esc(d.error || 'Failed')}</span>`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${esc(e.message)}</span>`;
+  } finally {
+    if (btn) { btn.textContent = '接続テスト'; btn.disabled = false; }
+  }
+}
+
 function _syncProviderUI() {
   const sel = document.getElementById('provider-select');
   if (sel) sel.value = ACTIVE_PROVIDER;
