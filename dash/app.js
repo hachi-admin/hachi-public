@@ -247,6 +247,7 @@ function _applyData(d) {
 }
 
 function _renderAll(d) {
+  window._allChannels = d.channels || [];
   _renderAgentStatsBox();
   _renderAgentGrid();
   document.getElementById('agent-grid')?.classList.add('loaded');
@@ -286,11 +287,11 @@ function navTo(pageId) {
   } else {
     swap();
   }
-  if (pageId === 'analytics') _initCharts();
+  if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
-  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); }
-  if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); }
+  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
+  if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); _renderChannelCtxList(); }
   if (pageId === 'repos') _initReposPage();
 }
 
@@ -884,68 +885,249 @@ function _renderSettings(channels) {
 function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
-  if (id === 'location') _renderSettingsLocation();
-  if (id === 'mail') _loadMailConfig();
+  if (id === 'general') _renderSettingsLocation();
+  if (id === 'mail') _loadMailAccounts();
+  if (id === 'providers') _loadProviders();
 }
 
-async function _loadMailConfig() {
-  const status = document.getElementById('mail-status-line');
-  if (status) status.textContent = '読み込み中…';
+/* ── Mail accounts ─────────────────────────────────────────── */
+
+async function _loadMailAccounts() {
+  const list = document.getElementById('mail-accounts-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
   try {
-    const res = await fetch(apiUrl('/api/mail/config'), { headers: _authHeaders() });
+    const res = await fetch(apiUrl('/api/mail/accounts'), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
-    const d = await res.json();
-    const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
-    set('mail-host',       d.host);
-    set('mail-port',       d.port);
-    set('mail-user',       d.user);
-    set('mail-smtp-host',  d.smtpHost);
-    set('mail-smtp-port',  d.smtpPort);
-    set('mail-spam-folder',d.spamFolder);
-    set('mail-start-utc',  d.activeStartUtc);
-    set('mail-end-utc',    d.activeEndUtc);
-    set('mail-interval',   d.intervalHours);
-    if (status) {
-      const configured = d.configured;
-      const lastScan = d.lastScanAt ? new Date(d.lastScanAt._seconds ? d.lastScanAt._seconds * 1000 : d.lastScanAt).toLocaleString() : 'Never';
-      status.innerHTML = configured
-        ? `<span style="color:var(--grn)">Connected</span> — ${esc(d.user)} · Last scan: ${esc(lastScan)}`
-        : '<span style="color:var(--red)">Not configured</span> — set MAIL_HOST and MAIL_USER below, then store App Password in Secret Manager';
+    const { accounts } = await res.json();
+    if (!accounts.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--m)">アカウントがありません。「＋ 追加」でGmailを追加してください。</div>';
+      return;
     }
+    list.innerHTML = accounts.map(a => _renderMailAccountCard(a)).join('');
   } catch (e) {
-    if (status) status.textContent = 'Failed to load: ' + e.message;
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
   }
 }
 
-async function saveMailConfig() {
+function _renderMailAccountCard(a) {
+  const lastScan = a.lastScanAt
+    ? new Date(a.lastScanAt._seconds ? a.lastScanAt._seconds * 1000 : a.lastScanAt).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+    : 'なし';
+  const oauthBadge = a.authType === 'oauth2' || a.oauthConfigured
+    ? '<span style="color:#4caf50;font-size:10px;font-weight:700">● OAuth2</span>'
+    : '<span style="color:var(--m);font-size:10px">● パスワード</span>';
+  const activeBadge = a.active
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    : '';
+  return `<div style="padding:12px 14px;background:var(--bg2);border-radius:10px;border:1px solid ${a.active ? 'var(--acc)' : 'var(--div)'}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:700;color:var(--txt);flex:1">${esc(a.email)}</span>
+      ${activeBadge}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--m);margin-bottom:8px">
+      <span>${oauthBadge}</span>
+      <span>IMAP: ${esc(a.host)}:${a.port}</span>
+      <span>間隔: ${a.intervalHours}h</span>
+      <span>最終スキャン: ${lastScan}</span>
+    </div>
+    <div style="display:flex;gap:6px">
+      ${!a.active ? `<button class="save-btn" style="font-size:10px;padding:4px 10px" onclick="setMailAccountActive('${esc(a.id)}')">アクティブに設定</button>` : ''}
+      <button class="save-btn" style="font-size:10px;padding:4px 10px;background:var(--bg2);color:var(--txt)" onclick="openMailRules('${esc(a.id)}','${esc(a.email)}')">&#9776; ルール</button>
+      <button class="refresh-btn" style="font-size:10px;padding:4px 10px" onclick="removeMailAccount('${esc(a.id)}', '${esc(a.email)}')">削除</button>
+    </div>
+  </div>`;
+}
+
+function showAddMailAccountModal() {
+  const f = document.getElementById('mail-add-form');
+  if (f) f.style.display = 'block';
+  document.getElementById('add-mail-email')?.focus();
+}
+
+function hideAddMailAccountModal() {
+  const f = document.getElementById('mail-add-form');
+  if (f) f.style.display = 'none';
+}
+
+async function addMailAccount() {
   const get = id => document.getElementById(id)?.value.trim();
+  const email = get('add-mail-email');
+  if (!email || !email.includes('@')) { showToast('有効なメールアドレスを入力してください。', 'warn'); return; }
   const body = {
-    host:           get('mail-host')        || undefined,
-    port:           Number(get('mail-port'))|| undefined,
-    user:           get('mail-user')        || undefined,
-    smtpHost:       get('mail-smtp-host')   || undefined,
-    smtpPort:       Number(get('mail-smtp-port')) || undefined,
-    spamFolder:     get('mail-spam-folder') || undefined,
-    activeStartUtc: Number(get('mail-start-utc')),
-    activeEndUtc:   Number(get('mail-end-utc')),
-    intervalHours:  Number(get('mail-interval')) || undefined,
+    email,
+    host:           get('add-mail-host')        || 'imap.gmail.com',
+    port:           Number(get('add-mail-port')) || 993,
+    smtpHost:       get('add-mail-smtp-host')    || 'smtp.gmail.com',
+    smtpPort:       Number(get('add-mail-smtp-port')) || 587,
+    spamFolder:     get('add-mail-spam')         || 'Spam',
+    intervalHours:  Number(get('add-mail-interval')) || 4,
+    activeStartUtc: Number(get('add-mail-start-utc')),
+    activeEndUtc:   Number(get('add-mail-end-utc')),
   };
-  // Strip undefined/NaN
-  for (const k of Object.keys(body)) { if (body[k] === undefined || Number.isNaN(body[k])) delete body[k]; }
-  const s = document.getElementById('mail-save-status');
+  const s = document.getElementById('mail-add-status');
   if (s) s.textContent = '保存中…';
   try {
-    const res = await fetch(apiUrl('/api/mail/config'), {
-      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    const res = await fetch(apiUrl('/api/mail/accounts'), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
       body: JSON.stringify(body),
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.status); }
-    if (s) s.textContent = '保存しました。';
-    showToast('メール設定を保存しました。', 'success');
-    await _loadMailConfig();
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || res.status); }
+    hideAddMailAccountModal();
+    if (s) s.textContent = '';
+    showToast(`${email} を追加しました。`, 'success');
+    await _loadMailAccounts();
   } catch (e) {
     if (s) s.textContent = 'Error: ' + e.message;
-    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function setMailAccountActive(id) {
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${id}`), {
+      method:'PATCH', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify({ active: true }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    showToast('アクティブアカウントを変更しました。', 'success');
+    await _loadMailAccounts();
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function removeMailAccount(id, email) {
+  if (!confirm(`${email} を削除しますか？`)) return;
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${id}`), { method:'DELETE', headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    showToast(`${email} を削除しました。`, 'success');
+    await _loadMailAccounts();
+    // Also hide rules panel if showing this account's rules
+    const rulesSec = document.getElementById('mail-rules-section');
+    if (rulesSec) rulesSec.style.display = 'none';
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+/* ── Mail rules ─────────────────────────────────────────── */
+let _currentRulesAccountId = null;
+
+async function openMailRules(accountId, email) {
+  _currentRulesAccountId = accountId;
+  const sec = document.getElementById('mail-rules-section');
+  const label = document.getElementById('mail-rules-account-label');
+  if (sec) sec.style.display = 'block';
+  if (label) label.textContent = email;
+  await _loadMailRules(accountId);
+}
+
+async function _loadMailRules(accountId) {
+  const list = document.getElementById('mail-rules-list'); if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${accountId}/rules`), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const { rules } = await res.json();
+    if (!rules.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--m)">ルールなし</div>';
+      return;
+    }
+    list.innerHTML = rules.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:8px">
+      <span style="font-size:10px;color:var(--acc);font-weight:700;min-width:40px">${esc(r.field)}</span>
+      <span style="font-size:10px;color:var(--m);min-width:50px">${esc(r.matchType)}</span>
+      <span style="font-size:11px;color:var(--txt);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.pattern)}</span>
+      ${r.folder ? `<span style="font-size:10px;color:var(--m)">→ ${esc(r.folder)}</span>` : ''}
+      ${r.classification ? `<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:var(--accent-bg);color:var(--acc)">${esc(r.classification)}</span>` : ''}
+      <button class="refresh-btn" style="font-size:9px;padding:2px 7px" onclick="deleteMailRule('${esc(accountId)}','${esc(r.id)}')">削除</button>
+    </div>`).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function showAddRuleForm() {
+  const f = document.getElementById('mail-rule-add-form'); if (f) f.style.display = 'block';
+}
+function hideAddRuleForm() {
+  const f = document.getElementById('mail-rule-add-form'); if (f) f.style.display = 'none';
+}
+
+async function saveMailRule() {
+  if (!_currentRulesAccountId) { showToast('アカウントを先に選択してください', 'warn'); return; }
+  const get = id => document.getElementById(id)?.value.trim();
+  const body = {
+    field: get('rule-field') || 'from',
+    matchType: get('rule-match-type') || 'contains',
+    pattern: get('rule-pattern'),
+    folder: get('rule-folder') || null,
+    classification: get('rule-classification') || null,
+  };
+  if (!body.pattern) { showToast('パターンを入力してください', 'warn'); return; }
+  const s = document.getElementById('mail-rule-status');
+  if (s) s.textContent = '保存中…';
+  try {
+    const res = await fetch(apiUrl(`/api/mail/accounts/${_currentRulesAccountId}/rules`), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error||res.status); }
+    hideAddRuleForm();
+    if (s) s.textContent = '';
+    document.getElementById('rule-pattern').value = '';
+    showToast('ルールを追加しました', 'success');
+    await _loadMailRules(_currentRulesAccountId);
+  } catch (e) {
+    if (s) s.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function deleteMailRule(accountId, ruleId) {
+  try {
+    await fetch(apiUrl(`/api/mail/accounts/${accountId}/rules/${ruleId}`), { method:'DELETE', headers:_authHeaders() });
+    showToast('削除しました', 'success');
+    await _loadMailRules(accountId);
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+/* ── Channel per-channel context window ─────────────────── */
+
+function _renderChannelCtxList() {
+  const list = document.getElementById('channel-ctx-list'); if (!list) return;
+  // Use the channels already loaded (from dashboard data)
+  const chans = (window._allChannels || []).filter(c => c.key);
+  if (!chans.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--m)">登録済みチャンネルがありません。チャンネルを登録するとここに表示されます。</div>';
+    return;
+  }
+  list.innerHTML = chans.map(c => {
+    const cur = c.maxContextMessages ?? 20;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border-radius:8px">
+      <span style="font-size:12px;color:var(--txt);font-weight:600;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.key)}</span>
+      <input type="range" min="5" max="100" step="5" value="${cur}"
+        style="flex:1" id="ctx-ch-${esc(c.channelId)}"
+        oninput="document.getElementById('ctx-ch-label-${esc(c.channelId)}').textContent=this.value">
+      <span id="ctx-ch-label-${esc(c.channelId)}" style="font-size:11px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">${cur}</span>
+      <button class="save-btn" style="font-size:10px;padding:3px 10px" onclick="saveChannelCtx('${esc(c.channelId)}','${esc(c.key)}')">保存</button>
+    </div>`;
+  }).join('');
+}
+
+async function saveChannelCtx(channelId, key) {
+  const val = Number(document.getElementById(`ctx-ch-${channelId}`)?.value);
+  if (!val) return;
+  try {
+    const res = await fetch(apiUrl('/api/channels'), {
+      method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
+      body: JSON.stringify({ channelId, key, maxContextMessages: val }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    showToast(`${key}: コンテキスト ${val} 件に設定しました`, 'success');
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
   }
 }
 
@@ -979,6 +1161,80 @@ async function saveLocationOverrideSettings() {
 /* ═══════════════════════════════════════════════════════════
    AI PROVIDER MANAGEMENT
 ══════════════════════════════════════════════════════════════ */
+
+async function _loadProviders() {
+  const list = document.getElementById('providers-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/project/providers'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const sel = document.getElementById('provider-select');
+    if (sel) sel.value = data.activeProvider || 'gemini';
+    list.innerHTML = data.providers.map(p => _renderProviderCard(p, data.activeProvider)).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="font-size:11px;color:var(--red)">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function _renderProviderCard(p, activeProvider) {
+  const isActive = p.id === activeProvider;
+  const keyBadge = p.keyConfigured
+    ? '<span style="color:#4caf50;font-size:10px;font-weight:700">● キー設定済</span>'
+    : '<span style="color:var(--red);font-size:10px;font-weight:700">● キー未設定</span>';
+  const overrideBadge = p.keyOverrideInFirestore
+    ? '<span style="color:#ff9800;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(255,152,0,.15);font-weight:600">Firestoreキー</span>'
+    : '';
+  const activeBadge = isActive
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    : '';
+  const modelsText = p.models.join(', ');
+  const rotateLink = p.rotationUrl
+    ? `<a href="${p.rotationUrl}" target="_blank" rel="noopener" style="font-size:10px;color:var(--acc)">キーをローテーション →</a>`
+    : '';
+  const secretText = p.secretName ? `<div style="font-size:10px;color:var(--m);margin-top:2px">Secret: ${esc(p.secretName)}</div>` : '';
+  return `<div style="padding:14px;background:var(--bg2);border-radius:10px;border:1px solid ${isActive ? 'var(--acc)' : 'var(--div)'}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--txt);flex:1">${esc(p.name)}</span>
+      ${activeBadge}
+      ${overrideBadge}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--m);margin-bottom:8px">
+      <span>${keyBadge}</span>
+      ${p.agentCount ? `<span>エージェント: ${p.agentCount}</span>` : ''}
+      <span style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">モデル: ${esc(modelsText)}</span>
+    </div>
+    ${secretText}
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <button class="save-btn" style="font-size:10px;padding:4px 10px" onclick="testProvider('${esc(p.id)}', this)">接続テスト</button>
+      ${rotateLink}
+    </div>
+    <div id="provider-test-${esc(p.id)}" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+  </div>`;
+}
+
+async function testProvider(id, btn) {
+  const statusEl = document.getElementById(`provider-test-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (statusEl) statusEl.textContent = 'テスト中…';
+  try {
+    const res = await fetch(apiUrl(`/api/project/providers/${id}/test`), {
+      method:'POST', headers: _authHeaders(),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:#4caf50">✓ 接続成功</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${esc(d.error || 'Failed')}</span>`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${esc(e.message)}</span>`;
+  } finally {
+    if (btn) { btn.textContent = '接続テスト'; btn.disabled = false; }
+  }
+}
+
 function _syncProviderUI() {
   const sel = document.getElementById('provider-select');
   if (sel) sel.value = ACTIVE_PROVIDER;
@@ -1839,6 +2095,102 @@ function _initCharts() {
   if (!document.getElementById('cost-chart')) return;
   _buildDays();
   drawCostChart();
+}
+
+async function _loadAnalytics() {
+  try {
+    const res = await fetch(apiUrl('/api/analytics'), { headers: _authHeaders() });
+    if (!res.ok) return;
+    const d = await res.json();
+
+    // KPIs
+    const today = d.today || new Date().toISOString().split('T')[0];
+    const todayTasks = (d.byDay?.[today]?.total) ?? 0;
+    const todayFail  = (d.byDay?.[today]?.failed) ?? 0;
+    const newsTotal  = (d.newsHistory || []).reduce((s, n) => s + n.count, 0);
+    _setText('kpi-tasks-today', todayTasks);
+    _setText('kpi-tasks-fail', todayFail > 0 ? `${todayFail} 件失敗` : '');
+    _setText('kpi-queue', TASK_STATS?.byStatus ? ((TASK_STATS.byStatus.pending||0) + (TASK_STATS.byStatus.running||0)) : '—');
+    _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(4)}`);
+    _setText('kpi-news', newsTotal);
+
+    // Task activity chart
+    _drawTaskChart(d.byDay || {});
+
+    // Task type breakdown
+    const typeList = document.getElementById('task-type-list');
+    if (typeList) {
+      const entries = Object.entries(d.byType || {}).sort((a,b) => b[1]-a[1]).slice(0, 12);
+      const max = Math.max(1, ...entries.map(([,v]) => v));
+      typeList.innerHTML = entries.map(([type, cnt]) => {
+        const pct = Math.round(cnt/max*100);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <span style="font-size:10px;color:var(--m);width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(type)}</span>
+          <div style="flex:1;background:var(--div);border-radius:3px;height:6px"><div style="width:${pct}%;height:6px;border-radius:3px;background:var(--acc)"></div></div>
+          <span style="font-size:10px;color:var(--txt);min-width:24px;text-align:right">${cnt}</span>
+        </div>`;
+      }).join('') || '<div style="font-size:11px;color:var(--m)">データなし</div>';
+    }
+
+    // Mail run log
+    const mailLog = document.getElementById('mail-run-log');
+    if (mailLog) {
+      if (!d.mailRuns?.length) {
+        mailLog.innerHTML = '<div style="font-size:11px;color:var(--m)">メールタスク実行記録なし</div>';
+      } else {
+        mailLog.innerHTML = d.mailRuns.slice(0, 8).map(r => {
+          const dt = new Date(r.date).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          const ok = r.status === 'completed';
+          const badge = ok
+            ? '<span style="color:#4caf50;font-size:9px;font-weight:700">●</span>'
+            : '<span style="color:var(--red);font-size:9px;font-weight:700">●</span>';
+          const msg = ok ? (r.result || 'OK').slice(0, 60) : (r.error || 'failed').slice(0, 60);
+          return `<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 0;border-bottom:1px solid var(--div)">
+            <div style="padding-top:2px">${badge}</div>
+            <div><div style="font-size:10px;color:var(--m)">${dt}</div><div style="font-size:11px;color:var(--txt);line-height:1.4">${esc(msg)}</div></div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch { /* silent */ }
+}
+
+function _setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+
+function _drawTaskChart(byDay) {
+  const canvas = document.getElementById('task-chart'); if (!canvas) return;
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() - i*86400000);
+    const key = d.toISOString().split('T')[0];
+    const label = ['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+    days.push({ key, label, completed: byDay[key]?.completed||0, failed: byDay[key]?.failed||0, total: byDay[key]?.total||0 });
+  }
+  const dpr = window.devicePixelRatio||1;
+  const par = canvas.parentElement;
+  const W = par ? par.clientWidth - 28 : 300, H = 140, PL=32, PR=8, PT=8, PB=28;
+  canvas.width = W*dpr; canvas.height = H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+  const CT = _chartTheme();
+  ctx.fillStyle = CT.bg; ctx.fillRect(0,0,W,H);
+  const CW = W-PL-PR, CH = H-PT-PB;
+  const n = days.length, gap = CW/n, barW = Math.max(4, gap*.6);
+  const maxV = Math.max(1, ...days.map(d=>d.total));
+  days.forEach((d, i) => {
+    const x = PL + i*gap + gap/2 - barW/2;
+    const bh = (d.total/maxV)*CH;
+    ctx.fillStyle = '#34D39966'; ctx.fillRect(x, PT+CH-bh, barW, bh);
+    const fh = (d.failed/maxV)*CH;
+    if (fh>0) { ctx.fillStyle = '#EF444466'; ctx.fillRect(x, PT+CH-fh, barW, fh); }
+    ctx.fillStyle = CT.label; ctx.font = '9px Courier New'; ctx.textAlign='center';
+    ctx.fillText(d.label, x+barW/2, H-PB+13);
+    if (d.total>0) { ctx.fillStyle=CT.axis; ctx.font='8px Courier New'; ctx.fillText(d.total, x+barW/2, PT+CH-bh-2); }
+  });
+  [0,.5,1].forEach(r => {
+    const y = PT+CH*(1-r); ctx.fillStyle=CT.label; ctx.font='8px Courier New'; ctx.textAlign='right';
+    ctx.fillText(Math.round(maxV*r), PL-3, y+3);
+    ctx.strokeStyle=CT.grid; ctx.lineWidth=.5; ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+  });
 }
 
 function _buildDays() {

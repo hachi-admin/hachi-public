@@ -227,30 +227,75 @@
 
   <!-- ── ANALYTICS ──────────────────────────────── -->
   <section class="page" id="page-analytics" data-mob-panel="analytics">
-    <div class="page-hd"><div class="page-title">分析</div></div>
+    <div class="page-hd">
+      <div class="page-title">分析</div>
+      <button class="refresh-btn" onclick="_loadAnalytics()" style="font-size:11px">&#8635; 更新</button>
+    </div>
 
-    <!-- Costs chart -->
-    <div class="chart-box">
-      <div class="chart-header">
-        <span class="chart-title" data-i18n="analytics-chart">トークンコスト — 直近7日</span>
-        <div class="chart-tabs">
-          <button class="chart-tab active" data-ctab="bar" onclick="setCostTab(this,'bar')">Bar</button>
-          <button class="chart-tab" data-ctab="line" onclick="setCostTab(this,'line')">Line</button>
-        </div>
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="analytics-kpi-row">
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">本日のタスク</div>
+        <div id="kpi-tasks-today" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div id="kpi-tasks-fail" style="font-size:10px;color:var(--red)"></div>
       </div>
-      <div id="line-toggles" class="line-toggles hidden"></div>
-      <canvas id="cost-chart" height="160"></canvas>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">キュー深度</div>
+        <div id="kpi-queue" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div style="font-size:10px;color:var(--m)">pending + running</div>
+      </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">本日のコスト</div>
+        <div id="kpi-cost-today" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div style="font-size:10px;color:var(--m)">USD 概算</div>
+      </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">ニュース配信</div>
+        <div id="kpi-news" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div style="font-size:10px;color:var(--m)">今週の記事数</div>
+      </div>
+    </div>
+
+    <!-- Cost chart + task activity chart side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div class="chart-box" style="margin-bottom:0">
+        <div class="chart-header">
+          <span class="chart-title">コスト — 直近7日</span>
+          <div class="chart-tabs">
+            <button class="chart-tab active" data-ctab="bar" onclick="setCostTab(this,'bar')">Bar</button>
+            <button class="chart-tab" data-ctab="line" onclick="setCostTab(this,'line')">Line</button>
+          </div>
+        </div>
+        <div id="line-toggles" class="line-toggles hidden"></div>
+        <canvas id="cost-chart" height="140"></canvas>
+      </div>
+      <div class="chart-box" style="margin-bottom:0">
+        <div class="chart-header"><span class="chart-title">タスク実行 — 直近7日</span></div>
+        <canvas id="task-chart" height="140"></canvas>
+      </div>
+    </div>
+
+    <!-- Task type breakdown + Mail run log row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div>
+        <div class="section-hd" style="margin-top:0">タスクタイプ別</div>
+        <div id="task-type-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+      <div>
+        <div class="section-hd" style="margin-top:0">メール処理ログ</div>
+        <div id="mail-run-log" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
     </div>
 
     <!-- Cost table -->
-    <div class="section-hd" data-i18n="analytics-costs">本日のコスト</div>
+    <div class="section-hd">本日のコスト — エージェント別</div>
     <table class="ct-table">
-      <thead><tr><th data-i18n="analytics-agent">Agent</th><th>Model</th><th data-i18n="analytics-tokens">Tokens</th><th data-i18n="analytics-cost">Cost (est.)</th></tr></thead>
+      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>Cost (est.)</th></tr></thead>
       <tbody id="cost-table-body"></tbody>
     </table>
 
     <!-- Privilege matrix -->
-    <div class="section-hd" style="margin-top:20px" data-i18n="analytics-priv">Privilege matrix</div>
+    <div class="section-hd" style="margin-top:20px">Privilege matrix</div>
     <div id="priv-matrix"></div>
   </section>
 
@@ -263,8 +308,6 @@
       <nav class="settings-nav" id="settings-nav">
         <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">一般</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI プロバイダー</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'context')">コンテキスト</button>
-        <button class="settings-nav-btn" onclick="setSettingsSection(this,'location')">位置・Flash</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">メール</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">管理</button>
       </nav>
@@ -296,69 +339,12 @@
             <div class="qs-field">
               <label class="form-label">Flash 上書き</label>
               <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">全エージェントをエージェント個別設定に関わらず Flash モデルで動作させます。</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI PROVIDERS -->
-        <div class="settings-section" id="ss-providers">
-          <div class="section-hd" style="margin-top:0">プロバイダー</div>
-          <div class="qs-card" style="flex-direction:column">
-            <div class="qs-field">
-              <label class="form-label">プロバイダー</label>
-              <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)">
-                <option value="gemini">Google Gemini</option>
-                <option value="claude">Anthropic Claude</option>
-              </select>
-            </div>
-            <div class="qs-field">
-              <label class="form-label">API キーの上書き (Firestore・テスト用)</label>
-              <div style="display:flex;gap:8px;align-items:center">
-                <input class="form-input" id="provider-key-input" type="password" placeholder="キーを貼り付けて上書き…" autocomplete="new-password" style="flex:1;font-size:11px">
-                <button class="save-btn" onclick="saveProviderKey()">保存</button>
-              </div>
-              <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
-            </div>
-            <div id="provider-key-hint" style="font-size:10px;color:var(--m);margin-top:6px;padding-top:6px;border-top:1px solid var(--div)">
-              ここで保存したキーは GCP Secret Manager を上書きします（Firestore に保存・認証必須）。本番キーは以下の Secret Manager で更新してください。
+              <div style="font-size:10px;color:var(--m);margin-top:4px">全エージェントを Flash モデルで動作させます。</div>
             </div>
           </div>
 
-          <div class="section-hd" style="margin-top:20px">GCP Secret Manager</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:10px;line-height:1.6">
-            本番キーは GCP Secret Manager に保管されています。変更は次回の Cloud Run デプロイ時に反映されます。
-            <a href="https://console.cloud.google.com/security/secret-manager" target="_blank" rel="noopener" style="color:var(--acc);display:inline-block;margin-top:4px">&#8594; GCP Secret Manager を開く</a>
-          </div>
-          <div class="qs-card" style="display:flex;flex-direction:column;gap:0">
-            <div style="padding-bottom:12px">
-              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">GEMINI_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">全 Gemini エージェント (Pro &amp; Flash)。Google AI Studio でローテーション。</div>
-            </div>
-            <div style="border-top:1px solid var(--div);padding-top:12px;padding-bottom:12px">
-              <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:2px">ANTHROPIC_API_KEY</div>
-              <div style="font-size:11px;color:var(--m)">Claude プロバイダー選択時に有効。Anthropic Console でローテーション。</div>
-            </div>
-            <div style="border-top:1px solid var(--div);padding-top:12px" id="provider-agents-list">
-              <div style="font-size:11px;color:var(--m)">エージェントごとのモデル割り当ては概要カードに表示されます。</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- CONTEXT WINDOW -->
-        <div class="settings-section" id="ss-context">
-          <div class="section-hd" style="margin-top:0">コンテキストウィンドウ</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:12px">グローバル設定。チャンネルごとのコンテキストはチャンネルページで調整できます。</div>
-          <div class="qs-card" style="flex-direction:column" id="context-settings-card">
-            <div class="qs-field">
-              <label class="form-label">最大保持メッセージ数</label>
-              <div style="display:flex;gap:10px;align-items:center">
-                <input type="range" id="ctx-max-messages" min="5" max="100" step="5" value="20"
-                  style="flex:1" oninput="document.getElementById('ctx-max-label').textContent=this.value">
-                <span id="ctx-max-label" style="font-size:12px;font-weight:700;color:var(--txt);min-width:28px;text-align:right">20</span>
-              </div>
-              <div style="font-size:10px;color:var(--m);margin-top:3px">チャットコンテキストウィンドウに読み込むメッセージ数。少ないほどコスト削減、多いほど長期記憶が向上します。</div>
-            </div>
+          <div class="section-hd" style="margin-top:20px">コンテキスト圧縮</div>
+          <div class="qs-card" style="flex-direction:column;gap:10px" id="context-settings-card">
             <div class="qs-field">
               <label class="form-label">コンテキスト圧縮</label>
               <div style="display:flex;align-items:center;gap:10px">
@@ -368,18 +354,15 @@
                   <option value="pro">Pro (高品質な要約)</option>
                 </select>
               </div>
-              <div style="font-size:10px;color:var(--m);margin-top:3px">古いメッセージを AI で要約してからコンテキストに注入します。長い会話のトークンコストを削減します。</div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">古いメッセージをAIで要約してコンテキストに注入します。チャンネルごとの最大メッセージ数はチャンネルページで設定できます。</div>
             </div>
-            <button class="save-btn" style="margin-top:12px" onclick="saveContextSettings()">保存</button>
-            <div id="ctx-save-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+            <button class="save-btn" style="margin-top:4px;width:fit-content" onclick="saveContextSettings()">保存</button>
+            <div id="ctx-save-status" style="font-size:10px;color:var(--m)"></div>
           </div>
-        </div>
 
-        <!-- LOCATION & FLASH -->
-        <div class="settings-section" id="ss-location">
-          <div class="section-hd" style="margin-top:0">位置情報</div>
+          <div class="section-hd" style="margin-top:20px">位置情報</div>
           <div class="qs-card" style="flex-direction:column">
-            <div id="settings-loc-detail" style="font-size:12px;color:var(--m);margin-bottom:12px;line-height:1.5">読み込み中…</div>
+            <div id="settings-loc-detail" style="font-size:12px;color:var(--m);margin-bottom:10px;line-height:1.5">読み込み中…</div>
             <div class="form-grid" style="margin-bottom:0">
               <div class="qs-field">
                 <label class="form-label">都市の上書き</label>
@@ -390,70 +373,172 @@
                 <input class="form-input" id="settings-loc-country" placeholder="例: JP" style="font-size:11px">
               </div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:12px">
+            <div style="display:flex;gap:8px;margin-top:10px">
               <button class="save-btn" onclick="saveLocationOverrideSettings()">上書きを保存</button>
-              <button class="refresh-btn" onclick="clearLocationOverride()">上書きをクリア</button>
+              <button class="refresh-btn" onclick="clearLocationOverride()">クリア</button>
             </div>
           </div>
-
-          <div class="section-hd" style="margin-top:20px">エージェントごとの Flash 上書き</div>
-          <div style="font-size:11px;color:var(--m);margin-bottom:10px">個別エージェントをグローバル設定に関わらず Flash モデルで動作させます。</div>
-          <div class="qs-card" id="settings-flash-list" style="padding:8px"></div>
         </div>
 
-        <!-- MAIL -->
-        <div class="settings-section" id="ss-mail">
-          <div class="section-hd" style="margin-top:0">メールアカウント</div>
-          <div id="mail-status-line" style="font-size:11px;color:var(--m);margin-bottom:12px">読み込み中…</div>
-          <div class="qs-field">
-            <label class="form-label">IMAP ホスト</label>
-            <input class="form-input" id="mail-host" type="text" placeholder="imap.gmail.com" autocomplete="off">
+        <!-- AI PROVIDERS -->
+        <div class="settings-section" id="ss-providers">
+          <div class="section-hd" style="margin-top:0">AI プロバイダー</div>
+          <div id="providers-list" style="display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
           </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">IMAP ポート</label>
-            <input class="form-input" id="mail-port" type="number" placeholder="993" style="width:90px">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">メールアドレス</label>
-            <input class="form-input" id="mail-user" type="email" placeholder="you@gmail.com" autocomplete="off">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP ホスト</label>
-            <input class="form-input" id="mail-smtp-host" type="text" placeholder="smtp.gmail.com" autocomplete="off">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">SMTP ポート</label>
-            <input class="form-input" id="mail-smtp-port" type="number" placeholder="587" style="width:90px">
-          </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">スパムフォルダ名</label>
-            <input class="form-input" id="mail-spam-folder" type="text" placeholder="Spam" style="width:160px">
-          </div>
-          <div class="qs-field" style="margin-top:14px">
-            <label class="form-label">稼働時間帯 (UTC)</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-              <input class="form-input" id="mail-start-utc" type="number" min="0" max="23" placeholder="22" style="width:70px">
-              <span style="font-size:11px;color:var(--m)">〜</span>
-              <input class="form-input" id="mail-end-utc" type="number" min="0" max="23" placeholder="13" style="width:70px">
+
+          <div class="section-hd" style="margin-top:24px">アクティブプロバイダーの切替</div>
+          <div class="qs-card" style="flex-direction:column;gap:12px">
+            <div class="qs-field">
+              <label class="form-label">デフォルトプロバイダー</label>
+              <select class="form-select" id="provider-select" onchange="setActiveProvider(this.value)" style="width:auto">
+                <option value="gemini">Google Gemini</option>
+                <option value="claude">Anthropic Claude</option>
+              </select>
             </div>
-            <div style="font-size:10px;color:var(--m);margin-top:4px">デフォルト 22〜13 UTC = JST 7:00〜22:00。この時間帯外のチェックはスキップされます。</div>
+            <div class="qs-field">
+              <label class="form-label">API キー上書き (Firestore・テスト用)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-input" id="provider-key-input" type="password" placeholder="キーを貼り付けて上書き…" autocomplete="new-password" style="flex:1;font-size:11px">
+                <button class="save-btn" onclick="saveProviderKey()">保存</button>
+              </div>
+              <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">Firestore に保存されたキーは GCP Secret Manager より優先されます（テスト用のみ）。</div>
+            </div>
           </div>
-          <div class="qs-field" style="margin-top:10px">
-            <label class="form-label">チェック間隔 (N時間)</label>
-            <input class="form-input" id="mail-interval" type="number" min="1" max="24" placeholder="4" style="width:70px">
+        </div>
+
+
+        <!-- MAIL ACCOUNTS -->
+        <div class="settings-section" id="ss-mail">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="section-hd" style="margin-top:0;margin-bottom:0">Gmail アカウント</div>
+            <button class="save-btn" onclick="showAddMailAccountModal()" style="font-size:11px;padding:5px 12px">＋ 追加</button>
           </div>
-          <button class="save-btn" style="margin-top:16px" onclick="saveMailConfig()">保存</button>
-          <div id="mail-save-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
-          <div class="section-hd" style="margin-top:24px">Gmail アプリパスワードの設定</div>
+          <div id="mail-accounts-list" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
+          </div>
+          <div id="mail-accounts-status" style="font-size:10px;color:var(--m);margin-top:8px"></div>
+
+          <!-- Add account form (hidden by default) -->
+          <div id="mail-add-form" style="display:none;margin-top:16px;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--div)">
+            <div class="section-hd" style="margin-top:0;margin-bottom:10px;font-size:12px">新しいアカウントを追加</div>
+            <div class="qs-field">
+              <label class="form-label">メールアドレス</label>
+              <input class="form-input" id="add-mail-email" type="email" placeholder="you@gmail.com" autocomplete="off">
+            </div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">IMAP ホスト</label>
+                <input class="form-input" id="add-mail-host" type="text" value="imap.gmail.com" autocomplete="off">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">IMAP ポート</label>
+                <input class="form-input" id="add-mail-port" type="number" value="993" style="width:80px">
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">SMTP ホスト</label>
+                <input class="form-input" id="add-mail-smtp-host" type="text" value="smtp.gmail.com" autocomplete="off">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">SMTP ポート</label>
+                <input class="form-input" id="add-mail-smtp-port" type="number" value="587" style="width:80px">
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="qs-field">
+                <label class="form-label">スパムフォルダ</label>
+                <input class="form-input" id="add-mail-spam" type="text" value="Spam" style="width:110px">
+              </div>
+              <div class="qs-field">
+                <label class="form-label">チェック間隔 (h)</label>
+                <input class="form-input" id="add-mail-interval" type="number" min="1" max="24" value="4" style="width:70px">
+              </div>
+            </div>
+            <div class="qs-field" style="margin-top:10px">
+              <label class="form-label">稼働時間帯 UTC (開始〜終了)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-input" id="add-mail-start-utc" type="number" min="0" max="23" value="22" style="width:65px">
+                <span style="font-size:11px;color:var(--m)">〜</span>
+                <input class="form-input" id="add-mail-end-utc" type="number" min="0" max="23" value="13" style="width:65px">
+              </div>
+              <div style="font-size:10px;color:var(--m);margin-top:3px">22〜13 UTC = JST 7:00〜22:00</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <button class="save-btn" onclick="addMailAccount()">保存</button>
+              <button class="refresh-btn" onclick="hideAddMailAccountModal()">キャンセル</button>
+            </div>
+            <div id="mail-add-status" style="font-size:10px;color:var(--m);margin-top:6px"></div>
+          </div>
+
+          <!-- Rules per account (shown when an account is selected) -->
+          <div id="mail-rules-section" style="display:none;margin-top:20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div class="section-hd" style="margin-top:0;margin-bottom:0">振り分けルール — <span id="mail-rules-account-label" style="font-weight:400;color:var(--m)"></span></div>
+              <button class="save-btn" onclick="showAddRuleForm()" style="font-size:11px;padding:4px 10px">＋ ルール追加</button>
+            </div>
+            <div id="mail-rules-list" style="display:flex;flex-direction:column;gap:6px">
+              <div style="font-size:11px;color:var(--m)">読み込み中…</div>
+            </div>
+            <!-- Add rule form -->
+            <div id="mail-rule-add-form" style="display:none;margin-top:12px;padding:12px;background:var(--bg2);border-radius:8px;border:1px solid var(--div)">
+              <div class="form-grid">
+                <div class="qs-field">
+                  <label class="form-label">フィールド</label>
+                  <select class="form-select" id="rule-field" style="width:auto;font-size:11px">
+                    <option value="from">差出人 (from)</option>
+                    <option value="subject">件名 (subject)</option>
+                    <option value="to">宛先 (to)</option>
+                  </select>
+                </div>
+                <div class="qs-field">
+                  <label class="form-label">マッチ方式</label>
+                  <select class="form-select" id="rule-match-type" style="width:auto;font-size:11px">
+                    <option value="contains">含む</option>
+                    <option value="regex">正規表現</option>
+                  </select>
+                </div>
+              </div>
+              <div class="qs-field" style="margin-top:8px">
+                <label class="form-label">パターン</label>
+                <input class="form-input" id="rule-pattern" type="text" placeholder="例: @amazon.co.jp" style="font-size:11px">
+              </div>
+              <div class="form-grid" style="margin-top:8px">
+                <div class="qs-field">
+                  <label class="form-label">フォルダ (省略可)</label>
+                  <input class="form-input" id="rule-folder" type="text" placeholder="例: [Hachi]/Shopping" style="font-size:11px">
+                </div>
+                <div class="qs-field">
+                  <label class="form-label">分類上書き (省略可)</label>
+                  <select class="form-select" id="rule-classification" style="width:auto;font-size:11px">
+                    <option value="">— 変更なし —</option>
+                    <option value="financial">financial</option>
+                    <option value="interesting">interesting</option>
+                    <option value="normal">normal</option>
+                    <option value="spam">spam</option>
+                    <option value="reply_needed">reply_needed</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:10px">
+                <button class="save-btn" style="font-size:11px" onclick="saveMailRule()">保存</button>
+                <button class="refresh-btn" style="font-size:11px" onclick="hideAddRuleForm()">キャンセル</button>
+              </div>
+              <div id="mail-rule-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
+            </div>
+          </div>
+
+          <div class="section-hd" style="margin-top:24px">OAuth2 セットアップ</div>
           <div style="font-size:11px;color:var(--m);line-height:1.7">
             <ol style="padding-left:16px;margin:6px 0">
-              <li>Gmail で IMAP を有効化: 設定 → すべての設定を表示 → メール転送と POP/IMAP → IMAP を有効にする</li>
-              <li>アプリパスワードを作成: Google アカウント → セキュリティ → 2段階認証 → アプリパスワード</li>
-              <li>パスワードを GCP Secret Manager に <code>HACHI_MAIL_PASSWORD</code> として保存</li>
-              <li>Cloud Run 環境変数を設定: <code>MAIL_HOST=imap.gmail.com</code>, <code>MAIL_USER=hachiproject888@gmail.com</code>, <code>MAIL_SMTP_HOST=smtp.gmail.com</code></li>
-              <li>シークレット更新後に再デプロイ</li>
+              <li>Gmail で IMAP を有効化: 設定 → すべての設定 → メール転送と POP/IMAP → IMAP を有効にする</li>
+              <li>GCP Console で OAuth2 デスクトップクライアントを作成し、クライアント ID / シークレットを <code>hachi-sec-017/018</code> に保存</li>
+              <li><code>node scripts/gmail-oauth-setup.js</code> をローカルで実行し、リフレッシュトークンを <code>hachi-sec-019</code> に保存</li>
+              <li>Cloud Run に <code>--update-secrets HACHI_SEC_017=hachi-sec-017:latest ...</code> を追加して再デプロイ</li>
             </ol>
-            <div style="margin-top:8px">金融関連メールは <strong>billing-and-expenses</strong> Discord チャンネルに投稿されます。返信候補は <strong>mails</strong> に表示されます。</div>
+            <div style="margin-top:6px">OAuth2 設定後はアカウントカードの OAuth バッジが <span style="color:#4caf50">●</span> に変わります。</div>
           </div>
         </div>
 
@@ -582,6 +667,13 @@
         </div>
         <div id="create-discord-ch-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
       </div>
+    </div>
+
+    <!-- Per-channel context window -->
+    <div class="section-hd" style="margin-top:16px">チャンネルごとのコンテキスト設定</div>
+    <div style="font-size:11px;color:var(--m);margin-bottom:10px">チャンネルごとに最大保持メッセージ数を設定します。未設定の場合はグローバルデフォルト（20）を使用します。</div>
+    <div id="channel-ctx-list" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--m)">チャンネルを登録するとここに表示されます。</div>
     </div>
 
     <!-- Hidden inputs kept for registerDiscordChannel() compat -->
