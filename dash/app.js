@@ -647,6 +647,126 @@ function setKTab(el, tab) {
   document.querySelectorAll('.tab-btn[data-ktab]').forEach(b => b.classList.toggle('active', b === el));
   document.querySelectorAll('#page-knowledge .tab-content > div').forEach(d => d.classList.add('hidden'));
   document.getElementById('k-' + tab)?.classList.remove('hidden');
+  if (tab === 'topics') _loadTopics(); // lazy-load article topics on first open
+}
+
+// ─── Article topics (Note article pipeline) ──────────────────────────────────
+let TOPICS = [];
+
+async function _loadTopics() {
+  const box = document.getElementById('k-topics');
+  if (box && !box.dataset.loaded) box.innerHTML = '<div style="color:var(--m);font-size:11px;padding:8px 0">読み込み中…</div>';
+  try {
+    const r = await fetch(apiUrl('/api/topics'), { headers: _authHeaders() });
+    const d = await r.json();
+    TOPICS = Array.isArray(d.topics) ? d.topics : [];
+  } catch { TOPICS = []; }
+  if (box) box.dataset.loaded = '1';
+  _renderTopics();
+}
+
+function _renderTopics() {
+  const box = document.getElementById('k-topics');
+  if (!box) return;
+  const FREQ = ['daily', 'weekly', 'monthly'];
+  const freqSel = (id, cur) => `<select onchange="changeTopicFreq('${id}',this.value)" style="font-size:9px;background:var(--bg2);color:var(--fg);border:1px solid var(--bd);border-radius:4px;padding:1px 3px">${FREQ.map(f => `<option value="${f}"${f === cur ? ' selected' : ''}>${f}</option>`).join('')}</select>`;
+
+  const suggested = TOPICS.filter(t => t.status === 'suggested');
+  const active = TOPICS.filter(t => t.status === 'active');
+  const blocked = TOPICS.filter(t => t.status === 'blocked');
+
+  const row = (t, controls) => `<div class="src-row" data-id="${t.id}" style="display:block;padding:6px 8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div class="src-name">${esc(t.category)} <span style="color:var(--m);font-size:9px">${t.frequency}</span></div>
+        <div style="font-size:10px;color:var(--m);margin-top:2px">${esc(t.description)}</div>
+        ${t.rationale ? `<div style="font-size:9px;color:var(--m);margin-top:2px;opacity:.8">理由: ${esc(t.rationale)}</div>` : ''}
+        ${t.lastGeneratedAt ? `<div style="font-size:9px;color:#34D399;margin-top:2px">最終生成: ${esc(String(t.lastGeneratedAt).slice(0,10))}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${controls}</div>
+    </div></div>`;
+
+  const secHd = (label, n) => `<div style="font-size:11px;font-weight:700;color:var(--acc);margin:10px 0 4px">${label} (${n})</div>`;
+  const empty = m => `<div style="color:var(--m);font-size:11px;padding:4px 0">${m}</div>`;
+
+  const toolbar = `<div class="qs-card" style="flex-direction:column;gap:6px;align-items:stretch;margin-bottom:10px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">🧭 トピックを探す</button>
+      <span style="font-size:10px;color:var(--m)">note.com のトレンドから候補を提案します</span>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      <input class="form-input" id="new-topic-cat" placeholder="カテゴリ" style="font-size:11px;flex:0 0 130px">
+      <input class="form-input" id="new-topic-desc" placeholder="この記事の具体的な内容" style="font-size:11px;flex:1;min-width:160px">
+      <select id="new-topic-freq" style="font-size:11px;background:var(--bg2);color:var(--fg);border:1px solid var(--bd);border-radius:4px;padding:2px 4px">${FREQ.map(f => `<option value="${f}">${f}</option>`).join('')}</select>
+      <button class="save-btn" onclick="submitNewTopic()" style="font-size:11px">＋ 追加</button>
+    </div>
+  </div>`;
+
+  box.innerHTML = toolbar
+    + secHd('候補（承認待ち）', suggested.length)
+    + (suggested.length ? suggested.map(t => row(t,
+        `<button class="act-btn resume" onclick="approveTopic('${t.id}')" style="font-size:8px;padding:2px 6px">✅ 承認</button>
+         <button class="act-btn cancel" onclick="rejectTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🚫 却下</button>`)).join('') : empty('候補はありません。「トピックを探す」で提案を生成できます。'))
+    + secHd('有効（生成中）', active.length)
+    + (active.length ? active.map(t => row(t,
+        `${freqSel(t.id, t.frequency)}
+         <button class="act-btn cancel" onclick="deleteTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🗑</button>`)).join('') : empty('有効なトピックはありません。'))
+    + secHd('ブロック済み', blocked.length)
+    + (blocked.length ? blocked.map(t => row(t,
+        `<button class="act-btn resume" onclick="approveTopic('${t.id}')" style="font-size:8px;padding:2px 6px">↻ 復元</button>
+         <button class="act-btn cancel" onclick="deleteTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🗑</button>`)).join('') : empty('なし'));
+}
+
+async function approveTopic(id) {
+  await fetch(apiUrl(`/api/topics/${id}/approve`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+  showToast('トピックを有効にしました。', 'success');
+  _loadTopics();
+}
+
+function rejectTopic(id) {
+  const row = document.querySelector(`#k-topics .src-row[data-id="${id}"]`);
+  showConfirm('このトピックを却下しますか？', async () => {
+    await fetch(apiUrl(`/api/topics/${id}/reject`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+    showToast('却下しました。', 'success');
+    _loadTopics();
+  }, row);
+}
+
+function deleteTopic(id) {
+  const row = document.querySelector(`#k-topics .src-row[data-id="${id}"]`);
+  showConfirm('このトピックを削除しますか？', async () => {
+    await fetch(apiUrl(`/api/topics/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
+    showToast('削除しました。', 'success');
+    _loadTopics();
+  }, row);
+}
+
+async function changeTopicFreq(id, frequency) {
+  await fetch(apiUrl(`/api/topics/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ frequency })
+  }).catch(() => {});
+  showToast('頻度を更新しました。', 'success');
+}
+
+async function submitNewTopic() {
+  const category = document.getElementById('new-topic-cat')?.value.trim();
+  const description = document.getElementById('new-topic-desc')?.value.trim();
+  const frequency = document.getElementById('new-topic-freq')?.value || 'weekly';
+  if (!category || !description) { showToast('カテゴリと内容を入力してください。', 'error'); return; }
+  await fetch(apiUrl('/api/topics'), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, description, frequency, status: 'active' })
+  }).catch(() => {});
+  document.getElementById('new-topic-cat').value = '';
+  document.getElementById('new-topic-desc').value = '';
+  showToast('トピックを追加しました。', 'success');
+  _loadTopics();
+}
+
+async function scoutTopicsNow() {
+  showToast('トピックを探しています…（数十秒かかります）', 'info');
+  await fetch(apiUrl('/api/topics/scout'), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+  setTimeout(_loadTopics, 8000);
 }
 
 function _renderKnowledge() {
