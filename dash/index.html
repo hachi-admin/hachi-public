@@ -235,7 +235,7 @@
     </div>
 
     <!-- KPI row -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="analytics-kpi-row">
+    <div class="analytics-kpi-row" id="analytics-kpi-row">
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
         <div style="font-size:10px;color:var(--m)">本日のタスク</div>
         <div id="kpi-tasks-today" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
@@ -259,7 +259,7 @@
     </div>
 
     <!-- Cost chart + task activity chart side by side -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="analytics-chart-pair">
       <div class="chart-box" style="margin-bottom:0">
         <div class="chart-header">
           <span class="chart-title">コスト — 直近7日</span>
@@ -278,7 +278,7 @@
     </div>
 
     <!-- Task type breakdown + Mail run log row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="analytics-chart-pair">
       <div>
         <div class="section-hd" style="margin-top:0">タスクタイプ別</div>
         <div id="task-type-list" style="display:flex;flex-direction:column;gap:4px"></div>
