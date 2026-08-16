@@ -1221,3 +1221,53 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-view-btn:hover{color:var(--acc)}
 .cat-view-btn.active{background:var(--bg);box-shadow:var(--sh-sm);color:var(--acc);font-weight:700}
 .cat-view-btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* ══════════════════════════════════════════════════════════════
+   NOTE RECEPTION
+══════════════════════════════════════════════════════════════
+   Reader response, kept visually separate from the editorial controls above it: this is the one
+   panel in 記事 the operator cannot change by editing anything, only by publishing differently. */
+.note-panel{display:flex;flex-direction:column;gap:22px}
+.note-empty{color:var(--m);font-size:.7rem;padding:10px 0}
+
+.note-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.note-stat{
+  display:flex;flex-direction:column;gap:3px;
+  background:var(--bg);box-shadow:var(--sh-in);border-radius:14px;padding:14px 16px;
+}
+.note-stat-label{font-size:.62rem;font-weight:700;color:var(--m2);letter-spacing:.06em}
+.note-stat-value{font-size:1rem;font-weight:800;color:var(--txt);font-variant-numeric:tabular-nums}
+.note-stat-sub{font-size:.64rem;color:var(--m)}
+
+.note-block{display:flex;flex-direction:column;gap:10px}
+.note-h{font-size:.7rem;font-weight:700;color:var(--txt);margin:0}
+
+/* A bar makes the gap between categories readable at a glance; the count sits beside the mean
+   because a 5.0 from one article is not the same claim as a 5.0 from nine. */
+/* Capped: stretched across a desktop width, 0.83 vs 0.5 reads as a chasm. */
+.note-cat{display:flex;align-items:center;gap:14px}
+.note-cat-name{font-size:.68rem;color:var(--txt);flex:0 0 150px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.note-bar{flex:1;max-width:280px;height:8px;border-radius:99px;background:var(--bg);box-shadow:var(--sh-press);overflow:hidden;min-width:40px}
+.note-bar-fill{display:block;height:100%;border-radius:99px;background:var(--acc);opacity:.65}
+.note-cat-num{font-size:.68rem;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums;white-space:nowrap}
+.note-cat-n{font-weight:500;color:var(--m2);margin-left:2px}
+
+.note-row{display:flex;align-items:flex-start;gap:14px;padding:10px 0;border-top:1px solid var(--div)}
+.note-row:first-of-type{border-top:none}
+.note-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.note-row-title{font-size:.7rem;font-weight:600;color:var(--txt);line-height:1.45}
+.note-row-title a{color:inherit;text-decoration:none}
+.note-row-title a:hover{color:var(--acc);text-decoration:underline}
+.note-row-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.note-tag{font-size:.6rem;color:var(--m2)}
+.note-warn{font-size:.6rem;font-weight:700;color:var(--yel)}
+.note-row-nums{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+.note-likes{font-size:.72rem;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+.note-trend{font-size:.6rem;font-weight:700;color:var(--grn)}
+
+.note-foot{font-size:.62rem;color:var(--m2);line-height:1.6;margin:0}
+
+@media(max-width:560px){
+  .note-cat-name{flex:1 1 auto}
+  .note-bar{display:none} /* at this width the bar is too short to compare — the numbers carry it */
+}

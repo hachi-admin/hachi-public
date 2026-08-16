@@ -782,10 +782,15 @@ function _renderTopics() {
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
+      <button class="cat-view-btn${_catView === 'reception' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'reception'}" onclick="setCatView('reception')">note の反応</button>
     </div>
   </div>`;
 
-  box.innerHTML = toolbar + (_catView === 'articles' ? _buildArticleRows() : _buildCategoryCards());
+  box.innerHTML = toolbar + (
+    _catView === 'articles'  ? _buildArticleRows()  :
+    _catView === 'reception' ? _buildReception()    :
+                               _buildCategoryCards());
+  if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
 }
 
 function _buildCategoryCards() {
@@ -942,6 +947,98 @@ function _categoryEditor(c) {
       <button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>
       <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">削除</button>
     </div>`;
+}
+
+/* ── note reception ──────────────────────────────────────────────────────────
+   What readers actually did with what we published. Two rules shape this panel:
+
+   Generated and hand-written posts are never pooled. The account carries both, and the
+   hand-written ones currently out-perform the pipeline — averaging them would report a
+   flattering number that describes neither.
+
+   And it says what it does not know. PV, 読了率 and 売上 live behind the operator's logged-in
+   note dashboard; this reads only the public creator feed, so the panel names the gap rather
+   than letting ♡ stand in for reach. */
+let NOTE_STATS = null;
+let _noteStatsErr = null;
+
+async function _loadNoteStats() {
+  try {
+    const res = await fetch(apiUrl('/api/note-stats'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    NOTE_STATS = await res.json();
+    _noteStatsErr = null;
+  } catch (e) {
+    _noteStatsErr = e.message;
+  }
+  if (_catView === 'reception') _renderTopics();
+}
+
+function _noteBar(mean, max) {
+  const pct = max > 0 ? Math.round((mean / max) * 100) : 0;
+  return `<span class="note-bar"><span class="note-bar-fill" style="width:${Math.max(pct, 2)}%"></span></span>`;
+}
+
+function _buildReception() {
+  if (_noteStatsErr) return `<div class="note-empty">note の反応を読み込めませんでした（${esc(_noteStatsErr)}）。</div>`;
+  if (!NOTE_STATS) return `<div class="note-empty">読み込み中…</div>`;
+  if (!NOTE_STATS.collected) {
+    return `<div class="note-empty">まだ収集されていません。1日1回、自動で取得します。</div>`;
+  }
+
+  const g = NOTE_STATS.totals.generated;
+  const m = NOTE_STATS.totals.manual;
+  const cats = NOTE_STATS.byCategory ?? [];
+  const maxCat = Math.max(...cats.map(c => c.meanLikes), 0);
+  const top = (NOTE_STATS.generated ?? []).slice(0, 6);
+
+  const row = (p) => `<div class="note-row">
+    <div class="note-row-main">
+      <div class="note-row-title">${p.url
+        ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>`
+        : esc(p.title)}</div>
+      <div class="note-row-meta">
+        ${p.isPaid ? `<span class="cat-chip earns">有料 ¥${p.price}</span>` : ''}
+        ${(p.hashtags ?? []).slice(0, 3).map(h => `<span class="note-tag">${esc(h)}</span>`).join('')}
+        ${p.hashtags?.length ? '' : '<span class="note-warn">タグ無し</span>'}
+      </div>
+    </div>
+    <div class="note-row-nums">
+      <span class="note-likes">♡${p.likes}</span>
+      ${p.trend && p.trend.likes > 0 ? `<span class="note-trend">+${p.trend.likes}</span>` : ''}
+    </div>
+  </div>`;
+
+  return `<div class="note-panel">
+    <div class="note-totals">
+      <div class="note-stat">
+        <span class="note-stat-label">自動生成</span>
+        <span class="note-stat-value">${g.articles}本 · ♡${g.totalLikes}</span>
+        <span class="note-stat-sub">平均 ♡${g.meanLikes}　反応ゼロ ${g.zeroLike}本</span>
+      </div>
+      <div class="note-stat">
+        <span class="note-stat-label">手動</span>
+        <span class="note-stat-value">${m.articles}本 · ♡${m.totalLikes}</span>
+        <span class="note-stat-sub">平均 ♡${m.meanLikes}（比較用の基準）</span>
+      </div>
+    </div>
+
+    ${cats.length ? `<div class="note-block">
+      <h4 class="note-h">カテゴリ別の平均♡</h4>
+      ${cats.map(c => `<div class="note-cat">
+        <span class="note-cat-name">${esc(c.label)}</span>
+        ${_noteBar(c.meanLikes, maxCat)}
+        <span class="note-cat-num">${c.meanLikes}<span class="note-cat-n">/${c.n}本</span></span>
+      </div>`).join('')}
+    </div>` : ''}
+
+    ${top.length ? `<div class="note-block">
+      <h4 class="note-h">自動生成記事の反応</h4>
+      ${top.map(row).join('')}
+    </div>` : ''}
+
+    <p class="note-foot">${(NOTE_STATS.missing ?? []).join('・')} は note のログイン内でのみ公開されるため、ここには含まれません。1日1回収集${NOTE_STATS.lastCollectedAt ? `（最終 ${_catDate(NOTE_STATS.lastCollectedAt)}）` : ''}。</p>
+  </div>`;
 }
 
 function _buildArticleRows() {
