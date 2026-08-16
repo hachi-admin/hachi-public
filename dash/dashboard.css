@@ -293,6 +293,7 @@ header{margin:12px;padding:10px 16px}
 .asb-stat{display:flex;flex-direction:column;align-items:center;flex:1;min-width:60px;padding:0 4px}
 .asb-val{font-size:18px;font-weight:800;color:var(--txt);line-height:1}
 .asb-val.run{color:var(--blue)}.asb-val.fail{color:var(--red)}
+/* A zero carries no class, so it stays neutral — a red 0 reads as an alarm not sounding. */
 .asb-label{font-size:9px;color:var(--m2);margin-top:3px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
 .asb-sep{width:1px;align-self:stretch;background:var(--div);margin:0 8px;flex:none}
 
@@ -1316,3 +1317,55 @@ body:has(.mob-more-sheet.open) .page-area{
   }
   .wiki-back:active{box-shadow:var(--sh-press)}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   AGENT CARD — WHAT IT IS, WHEN IT RUNS, WHAT IT COSTS
+══════════════════════════════════════════════════════════════
+   The card used to carry a name and an unlabelled bar, which said neither what the agent does
+   nor what the bar measures. Four short facts fit without crowding, and they are the ones that
+   decide whether you need to open it. */
+.acard-role{
+  font-size:.6rem;font-weight:700;color:var(--m);
+  letter-spacing:.04em;margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.acard-when{
+  font-size:.58rem;color:var(--m2);margin-top:1px;margin-bottom:7px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.acard-nums{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:5px;
+  font-size:.58rem;font-variant-numeric:tabular-nums;
+}
+.acard-pct{color:var(--m2);font-weight:700}
+/* Only an agent near its ceiling colours the number — that is the one state worth reacting to. */
+.acard-pct[data-hot]{color:var(--red)}
+.acard-cost{color:var(--m2)}
+
+/* ══════════════════════════════════════════════════════════════
+   MARKDOWN CALLOUTS
+══════════════════════════════════════════════════════════════
+   A pull-out is the one part of an article the reader is meant to be able to take without
+   reading the rest, so it sits in a well — pressed into the page rather than raised off it. */
+.md-callout{
+  background:var(--bg);box-shadow:var(--sh-in);border-radius:14px;
+  padding:14px 16px;margin:18px 0;
+}
+.md-callout-label{
+  font-size:.64rem;font-weight:700;color:var(--m);
+  letter-spacing:.06em;margin-bottom:8px;
+}
+.md-callout-body>*:first-child{margin-top:0}
+.md-callout-body>*:last-child{margin-bottom:0}
+.md-callout-body{font-size:.72rem;line-height:1.75;color:var(--txt)}
+
+/* Row actions are secondary to the row. At 36px with a full raised shadow the dismiss control
+   was the heaviest thing in a task card — louder than the task it belonged to. */
+.src-row .act-btn.cancel,
+#task-feed .act-btn.cancel,
+.feed-item .act-btn.cancel{
+  min-height:32px;padding:6px 9px;box-shadow:var(--sh-sm);opacity:.75;
+}
+.src-row .act-btn.cancel:hover,
+#task-feed .act-btn.cancel:hover,
+.feed-item .act-btn.cancel:hover{opacity:1}
