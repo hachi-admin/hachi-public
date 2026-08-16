@@ -260,17 +260,23 @@ header{margin:12px;padding:10px 16px}
 
 .agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
 .acard{
-  background:var(--bg);box-shadow:var(--sh);border-left:4px solid transparent;
+  background:var(--bg);box-shadow:var(--sh);
   border-radius:12px;padding:14px 12px;cursor:pointer;
-  transition:box-shadow .2s,border-left-color .2s,transform .15s;
+  transition:box-shadow .2s,transform .15s;
   position:relative;display:flex;flex-direction:column;gap:7px;
 }
 .acard:hover{box-shadow:var(--sh-lg);transform:translateY(-2px)}
 .acard:active{box-shadow:var(--sh-press);transform:none}
-.acard.running{border-left-color:var(--blue);animation:agentFloat 2.6s ease-in-out infinite}
-.acard.failed{border-left-color:var(--red);animation:agentGlow 2s ease-in-out infinite}
-.acard.done{border-left-color:color-mix(in srgb,var(--grn) 35%,transparent)}
-.acard.idle{border-left-color:transparent}
+/* Status as a raised pip in the corner: same surface, same light, just a small object sitting on
+   it. Colour is confined to a 7px dot instead of running the height of the card. */
+.acard{position:relative}
+.acard.running::before,.acard.failed::before,.acard.done::before{
+  content:'';position:absolute;top:11px;right:11px;width:7px;height:7px;border-radius:50%;
+  box-shadow:var(--sh-sm);
+}
+.acard.running::before{background:var(--blue);animation:agentFloat 2.6s ease-in-out infinite}
+.acard.failed::before{background:var(--red)}
+.acard.done::before{background:color-mix(in srgb,var(--grn) 70%,var(--bg))}
 .acard.disabled{opacity:.45;filter:grayscale(.5)}
 .avatar{image-rendering:pixelated;image-rendering:crisp-edges;display:block;margin:0 auto 2px}
 .acard-name{font-size:12px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
@@ -279,17 +285,20 @@ header{margin:12px;padding:10px 16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
 .card{
   position:relative;background:var(--bg);box-shadow:var(--sh);
-  border-top:3px solid transparent;border-radius:12px;padding:12px;
-  cursor:pointer;transition:box-shadow .2s,border-top-color .2s,transform .15s;
+  border-radius:14px;padding:12px;position:relative;
+  cursor:pointer;transition:box-shadow .2s,transform .15s;
   display:flex;flex-direction:column;align-items:stretch;text-align:center;
   aspect-ratio:1;overflow:hidden;
 }
 .card:hover{box-shadow:var(--sh-lg);transform:translateY(-2px)}
 .card:active{box-shadow:var(--sh-press);transform:none}
-.card.running{border-top-color:var(--blue);animation:agentFloat 2.6s ease-in-out infinite}
-.card.failed{border-top-color:var(--red);animation:agentGlow 2s ease-in-out infinite}
-.card.done{border-top-color:color-mix(in srgb,var(--grn) 38%,transparent)}
-.card.idle,.card.active{border-top-color:transparent}
+.card.running::before,.card.failed::before,.card.done::before{
+  content:'';position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;box-shadow:var(--sh-sm);
+}
+.card.running::before{background:var(--blue);animation:agentFloat 2.6s ease-in-out infinite}
+.card.failed::before{background:var(--red)}
+.card.done::before{background:color-mix(in srgb,var(--grn) 70%,var(--bg))}
+
 .card.disabled{opacity:.45;filter:grayscale(.5)}
 .agent-name{font-size:12px;font-weight:700;color:var(--txt)}
 .agent-desc{font-size:10px;color:var(--m);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;width:100%}
@@ -418,13 +427,10 @@ header{margin:12px;padding:10px 16px}
    card grammar: a status edge you read without focusing, and a whole-row hit area. */
 #task-feed .feed-item{
   padding:10px 10px 10px 12px;margin-bottom:6px;border-bottom:none;border-radius:10px;
-  box-shadow:var(--sh-sm);border-left:3px solid transparent;transition:box-shadow .15s,transform .12s;
+  box-shadow:var(--sh-sm);transition:box-shadow .15s,transform .12s;
 }
 #task-feed .feed-item:hover{box-shadow:var(--sh);transform:translateX(2px)}
-#task-feed .feed-item:has(.feed-dot.running){border-left-color:var(--blue)}
-#task-feed .feed-item:has(.feed-dot.failed){border-left-color:var(--red)}
-#task-feed .feed-item:has(.feed-dot.completed){border-left-color:color-mix(in srgb,var(--grn) 45%,transparent)}
-#task-feed .feed-item:has(.feed-dot.pending){border-left-color:var(--m2)}
+/* The dot already carries status here — no need for an edge as well. */
 .feed-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px}
 .feed-dot.completed{background:var(--grn)}.feed-dot.running{background:var(--blue);animation:pulse 1.2s infinite}
 .feed-dot.failed{background:var(--red)}.feed-dot.pending{background:var(--m2)}.feed-dot.cancelled{background:color-mix(in srgb,var(--m) 40%,transparent)}
@@ -565,13 +571,13 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-label{display:block;font-size:10px;color:var(--m2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .cat-prompt{
   width:100%;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:12px;
-  padding:15px;font-size:12px;color:var(--txt);line-height:1.75;resize:vertical;
-  font-family:inherit;outline:none;
+  padding:14px;font-size:12px;color:var(--txt);line-height:1.6;resize:vertical;
+  font-family:inherit;outline:none;max-height:38vh;
 }
 .cat-prompt:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 22%,transparent)}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:0}
 .cat-field{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--m2)}
-.cat-field > span:first-child{font-weight:600;letter-spacing:.04em}
+.cat-field > span:first-child{font-weight:600;letter-spacing:.04em;color:var(--m)}
 .cat-field.cat-wide{grid-column:1/-1}
 .cat-in{
   background:var(--bg);box-shadow:var(--sh-press);border:none;color:var(--txt);
@@ -587,7 +593,7 @@ body:has(.mob-more-sheet.open) .page-area{
   width:58px;height:58px;border-radius:50%;flex-shrink:0;
   box-shadow:var(--sh);display:grid;place-items:center;font-size:27px;line-height:1;
 }
-.neu-well{box-shadow:var(--sh-in);border-radius:14px;padding:14px}
+.neu-well{box-shadow:var(--sh-in);border-radius:14px;padding:var(--pad-surface)}
 .neu-sec{margin-top:12px}
 .neu-sec > summary{
   list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
@@ -598,7 +604,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .neu-sec > summary::-webkit-details-marker{display:none}
 .neu-sec > summary::marker{content:''}
 .neu-sec > summary:hover{box-shadow:var(--sh)}
-.neu-sec[open] > summary{box-shadow:var(--sh-press);color:var(--acc)}
+.neu-sec[open] > summary{box-shadow:var(--sh-press);color:var(--txt)}
 .neu-sec .chev{margin-left:auto;font-size:10px;color:var(--m2);transition:transform .18s}
 .neu-sec[open] .chev{transform:rotate(90deg)}
 .neu-sec .sum-val{margin-left:auto;font-size:10px;color:var(--m2);font-weight:500;text-align:right;line-height:1.35}
@@ -614,7 +620,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard .acard-name{overflow-wrap:anywhere}
 .acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
 .acard .acard-foot{display:flex;align-items:center;gap:6px}
-#detail-content .cat-prompt{min-height:180px}
+#detail-content .cat-prompt{min-height:150px}
 /* The editor is long. Keep its actions pinned to the bottom of the panel rather than making the
    user scroll back down to save. */
 .p-actions{
@@ -1071,9 +1077,15 @@ body:has(.mob-more-sheet.open) .page-area{
      box that leaves dead space above and below on a tall screen. */
   .overlay{align-items:flex-end}
   .panel,.panel.panel-wide{
-    width:100%;max-width:100%;max-height:92vh;
-    border-radius:18px 18px 0 0;padding:18px 16px 16px;
+    width:100%;max-width:100%;height:96dvh;max-height:96dvh;
+    border-radius:22px 22px 0 0;padding:20px 16px 16px;
+    box-shadow:0 -8px 20px var(--d-sh),0 -2px 0 var(--l-sh);
     animation:sheetUp .22s cubic-bezier(.22,1,.36,1);
+  }
+  /* Grab rail — tells you it is a sheet, and gives the top edge something solid to end on. */
+  .panel::before{
+    content:'';position:sticky;top:0;display:block;width:38px;height:4px;margin:-6px auto 12px;
+    border-radius:99px;box-shadow:var(--sh-press);background:var(--bg);
   }
   .p-actions{margin:14px -16px -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-radius:0}
   .p-close{top:10px;right:10px;width:40px;height:40px}

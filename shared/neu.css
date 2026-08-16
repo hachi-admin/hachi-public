@@ -20,6 +20,9 @@
      everything behind it instead of leaving the surface visible and merely dimmed. */
   --scrim:color-mix(in srgb, #2b3350 34%, transparent);
   --focus:var(--acc);
+  /* A neumorphic surface needs room for its own shadow to read; below this the inset highlight
+     collides with the content and the surface looks flat. */
+  --pad-surface:16px;
   --sh-sm:4px 4px 9px var(--d-sh),-4px -4px 9px var(--l-sh);
   --sh-in:inset 3px 3px 6px var(--d-sh),inset -3px -3px 6px var(--l-sh);
   --sh-press:inset 2px 2px 4px var(--d-sh),inset -2px -2px 4px var(--l-sh);
@@ -32,6 +35,7 @@
   --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
   --scrim:color-mix(in srgb, #10131a 48%, transparent);
   --focus:#8b95ff;
+  --pad-surface:16px;
   --sh-sm:5px 5px 11px var(--d-sh),-4px -4px 8px var(--l-sh);
   --sh-in:inset 4px 4px 9px var(--d-sh),inset -4px -4px 9px var(--l-sh);
   --sh-press:inset 3px 3px 7px var(--d-sh),inset -3px -3px 7px var(--l-sh);

@@ -763,11 +763,11 @@ function _categoryTile(c) {
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
-        <span class="chip" style="color:${st.color}">${st.label}</span>
+        <span class="chip">${st.label}</span>
         <span class="cat-chip">${esc(freq)}</span>
       </div>
       <div class="acard-foot" style="margin-top:6px;justify-content:space-between">
-        <span style="font-size:10px;color:${r.count ? '#FBBF24' : 'var(--m2)'}">${r.count ? `★${r.average}` : '未評価'}</span>
+        <span style="font-size:10px;color:var(--m2)">${r.count ? `★${r.average}` : '—'}</span>
         <span style="font-size:10px;color:var(--m2)">${c.articleCount || 0}本 ${money}</span>
       </div>
     </div>
@@ -828,8 +828,7 @@ function _categoryEditor(c) {
       <div class="p-icon-puck">${icon}</div>
       <div>
         <div class="p-title">${esc(c.name)}</div>
-        <div class="p-sub"><span style="color:${st.color}">${st.label}</span> · ${freqLabel} · ${c.articleCount || 0}本
-          ${r.count ? ` · <span style="color:#FBBF24">★${r.average}</span>` : ''}</div>
+        <div class="p-sub">${st.label} · ${freqLabel} · ${c.articleCount || 0}本${r.count ? ` · ★${r.average}` : ''}</div>
       </div>
     </div>
 
