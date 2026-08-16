@@ -469,10 +469,10 @@ header{margin:12px;padding:10px 16px}
 }
 .p-close:hover{box-shadow:var(--sh);color:var(--txt)}
 .p-close:active{box-shadow:var(--sh-press)}
-.p-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.p-header{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-right:44px}
 .p-title{font-size:16px;font-weight:700;color:var(--txt)}
 .p-sub{font-size:10px;color:var(--m);margin-top:2px}
-.p-section{margin-top:12px}
+.p-section{margin-top:16px}
 .p-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--m);margin-bottom:3px}
 .p-value{font-size:12px;color:var(--txt);line-height:1.5}
 .p-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
@@ -555,19 +555,49 @@ header{margin:12px;padding:10px 16px}
 .cat-def{font-size:11px;color:var(--m);line-height:1.5;margin-bottom:10px}
 .cat-label{display:block;font-size:10px;color:var(--m2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .cat-prompt{
-  width:100%;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:8px;
-  padding:10px;font-size:11.5px;color:var(--txt);line-height:1.6;resize:vertical;
-  font-family:inherit;outline:none;margin-bottom:10px;
+  width:100%;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:12px;
+  padding:15px;font-size:12px;color:var(--txt);line-height:1.75;resize:vertical;
+  font-family:inherit;outline:none;
 }
-.cat-prompt:focus{box-shadow:var(--sh-press)}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
-.cat-field{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--m2)}
+.cat-prompt:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 22%,transparent)}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:0}
+.cat-field{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--m2)}
+.cat-field > span:first-child{font-weight:600;letter-spacing:.04em}
 .cat-field.cat-wide{grid-column:1/-1}
 .cat-in{
-  background:var(--bg);box-shadow:var(--sh-sm);border:none;color:var(--txt);
-  padding:6px 8px;border-radius:7px;font-size:11px;outline:none;font-family:inherit;min-height:32px;width:100%;
+  background:var(--bg);box-shadow:var(--sh-press);border:none;color:var(--txt);
+  padding:9px 11px;border-radius:9px;font-size:11.5px;outline:none;font-family:inherit;
+  min-height:40px;width:100%;transition:box-shadow .15s;
 }
-.cat-in:focus{box-shadow:var(--sh)}
+.cat-in:focus{box-shadow:var(--sh-in)}
+/* ── Neumorphic editor ──────────────────────────────────────────────────────
+   Depth is the only structure: a recessed well says "these belong together",
+   a raised surface says "this is on top and you can press it". No fills, no
+   borders, no tints — the surface colour never changes from the page. */
+.p-icon-puck{
+  width:58px;height:58px;border-radius:50%;flex-shrink:0;
+  box-shadow:var(--sh);display:grid;place-items:center;font-size:27px;line-height:1;
+}
+.neu-well{box-shadow:var(--sh-in);border-radius:14px;padding:14px}
+.neu-sec{margin-top:12px}
+.neu-sec > summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
+  padding:13px 16px;border-radius:12px;box-shadow:var(--sh-sm);
+  font-size:12px;font-weight:600;color:var(--txt);
+  transition:box-shadow .18s,color .18s;user-select:none;min-height:48px;
+}
+.neu-sec > summary::-webkit-details-marker{display:none}
+.neu-sec > summary::marker{content:''}
+.neu-sec > summary:hover{box-shadow:var(--sh)}
+.neu-sec[open] > summary{box-shadow:var(--sh-press);color:var(--acc)}
+.neu-sec .chev{margin-left:auto;font-size:10px;color:var(--m2);transition:transform .18s}
+.neu-sec[open] .chev{transform:rotate(90deg)}
+.neu-sec .sum-val{margin-left:auto;font-size:10px;color:var(--m2);font-weight:500;text-align:right;line-height:1.35}
+.neu-sec[open] .sum-val{display:none}
+.neu-sec-body{padding:12px 2px 2px;animation:secOpen .2s ease}
+@keyframes secOpen{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.neu-sec-body{animation:none}}
+
 /* Category tiles carry Japanese names, which need more width than the agent grid's 158px.
    Sized so two fit a phone and four-to-six a desktop, without a lone orphan on the last row. */
 .cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px}
@@ -575,7 +605,7 @@ header{margin:12px;padding:10px 16px}
 .acard .acard-name{overflow-wrap:anywhere}
 .acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
 .acard .acard-foot{display:flex;align-items:center;gap:6px}
-#detail-content .cat-prompt{min-height:150px}
+#detail-content .cat-prompt{min-height:180px}
 /* The editor is long. Keep its actions pinned to the bottom of the panel rather than making the
    user scroll back down to save. */
 .p-actions{
@@ -583,10 +613,10 @@ header{margin:12px;padding:10px 16px}
   background:var(--bg);box-shadow:0 -6px 14px var(--d-sh);
   display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-radius:0 0 14px 14px;
 }
-.cat-money{background:color-mix(in srgb,var(--grn) 7%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
-.cat-style{background:color-mix(in srgb,var(--m2) 6%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
+.cat-money{margin-bottom:0}
+.cat-style{margin-bottom:0}
 .cat-style-field{gap:4px}
-.cat-hint{font-style:normal;font-size:9.5px;color:var(--m2);line-height:1.4;min-height:2.4em;display:block}
+.cat-hint{font-style:normal;font-size:9.5px;color:var(--m2);line-height:1.45;min-height:2.6em;display:block;padding-left:2px}
 .cat-age{display:flex;align-items:center;gap:4px}
 .cat-age .cat-in{min-width:0}
 .cat-age span{font-size:10px;color:var(--m2)}
