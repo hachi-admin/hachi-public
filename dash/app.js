@@ -472,17 +472,12 @@ function _renderAgentGrid() {
       </div>
       <div class="acard-info">
         <div class="acard-name">${esc(displayName)}</div>
-        <div class="acard-desc">${esc(displayDesc)}</div>
-        <div class="acard-chips" style="margin-top:4px">
-          <span class="chip chip-${status}">${esc(statusLabel)}</span>
-          <span class="cat-chip">${esc(catLabel)}</span>
-        </div>
         <div class="acard-foot" style="margin-top:6px">
           <div style="flex:1">
             <div class="tok-bar-wrap"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
-            <div class="token-text">${(d.tokensUsed||0) >= 1000 ? ((d.tokensUsed/1000).toFixed(1)+'k') : (d.tokensUsed||0)} / ${((d.tokenLimit||0)/1000).toFixed(0)}k</div>
+
           </div>
-          <div class="card-cost">${costEst > 0 ? '$'+(costEst).toFixed(3) : ''}</div>
+
         </div>
       </div>
       <button class="agent-toggle ${enabled ? 'on' : ''}" onclick="toggleAgent('${reg.id}',event)" title="${enabled ? t['lbl-disable']:t['lbl-enable']}">
@@ -538,21 +533,19 @@ function setAvTheme(t, el) {
   document.querySelectorAll('.av-theme-btn').forEach(b => b.classList.toggle('active', b === el));
 }
 
-function filterAgents() { _applyAgentFilters(); }
-
 function setCatFilter(el, cat) {
   _catFilter = cat;
   document.querySelectorAll('.cat-tab').forEach(b => b.classList.toggle('active', b === el));
   _applyAgentFilters();
 }
 
+// Search was removed: with 30 agents on one screen, scanning beats typing, and the input was one
+// more control competing with the grid it filtered.
 function _applyAgentFilters() {
-  const q = (document.getElementById('agent-search')?.value || '').toLowerCase();
   document.querySelectorAll('.acard[data-agent]').forEach(c => {
     const ok = (_catFilter === 'all' || c.dataset.category === _catFilter)
       && (!_lvFilter || +c.dataset.level === _lvFilter)
-      && (!_trigFilter || c.dataset.trigger === _trigFilter)
-      && (!q || c.dataset.name.toLowerCase().includes(q) || c.dataset.agent.includes(q) || (c.dataset.tools||'').includes(q));
+      && (!_trigFilter || c.dataset.trigger === _trigFilter);
     c.classList.toggle('hidden', !ok);
   });
 }
@@ -2093,10 +2086,10 @@ const _I18N = {
     'lbl-similar':       '% 類似度',
     // agent card chips
     'idle':              '待機中',
-    'cat-intelligence':  'インテリジェンス',
-    'cat-knowledge':     'ナレッジ',
+    'cat-intelligence':  '情報',
+    'cat-knowledge':     '知識',
     'cat-development':   '開発',
-    'cat-content':       'コンテンツ',
+    'cat-content':       '制作',
     // wiki file type group labels
     'ext-txt':           'テキスト',
     'ext-scripts':       'スクリプト',

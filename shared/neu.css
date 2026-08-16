@@ -91,7 +91,9 @@ header{
 .hbtn:hover{color:var(--acc)}
 .hbtn:active{box-shadow:var(--sh-press)}
 /* Rectangular text-label variant (toolbar / manage buttons) */
-.hbtn.pill{border-radius:8px;width:auto;padding:0 12px;font-size:.8rem}
+/* Fully rounded, not 8px: it sits beside two 50% circles and any lesser radius reads as a
+   different component. */
+.hbtn.pill{border-radius:999px;width:auto;padding:0 12px;font-size:.8rem}
 
 /* ── FOOTER ────────────────────────────────────────────── */
 footer{
