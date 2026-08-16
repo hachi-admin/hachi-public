@@ -553,6 +553,9 @@ header{margin:12px;padding:10px 16px}
   padding:6px 8px;border-radius:7px;font-size:11px;outline:none;font-family:inherit;min-height:32px;width:100%;
 }
 .cat-in:focus{box-shadow:var(--sh)}
+.cat-style{background:color-mix(in srgb,var(--m2) 6%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
+.cat-style-field{gap:4px}
+.cat-hint{font-style:normal;font-size:9.5px;color:var(--m2);line-height:1.4;min-height:2.4em;display:block}
 .cat-age{display:flex;align-items:center;gap:4px}
 .cat-age .cat-in{min-width:0}
 .cat-age span{font-size:10px;color:var(--m2)}

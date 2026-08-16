@@ -751,6 +751,15 @@ function _buildCategoryCards() {
       <label class="cat-label">編集方針 — 生成される記事の切り口とトーンを決めます</label>
       <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="4">${esc(c.prompt || '')}</textarea>
 
+      <label class="cat-label">記事のかたち — このカテゴリらしさを決めます</label>
+      <div class="cat-grid cat-style">
+        ${_styleField(c, 'format', '形式', CAT_META?.formats)}
+        ${_styleField(c, 'voice', '語り口', CAT_META?.voices)}
+        ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
+        ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
+      </div>
+
+      <label class="cat-label">読者と頻度</label>
       <div class="cat-grid">
         <label class="cat-field"><span>頻度</span>${sel(`cat-freq-${c.id}`, freqOpts)}</label>
         <label class="cat-field"><span>年齢</span><span class="cat-age">
@@ -800,12 +809,43 @@ function _buildArticleRows() {
   </div>`).join('');
 }
 
+// A style control: the select, plus the chosen option's one-line explanation underneath. The hint
+// updates on change, so the card explains what each setting actually does to the writing rather
+// than showing a bare enum the user has to remember the meaning of.
+function _styleField(c, key, label, options) {
+  const cur = (c.style || {})[key];
+  const opts = options || [];
+  const chosen = opts.find(o => o.id === cur) || opts[0] || {};
+  const id = `cat-${key}-${c.id}`;
+  return `<label class="cat-field cat-style-field"><span>${label}</span>
+    <select id="${id}" class="cat-in" onchange="_styleHint('${id}')"
+      data-hints='${esc(JSON.stringify(Object.fromEntries(opts.map(o => [o.id, o.hint || '']))))}'>
+      ${opts.map(o => `<option value="${o.id}"${o.id === cur ? ' selected' : ''}>${esc(o.label || o.id)}</option>`).join('')}
+    </select>
+    <em class="cat-hint" id="${id}-hint">${esc(chosen.hint || '')}</em></label>`;
+}
+
+function _styleHint(selectId) {
+  const el = document.getElementById(selectId);
+  const out = document.getElementById(`${selectId}-hint`);
+  if (!el || !out) return;
+  let hints = {};
+  try { hints = JSON.parse(el.dataset.hints || '{}'); } catch {}
+  out.textContent = hints[el.value] || '';
+}
+
 const _catVal = (id) => document.getElementById(id)?.value ?? '';
 
 async function saveCategory(id) {
   const body = {
     prompt: _catVal(`cat-prompt-${id}`),
     frequency: _catVal(`cat-freq-${id}`),
+    style: {
+      format: _catVal(`cat-format-${id}`),
+      voice: _catVal(`cat-voice-${id}`),
+      visualDensity: _catVal(`cat-visualDensity-${id}`),
+      depth: _catVal(`cat-depth-${id}`),
+    },
     targeting: {
       ageMin: Number(_catVal(`cat-agemin-${id}`)),
       ageMax: Number(_catVal(`cat-agemax-${id}`)),
