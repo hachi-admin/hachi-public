@@ -489,9 +489,9 @@ function _renderAgentStatsBox() {
   document.getElementById('agent-stats-box').innerHTML = `
     <div class="asb-stat"><div class="asb-val">${REGISTRY.length}</div><div class="asb-label">${t['stat-agents']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val run">${running}</div><div class="asb-label">${t['stat-running']}</div></div>
+    <div class="asb-stat"><div class="asb-val${running ? ' run' : ''}">${running}</div><div class="asb-label">${t['stat-running']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val fail">${failed}</div><div class="asb-label">${t['stat-failed']}</div></div>
+    <div class="asb-stat"><div class="asb-val${failed ? ' fail' : ''}">${failed}</div><div class="asb-label">${t['stat-failed']}</div></div>
     <div class="asb-sep"></div>
     <div class="asb-stat"><div class="asb-val">${enabled}</div><div class="asb-label">${t['stat-enabled']}</div></div>
     <div class="asb-sep"></div>
@@ -537,12 +537,15 @@ function _renderAgentGrid() {
       </div>
       <div class="acard-info">
         <div class="acard-name">${esc(displayName)}</div>
-        <div class="acard-foot" style="margin-top:6px">
-          <div style="flex:1">
-            <div class="tok-bar-wrap"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
-
-          </div>
-
+        <!-- A name and an unlabelled bar said almost nothing: not what the agent is for, not what
+             the bar measures, not what it costs. These four facts answer "what is this, when does
+             it run, how close is it to its ceiling, what is it costing me" without opening it. -->
+        <div class="acard-role">${esc(catLabel)}${reg.level ? ` · Lv${reg.level}` : ''}</div>
+        <div class="acard-when">${esc(t['trig-' + trig] || trig)}</div>
+        <div class="tok-bar-wrap" title="${(d.tokensUsed || 0).toLocaleString()} / ${(d.tokenLimit || 0).toLocaleString()} tokens"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
+        <div class="acard-nums">
+          <span class="acard-pct"${pct > 80 ? ' data-hot="1"' : ''}>${pct}%</span>
+          <span class="acard-cost">${costEst > 0 ? '$' + costEst.toFixed(2) : '—'}</span>
         </div>
       </div>
       <button class="agent-toggle ${enabled ? 'on' : ''}" onclick="toggleAgent('${reg.id}',event)" title="${enabled ? t['lbl-disable']:t['lbl-enable']}">
@@ -629,9 +632,12 @@ function _renderKpiRow() {
   ];
   document.getElementById('kpi-row').innerHTML = statuses.map(({s,key,color}) => {
     const n = (bs[s] || []).length;
-    return `<div class="kpi" role="button" tabindex="0" aria-label="${esc(s)} のタスクを開く" onclick="openTaskModal('${s}')" style="border-top:2px solid ${color}">
+    // No coloured edge: a stripe on the rim of a neumorphic card fights the material, which
+    // carries meaning through depth rather than paint. The count keeps the semantic colour, and
+    // only while it means something — a red 0 reads as an alarm that is not sounding.
+    return `<div class="kpi" role="button" tabindex="0" aria-label="${esc(s)} のタスクを開く" onclick="openTaskModal('${s}')">
       <div class="kpi-label">${t[key]}</div>
-      <div class="kpi-value" style="color:${color}">${n}</div>
+      <div class="kpi-value" style="color:${n > 0 ? color : 'var(--m2)'}">${n}</div>
       <div class="kpi-hint">${t['click-view']}</div>
     </div>`;
   }).join('');
@@ -2259,6 +2265,11 @@ const _I18N = {
     'cat-knowledge':     '知識',
     'cat-development':   '開発',
     'cat-content':       '制作',
+    // how an agent is set going, shown on its card
+    'trig-scheduled':    '定期実行',
+    'trig-queued':       'キュー待ち',
+    'trig-interactive':  '手動',
+    'trig-inline':       '他エージェント経由',
     // wiki file type group labels
     'ext-txt':           'テキスト',
     'ext-scripts':       'スクリプト',
@@ -2373,6 +2384,10 @@ const _I18N = {
     'cat-knowledge':     'Knowledge',
     'cat-development':   'Development',
     'cat-content':       'Content',
+    'trig-scheduled':    'Scheduled',
+    'trig-queued':       'Queued',
+    'trig-interactive':  'Manual',
+    'trig-inline':       'Sub-agent',
     // wiki file type group labels
     'ext-txt':           'Text',
     'ext-scripts':       'Scripts',
@@ -3142,7 +3157,7 @@ async function loadWikiFile(btn, path) {
     }
     const data = await res.json();
     reader.innerHTML = `<div class="docs-content"><h1>${esc(data.title||path)}</h1>${
-      data.content ? _markdownToHtml(data.content)
+      data.content ? _markdownToHtml(_stripLeadingTitle(data.content, data.title || path))
                    : `<p class="wiki-nobody">本文を読み込めませんでした${data.contentError ? `（${esc(data.contentError)}）` : ''}。</p>`}</div>`;
     if (window.mermaid) {
       const nodes = reader.querySelectorAll('.mermaid');
@@ -3178,7 +3193,7 @@ async function loadWikiPage(btn, slug, title) {
           <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">クイズ</button>
           <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">単語</button>
         </div>
-        ${storeContent ? _markdownToHtml(storeContent)
+        ${storeContent ? _markdownToHtml(_stripLeadingTitle(storeContent, storeTitle))
           : `<p class="wiki-nobody">本文を読み込めませんでした${data.contentError ? `（${esc(data.contentError)}）` : ''}。</p>`}
         ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">フォローアップ候補</div>${qs}</div>` : ''}
       </div>`;
@@ -3345,6 +3360,32 @@ Rules:
   document.body.appendChild(modal);
 }
 
+/* Wiki files repeat their title as the first heading of the body, so the reader rendered it
+   twice — once as the page header, once again immediately below.
+
+   The two are rarely byte-identical: the stored title is "2026-08-17 Daily News: AIインフラの…"
+   while the body heading is "2026-08-17 · AIインフラの…". What survives both is the Japanese
+   core, so that is what gets compared; a prefix test fails here because the differing part sits
+   in the middle. Pages with a genuinely different first heading keep it. */
+function _stripLeadingTitle(md, title) {
+  if (!md || !title) return md;
+  // Front matter comes off first, or the heading is never at the start and nothing matches.
+  // _markdownToHtml strips it again harmlessly.
+  md = String(md).replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  const squash = (x) => String(x).normalize('NFKC').replace(/[\s　]+/g, '')
+    .replace(/[「」『』【】（）()・:：\-—–_,、。]/g, '').toLowerCase();
+  const core = (x) => squash(x).replace(/[a-z0-9]/g, '');
+
+  return md.replace(/^\s*#\s+(.+?)\s*(?:\n|$)/, (whole, h1) => {
+    const a = squash(h1), b = squash(title);
+    if (a === b) return '';
+    const ca = core(h1), cb = core(title);
+    // Require a real core before trusting it — two Latin-only titles both reduce to ''.
+    if (ca.length >= 6 && (ca === cb || ca.includes(cb) || cb.includes(ca))) return '';
+    return whole;
+  });
+}
+
 function _markdownToHtml(md) {
   const blocks = [];
 
@@ -3352,6 +3393,16 @@ function _markdownToHtml(md) {
   // storage metadata, not article text — rendered as markdown it becomes a horizontal rule
   // followed by twenty lines of `key: value` before the reader reaches the first sentence.
   md = String(md ?? '').replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+
+  // ::: directive blocks. The news and editorial agents emit `:::callout 💡 TL;DR … :::end` for
+  // pull-outs; with no handler the fence markers printed as literal text around the paragraph.
+  md = md.replace(/^:::([a-z]+)[ \t]*(.*)\n([\s\S]*?)\n:::end[ \t]*$/gim, (_, kind, label, body) => {
+    const idx = blocks.length;
+    blocks.push(`<aside class="md-callout md-callout-${kind}">${
+      label.trim() ? `<div class="md-callout-label">${label.trim()}</div>` : ''
+    }<div class="md-callout-body">${_markdownToHtml(body.trim())}</div></aside>`);
+    return `\x00BLK${idx}\x00`;
+  });
 
   // 1. Extract <details>/<summary> blocks (editorial agent uses these for collapsibles)
   md = md.replace(/<details>([\s\S]*?)<\/details>/gi, (_, inner) => {
