@@ -774,6 +774,9 @@ function _buildCategoryCards() {
             placeholder="例: 事業会社のマーケター（空欄なら専門を前提としない）"></label>
       </div>
 
+      <label class="cat-label">収益化</label>
+      ${_moneyField(c)}
+
       <div class="cat-actions">
         <button class="save-btn" onclick="saveCategory('${c.id}')" style="font-size:10px;padding:4px 12px">保存</button>
         ${c.promptSuggested && c.promptSuggested !== c.prompt
@@ -834,6 +837,50 @@ function _styleHint(selectId) {
   out.textContent = hints[el.value] || '';
 }
 
+// Monetization control. The price input only appears for `paid`, because it is the only mode where
+// the number changes anything — it sets the minimum length the article must reach.
+function _moneyField(c) {
+  const m = c.monetization || {};
+  const opts = CAT_META?.monetizationModes || [];
+  const cur = m.mode || 'none';
+  const chosen = opts.find(o => o.id === cur) || {};
+  return `<div class="cat-grid cat-money">
+    <label class="cat-field cat-style-field"><span>方針</span>
+      <select id="cat-money-${c.id}" class="cat-in" onchange="_moneyChanged('${c.id}')"
+        data-hints='${esc(JSON.stringify(Object.fromEntries(opts.map(o => [o.id, o.hint || '']))))}'>
+        ${opts.map(o => `<option value="${o.id}"${o.id === cur ? ' selected' : ''}>${esc(o.label || o.id)}</option>`).join('')}
+      </select>
+      <em class="cat-hint" id="cat-money-${c.id}-hint">${esc(chosen.hint || '')}</em></label>
+    <label class="cat-field" id="cat-price-wrap-${c.id}" style="${cur === 'paid' ? '' : 'display:none'}">
+      <span>想定価格（円）</span>
+      <input type="number" class="cat-in" id="cat-price-${c.id}" value="${m.priceYen || 0}" min="0" max="50000" step="100"
+        onchange="_moneyChanged('${c.id}')">
+      <em class="cat-hint" id="cat-price-${c.id}-hint">${esc(_priceHint(m.priceYen || 0))}</em></label>
+    <label class="cat-field cat-wide"><span>メモ（ライターへの補足指示）</span>
+      <input type="text" class="cat-in" id="cat-moneynote-${c.id}" value="${esc(m.notes || '')}"
+        placeholder="例: 入門書を紹介できる回があれば記録すること"></label>
+  </div>`;
+}
+
+// Mirrors PAID_LENGTH in categories.js — shown live so the price and the length it demands are
+// visible together rather than discovered after an article comes out short.
+function _priceHint(yen) {
+  const y = Number(yen) || 0;
+  if (y <= 0) return '価格を入れると必要な文字数が出ます';
+  if (y <= 500) return '最低5,000字・目安7,000字';
+  if (y <= 1000) return '最低6,000字・目安9,000字';
+  return '最低10,000字・目安15,000字';
+}
+
+function _moneyChanged(id) {
+  _styleHint(`cat-money-${id}`);
+  const mode = _catVal(`cat-money-${id}`);
+  const wrap = document.getElementById(`cat-price-wrap-${id}`);
+  if (wrap) wrap.style.display = mode === 'paid' ? '' : 'none';
+  const ph = document.getElementById(`cat-price-${id}-hint`);
+  if (ph) ph.textContent = _priceHint(_catVal(`cat-price-${id}`));
+}
+
 const _catVal = (id) => document.getElementById(id)?.value ?? '';
 
 async function saveCategory(id) {
@@ -845,6 +892,11 @@ async function saveCategory(id) {
       voice: _catVal(`cat-voice-${id}`),
       visualDensity: _catVal(`cat-visualDensity-${id}`),
       depth: _catVal(`cat-depth-${id}`),
+    },
+    monetization: {
+      mode: _catVal(`cat-money-${id}`),
+      priceYen: Number(_catVal(`cat-price-${id}`)) || 0,
+      notes: _catVal(`cat-moneynote-${id}`),
     },
     targeting: {
       ageMin: Number(_catVal(`cat-agemin-${id}`)),
