@@ -1,0 +1,22 @@
+name: Design lint
+
+# The design system is a set of mechanical properties — paired shadows, depth range, no colour
+# edges, a softness floor, spacing that clears the blur. Those should fail here, not on someone's
+# phone. Judgement calls (is this card carrying too much?) are not in scope; hachi-core's
+# design_audit task handles those.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run design lint
+        run: node scripts/design-lint.js
