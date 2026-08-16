@@ -55,6 +55,22 @@ header{margin:12px;padding:10px 16px}
 }
 /* Icon glyphs via pseudo-element text */
 .ni-agents::before  { content: 'AI'; font-size:9px; letter-spacing:-.3px; }
+/* Article-category formats. Same two-letter idiom as .ni-agents so the icon set reads as one
+   family rather than a second vocabulary. */
+.ni-fmt-news::before      { content: 'NW'; font-size:9px; }
+.ni-fmt-analysis::before  { content: 'AN'; font-size:9px; }
+.ni-fmt-narrative::before { content: 'ST'; font-size:9px; }
+.ni-fmt-tutorial::before  { content: 'HT'; font-size:9px; }
+.ni-fmt-listicle::before  { content: 'LS'; font-size:9px; }
+.ni-fmt-review::before    { content: 'RV'; font-size:9px; }
+.ni-money::before         { content: '¥';  font-size:11px; }
+/* The tile's own identity mark: bigger, and recessed so it reads as stamped into the card. */
+.ni-lg{width:46px;height:46px;border-radius:14px;box-shadow:var(--sh-press)}
+.ni-lg::before{font-size:13px}
+/* Panel header mark — larger, and raised rather than recessed: it is the subject of the panel,
+   so it sits above the surface instead of being stamped into it. */
+.ni-xl{width:56px;height:56px;border-radius:18px;box-shadow:var(--sh)}
+.ni-xl::before{font-size:16px}
 .ni-tasks::before   { content: '✓'; font-size:14px; font-weight:900; }
 .ni-inbox::before   { content: '!'; font-size:15px; font-weight:900; }
 .ni-docs::before    { content: '≡'; font-size:16px; font-weight:400; }
@@ -441,8 +457,8 @@ header{margin:12px;padding:10px 16px}
 /* ══════════════════════════════════════════════════════════════
    TAB CONTROL — neumorphic pill style
 ══════════════════════════════════════════════════════════════ */
-.tab-bar{display:inline-flex;gap:0;margin-top:12px;margin-bottom:14px;flex-wrap:wrap;
-  background:var(--bg);box-shadow:var(--sh-in);border-radius:14px;padding:4px;
+.tab-bar{display:inline-flex;gap:10px;row-gap:10px;margin-top:12px;margin-bottom:16px;flex-wrap:wrap;
+  background:var(--bg);box-shadow:var(--sh-in);border-radius:16px;padding:8px;
 }
 .tab-btn{
   background:transparent;box-shadow:none;border:none;color:var(--m);
@@ -490,8 +506,13 @@ body:has(.mob-more-sheet.open) .page-area{
 .p-section{margin-top:16px}
 .p-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--m);margin-bottom:3px}
 .p-value{font-size:12px;color:var(--txt);line-height:1.5}
-.p-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
-.p-stat{flex:1;min-width:90px;background:var(--bg);box-shadow:var(--sh-press);border-radius:8px;padding:8px 10px}
+.p-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+.p-stat{flex:1;min-width:104px;background:var(--bg);box-shadow:var(--sh-press);border-radius:12px;padding:12px 14px}
+/* Controls nested inside a recessed tile carry no shadow of their own — two shadow systems in the
+   same 10px read as damage, not depth. */
+.p-stat .act-btn{box-shadow:none;background:transparent;text-decoration:underline;padding:2px 4px;min-height:0}
+.p-stat .act-btn:hover{box-shadow:none;color:var(--acc)}
+.p-stat .s-value{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .p-stat .s-label{font-size:9px;color:var(--m);text-transform:uppercase;letter-spacing:.08em}
 .p-stat .s-value{font-size:14px;font-weight:700;color:var(--txt);margin-top:2px}
 .p-bar-wrap{background:var(--d-sh);border-radius:3px;height:4px;overflow:hidden;margin-top:5px}
@@ -575,7 +596,7 @@ body:has(.mob-more-sheet.open) .page-area{
   font-family:inherit;outline:none;max-height:38vh;
 }
 .cat-prompt:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 22%,transparent)}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:0}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:18px;margin-bottom:0}
 .cat-field{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--m2)}
 .cat-field > span:first-child{font-weight:600;letter-spacing:.04em;color:var(--m)}
 .cat-field.cat-wide{grid-column:1/-1}
@@ -589,12 +610,8 @@ body:has(.mob-more-sheet.open) .page-area{
    Depth is the only structure: a recessed well says "these belong together",
    a raised surface says "this is on top and you can press it". No fills, no
    borders, no tints — the surface colour never changes from the page. */
-.p-icon-puck{
-  width:58px;height:58px;border-radius:50%;flex-shrink:0;
-  box-shadow:var(--sh);display:grid;place-items:center;font-size:27px;line-height:1;
-}
 .neu-well{box-shadow:var(--sh-in);border-radius:14px;padding:var(--pad-surface)}
-.neu-sec{margin-top:12px}
+.neu-sec{margin-top:16px}
 .neu-sec > summary{
   list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
   padding:13px 16px;border-radius:12px;box-shadow:var(--sh-sm);
@@ -615,7 +632,7 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* Category tiles carry Japanese names, which need more width than the agent grid's 158px.
    Sized so two fit a phone and four-to-six a desktop, without a lone orphan on the last row. */
-.cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px}
+.cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
 .acard .acard-name{overflow-wrap:anywhere}
 .acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
@@ -624,7 +641,7 @@ body:has(.mob-more-sheet.open) .page-area{
 /* The editor is long. Keep its actions pinned to the bottom of the panel rather than making the
    user scroll back down to save. */
 .p-actions{
-  position:sticky;bottom:-22px;margin:14px -22px -22px;padding:14px 22px;
+  position:sticky;bottom:-22px;margin:18px -22px -22px;padding:16px 22px;gap:10px;
   background:var(--bg);box-shadow:0 -6px 14px var(--d-sh),0 -2px 5px var(--l-sh);
   display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-radius:0 0 14px 14px;
 }
@@ -635,7 +652,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-age{display:flex;align-items:center;gap:4px}
 .cat-age .cat-in{min-width:0}
 .cat-age span{font-size:10px;color:var(--m2)}
-.cat-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cat-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .cat-foot{font-size:10px;color:var(--m2);margin-top:8px}
 .art-score{display:flex;gap:1px;flex-shrink:0}
 .art-star{background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:var(--div);padding:1px;transition:color .12s}
@@ -1077,7 +1094,7 @@ body:has(.mob-more-sheet.open) .page-area{
      box that leaves dead space above and below on a tall screen. */
   .overlay{align-items:flex-end}
   .panel,.panel.panel-wide{
-    width:100%;max-width:100%;height:96dvh;max-height:96dvh;
+    width:100%;max-width:100%;height:auto;min-height:52dvh;max-height:94dvh;
     border-radius:22px 22px 0 0;padding:20px 16px 16px;
     box-shadow:0 -8px 20px var(--d-sh),0 -2px 0 var(--l-sh);
     animation:sheetUp .22s cubic-bezier(.22,1,.36,1);
@@ -1089,7 +1106,7 @@ body:has(.mob-more-sheet.open) .page-area{
   }
   .p-actions{margin:14px -16px -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-radius:0}
   .p-close{top:10px;right:10px;width:40px;height:40px}
-  .cat-tile-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .cat-tile-grid{grid-template-columns:repeat(2,1fr);gap:16px}
   .cat-tile-icon{font-size:22px}
   /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
   .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
