@@ -272,7 +272,7 @@ function _renderAll(d) {
 /* ═══════════════════════════════════════════════════════════
    NAVIGATION
 ══════════════════════════════════════════════════════════════ */
-let _activePage = 'overview';
+let _activePage = 'tasks';
 
 /* ═══════════════════════════════════════════════════════════
    KEYBOARD ACTIVATION
@@ -289,35 +289,100 @@ document.addEventListener('keydown', (e) => {
   el.click();
 });
 
-function navTo(pageId) {
+/* ═══════════════════════════════════════════════════════════
+   NAVIGATION — five destinations, named by intent
+══════════════════════════════════════════════════════════════
+   The dashboard had ten pages behind four pills and a ⋯ drawer, which meant the article
+   pipeline — the thing this system exists to run — sat seven tabs deep inside ソース. Pages are
+   now grouped by what you came to do. A destination holding one page shows no sub-navigation;
+   the strip only appears where there is a real choice to make. Desktop and mobile read from this
+   same table, so the two can no longer drift apart (概要 / エージェント was the same page under
+   two names). */
+const DESTINATIONS = {
+  today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
+  articles:  { label: '記事', pages: [ ['articles','カテゴリ'] ] },
+  knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
+  ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
+  system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
+};
+
+// Which page each destination was last left on, so returning to 運用 does not always dump you
+// back on the agent grid after you were reading 分析.
+const _lastPage = {};
+let _activeDest = 'today';
+
+const _destOf = (pageId) =>
+  Object.keys(DESTINATIONS).find(d => DESTINATIONS[d].pages.some(([id]) => id === pageId));
+
+/** Accepts either a destination key or a page id — deep links and old call sites both work. */
+function navTo(target) {
+  let dest, pageId;
+  if (DESTINATIONS[target]) {
+    dest = target;
+    pageId = _lastPage[dest] ?? DESTINATIONS[dest].pages[0][0];
+  } else {
+    dest = _destOf(target);
+    if (!dest) return;
+    pageId = target;
+  }
+  _activeDest = dest;
+  _lastPage[dest] = pageId;
   _activePage = pageId;
+  _syncHash(pageId);
+
   const swap = () => {
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageId));
-    document.querySelectorAll('.nav-pill').forEach(p => p.classList.toggle('active', p.dataset.page === pageId));
-    document.querySelectorAll('.mob-tab[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
-    window.scrollTo({ top:0, behavior:'instant' });
+    document.querySelectorAll('.nav-pill[data-dest]').forEach(p => p.classList.toggle('active', p.dataset.dest === dest));
+    document.querySelectorAll('.mob-tab[data-dest]').forEach(b => b.classList.toggle('active', b.dataset.dest === dest));
+    _renderDestSub(dest, pageId);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
   if (document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
     document.startViewTransition(swap);
   } else {
     swap();
   }
+  _initPage(pageId);
+}
+
+// A single-page destination gets no strip at all — a tab bar with one tab is furniture.
+function _renderDestSub(dest, pageId) {
+  const bar = document.getElementById('dest-sub');
+  if (!bar) return;
+  const pages = DESTINATIONS[dest]?.pages ?? [];
+  if (pages.length < 2) { bar.innerHTML = ''; bar.classList.remove('show'); return; }
+  bar.classList.add('show');
+  bar.innerHTML = pages.map(([id, label]) =>
+    `<button class="dest-sub-btn${id === pageId ? ' active' : ''}" role="tab" aria-selected="${id === pageId}" onclick="navTo('${id}')">${label}</button>`
+  ).join('');
+}
+
+// Per-page lazy initialisation, unchanged in behaviour — just moved out of navTo so the
+// destination logic above stays readable.
+function _initPage(pageId) {
   if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
+  if (pageId === 'articles') _loadTopics();
   if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
   if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); _renderChannelCtxList(); }
   if (pageId === 'repos') _initReposPage();
 }
 
-document.querySelectorAll('.nav-pill').forEach(p => p.addEventListener('click', () => navTo(p.dataset.page)));
+document.querySelectorAll('.nav-pill[data-dest]').forEach(p => p.addEventListener('click', () => navTo(p.dataset.dest)));
 
-function openMoreSheet() { document.getElementById('mob-more-sheet').classList.add('open'); }
-function closeMoreSheet(e) {
-  if (!e || e.target === document.getElementById('mob-more-sheet') || e.type === 'click') {
-    document.getElementById('mob-more-sheet').classList.remove('open');
-  }
+/* The location hash names the current page, so a view can be linked to and survives a reload —
+   previously every refresh dropped you back on the first page whatever you were reading. */
+function _syncHash(pageId) {
+  const h = '#' + pageId;
+  if (location.hash !== h) history.replaceState(null, '', h);
 }
+window.addEventListener('hashchange', () => {
+  const id = location.hash.slice(1);
+  if (id && id !== _activePage) navTo(id);
+});
+const _openAt = location.hash.slice(1);
+
 
 function toggleDrop(id) {
   const drop = document.getElementById(id);
@@ -632,7 +697,7 @@ function _renderTaskFeed() {
   el.innerHTML = tasks.slice(0, 60).map(t => {
     const isUpcoming = t.status === 'pending' || t.status === 'running';
     const btn = isUpcoming
-      ? (t.id && t.status === 'pending' ? `<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">✕</button>`
+      ? (t.id && t.status === 'pending' ? `<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)"><i class="ni ni-close" aria-hidden="true"></i></button>`
         : t.id && t.status === 'running' ? `<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">⏹</button>` : '')
       : (t.id && (t.status === 'failed' || t.status === 'cancelled') ? `<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻</button>` : '');
     const timeStr = isUpcoming ? `Queued ${relTime(t.createdAt)} · P${t.priority ?? 3}` : `${fmtDate(t.updatedAt)} · ${relTime(t.updatedAt)}`;
@@ -656,7 +721,6 @@ function setKTab(el, tab) {
   document.querySelectorAll('.tab-btn[data-ktab]').forEach(b => b.classList.toggle('active', b === el));
   document.querySelectorAll('#page-knowledge .tab-content > div').forEach(d => d.classList.add('hidden'));
   document.getElementById('k-' + tab)?.classList.remove('hidden');
-  if (tab === 'topics') _loadTopics(); // lazy-load article topics on first open
 }
 
 // ─── Topic categories + articles (Note article pipeline) ─────────────────────
@@ -706,15 +770,18 @@ function _renderTopics() {
   const box = document.getElementById('k-topics');
   if (!box) return;
 
-  const toolbar = `<div class="qs-card" style="flex-direction:column;gap:6px;align-items:stretch;margin-bottom:10px">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">カテゴリを探す</button>
-      <button class="save-btn" onclick="showArticleFromUrl()" style="font-size:11px">URLから書く</button>
-      <span style="font-size:10px;color:var(--m)">note.com のトレンドから継続的なカテゴリを提案します</span>
+  // Two rows with distinct jobs: what you can *do* here, and which of the two lists you are
+  // looking at. They had 6px between them and 4px between the segments, which put raised shadows
+  // inside each other's clearance — the crowding was the shadows overlapping, not the labels.
+  const toolbar = `<div class="qs-card cat-toolbar">
+    <div class="cat-toolbar-actions">
+      <button class="save-btn" onclick="scoutTopicsNow()">カテゴリを探す</button>
+      <button class="save-btn" onclick="showArticleFromUrl()">URLから書く</button>
     </div>
-    <div style="display:flex;gap:4px">
-      <button class="act-btn ${_catView === 'categories' ? 'resume' : ''}" onclick="setCatView('categories')" style="font-size:9px;padding:3px 10px">カテゴリ (${CATEGORIES.length})</button>
-      <button class="act-btn ${_catView === 'articles' ? 'resume' : ''}" onclick="setCatView('articles')" style="font-size:9px;padding:3px 10px">記事 (${CAT_ARTICLES.length})</button>
+    <p class="cat-toolbar-note">note.com のトレンドから継続的なカテゴリを提案します</p>
+    <div class="cat-toolbar-views" role="tablist">
+      <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
+      <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
     </div>
   </div>`;
 
@@ -1111,7 +1178,7 @@ function _buildSourceRows(sources) {
           <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--m);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${esc(s.url)}</a>
         </div>
       </div>
-      <button class="act-btn cancel" onclick="blockSource('${s.id}')" style="font-size:8px;padding:2px 6px">⛔</button>
+      <button class="act-btn cancel" onclick="blockSource('${s.id}')" style="font-size:8px;padding:2px 6px" aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
     </div>`;
   }).join('');
 }
@@ -1138,7 +1205,7 @@ function _buildMergeSuggestionRows(items) {
           <div style="font-size:10px;color:var(--m)">${pct}${(_I18N[PROJECT_LANG]||_I18N.JP)['lbl-similar']}</div></div>
         <div style="display:flex;gap:6px">
           <button class="act-btn resume" onclick="markMerged('${esc(m.id)}')" style="font-size:9px;padding:3px 9px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-merged']}</button>
-          <button class="act-btn cancel" onclick="dismissMerge('${esc(m.id)}')" style="font-size:9px;padding:3px 8px">✕</button>
+          <button class="act-btn cancel" aria-label="閉じる" title="閉じる" onclick="dismissMerge('${esc(m.id)}')" style="font-size:9px;padding:3px 8px"><i class="ni ni-close" aria-hidden="true"></i></button>
         </div>
       </div>
     </div>`;
@@ -1155,7 +1222,7 @@ function _buildSuggestedFollowupRows(items) {
       <div style="font-size:10px;color:var(--txt);flex:1">${esc(it.question)}</div>
       <div style="display:flex;gap:4px">
         <button class="act-btn resume" onclick="researchFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 9px">${(_I18N[PROJECT_LANG]||_I18N.JP)['act-research']}</button>
-        <button class="act-btn cancel" onclick="dismissFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 8px">✕</button>
+        <button class="act-btn cancel" aria-label="閉じる" title="閉じる" onclick="dismissFollowup('${esc(slug)}','${esc(it.question).replace(/'/g,'')}',this)" style="font-size:9px;padding:3px 8px"><i class="ni ni-close" aria-hidden="true"></i></button>
       </div>
     </div>`).join('')}
   </div>`).join('');
@@ -1175,7 +1242,7 @@ function _buildVaultRows(vaults, pendingVaultTasks) {
         <div><div class="src-name">${db}${esc(v.id)}</div>
           <div style="font-size:10px;color:var(--m)">${esc(v.categories?.join(', ') || '(任意)')} · ${v.pageCount||0} ページ</div></div>
         <div style="display:flex;gap:6px">
-          ${!v.is_default ? `<button class="act-btn cancel" onclick="deleteVault('${esc(v.id)}')" style="font-size:9px;padding:3px 8px">✕</button>` : ''}
+          ${!v.is_default ? `<button class="act-btn cancel" aria-label="削除" title="削除" onclick="deleteVault('${esc(v.id)}')" style="font-size:9px;padding:3px 8px"><i class="ni ni-close" aria-hidden="true"></i></button>` : ''}
         </div>
       </div>
     </div>`;
@@ -1189,7 +1256,7 @@ function _buildBasesRows(bases) {
       <div><div class="src-name">${esc(b.name)}</div>${b.description?`<div style="font-size:10px;color:var(--m)">${esc(b.description)}</div>`:''}</div>
       <div style="display:flex;gap:6px">
         <button class="act-btn resume" onclick="runBase('${esc(b.id)}')" style="font-size:9px;padding:3px 10px">${t['act-run']}</button>
-        <button class="act-btn cancel" onclick="deleteBase('${esc(b.id)}')" style="font-size:9px;padding:3px 8px">✕</button>
+        <button class="act-btn cancel" aria-label="削除" title="削除" onclick="deleteBase('${esc(b.id)}')" style="font-size:9px;padding:3px 8px"><i class="ni ni-close" aria-hidden="true"></i></button>
       </div>
     </div>
     <div class="base-result" id="baseResult-${esc(b.id)}" style="display:none;margin-top:8px"></div>
@@ -1824,7 +1891,7 @@ async function _loadAccessUsers() {
     listEl.innerHTML = allowedUsers.map(u => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:10px;background:var(--bg);font-size:12px">
         <span style="font-weight:${u === me ? '700' : '400'}">${esc(u)}${u === me ? ' <span style="color:var(--m2);font-size:10px">(you)</span>' : ''}</span>
-        ${u !== me ? `<button class="act-btn cancel" onclick="removeDashboardUser('${esc(u)}')" style="font-size:9px;padding:2px 8px">✕</button>` : ''}
+        ${u !== me ? `<button class="act-btn cancel" aria-label="削除" title="削除" onclick="removeDashboardUser('${esc(u)}')" style="font-size:9px;padding:2px 8px"><i class="ni ni-close" aria-hidden="true"></i></button>` : ''}
       </div>`).join('');
     if (statusEl) statusEl.textContent = '';
   } catch (e) {
@@ -2248,7 +2315,7 @@ async function setProjectLanguage(value) {
   if (!res?.ok) { showToast('言語設定の更新に失敗しました', 'error'); return; }
   PROJECT_LANG = value;
   _syncLangUI();
-  showToast('コンテンツ言語を更新しました', 'success');
+  showToast('記事の言語を更新しました', 'success');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2325,7 +2392,7 @@ function openTaskModal(status) {
           <div class="tl-meta"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span> · ${fmtDate(t.createdAt)}</div>
           ${t.error ? `<div style="color:var(--error);font-size:10px">${esc(t.error.substring(0,80))}</div>` : ''}
         </div>
-        ${status==='pending'&&t.id?`<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">✕</button>`:''}
+        ${status==='pending'&&t.id?`<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)"><i class="ni ni-close" aria-hidden="true"></i></button>`:''}
         ${status==='running'&&t.id?`<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">⏹</button>`:''}
         ${(status==='failed'||status==='cancelled')&&t.id?`<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻</button>`:''}
       </div>`).join('') : `<div style="color:var(--m);font-size:11px;padding:8px">${(_I18N[PROJECT_LANG]||_I18N.JP)['empty-tasks']}</div>`}
@@ -2358,7 +2425,7 @@ function openTaskDetail(taskId) {
     ${t.branch?`<div class="p-section"><div class="p-label">${i18n['lbl-branch']}</div><div class="p-value" style="font-family:monospace">${esc(t.branch)}</div></div>`:''}
     ${t.prUrl?`<div class="p-section"><div class="p-label">${i18n['lbl-pr']}</div><div class="p-value"><a href="${esc(t.prUrl)}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(t.prUrl)}</a></div></div>`:''}
     <div style="display:flex;gap:8px;margin-top:16px">
-      ${t.status==='pending'?`<button class="act-btn cancel" onclick="doTaskAction('${t.id}','cancel',this)">${i18n['act-cancel']}</button>`:''}
+      ${t.status==='pending'?`<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)">${i18n['act-cancel']}</button>`:''}
       ${t.status==='running'?`<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">${i18n['act-stop']}</button>`:''}
       ${(t.status==='failed'||t.status==='cancelled')?`<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">${i18n['act-resume']}</button>`:''}
     </div>`;
@@ -2987,8 +3054,8 @@ async function loadWikiPage(btn, slug, title) {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
           ${tags ? `<div class="wiki-tags" style="margin:0">${tags}</div>` : ''}
           ${ghLink}
-          <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">✏️ クイズ</button>
-          <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">📖 ボキャブラリー</button>
+          <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">クイズ</button>
+          <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">単語</button>
         </div>
         ${_markdownToHtml(storeContent)}
         ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">フォローアップ候補</div>${qs}</div>` : ''}
@@ -3071,7 +3138,7 @@ Rules:
       <div style="font-size:11px;color:var(--m)">このプロンプトをコピーして Gemini CLI または Claude Code で実行してください。</div>
       <textarea id="wiki-prompt-text" style="flex:1;min-height:280px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
       <div style="display:flex;gap:8px">
-        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ コピー済み';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='コピーしました';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
         <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">閉じる</button>
       </div>
     </div>`;
@@ -3148,7 +3215,7 @@ Rules:
       <div style="font-size:11px;color:var(--m)">対象ページ: ${esc(pages.join(' · '))}。コピーして Gemini CLI または Claude Code でローカル実行してください。</div>
       <textarea id="wiki-prompt-text" style="flex:1;min-height:300px;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:10px;padding:12px;font-size:11px;font-family:'SF Mono','Monaco',monospace;color:var(--txt);resize:vertical;line-height:1.5" readonly>${prompt}</textarea>
       <div style="display:flex;gap:8px">
-        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='✓ コピー済み';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
+        <button class="save-btn" onclick="navigator.clipboard.writeText(document.getElementById('wiki-prompt-text').value).then(()=>{this.textContent='コピーしました';setTimeout(()=>{this.textContent='コピー'},1500)})">コピー</button>
         <button class="refresh-btn" onclick="document.getElementById('wiki-prompt-modal').remove()">閉じる</button>
       </div>
     </div>`;
@@ -3557,7 +3624,7 @@ function _renderLiveChannels(guild) {
     const availTags = ch.availableTags || [];
     const tagSection = isForum
       ? `<div class="ch-tree-agents" style="margin-top:3px">
-          ${availTags.map(tag=>`<span class="ch-tree-agent-pill" style="background:#1a1a2e;color:#a5b4fc" title="Tag ID: ${esc(tag.id)}">${tag.emoji?tag.emoji+' ':''}${esc(tag.name)}<button onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')" style="margin-left:3px;background:none;border:none;color:var(--m2);cursor:pointer;font-size:9px;padding:0" title="Remove">✕</button></span>`).join('')}
+          ${availTags.map(tag=>`<span class="ch-tree-agent-pill" style="background:#1a1a2e;color:#a5b4fc" title="Tag ID: ${esc(tag.id)}">${tag.emoji?tag.emoji+' ':''}${esc(tag.name)}<button onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')" style="margin-left:3px;background:none;border:none;color:var(--m2);cursor:pointer;font-size:9px;padding:0" title="Remove"><i class="ni ni-close" aria-hidden="true"></i></button></span>`).join('')}
           <button class="ch-plus-btn" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')" title="Add tag">${(_I18N[PROJECT_LANG]||_I18N.JP)['ch-add-tag']}</button>
         </div>`
       : '';
@@ -3942,7 +4009,7 @@ function _repoRow(repo) {
         <span style="color:var(--m)">${esc(repo.defaultBranch)}  ·  ${age}</span>
       </div>
     </div>
-    <button class="act-btn" onclick="_viewCollaborators('${esc(repo.fullName)}')" style="font-size:9px;padding:3px 8px;white-space:nowrap">👥 Collab</button>
+    <button class="act-btn" onclick="_viewCollaborators('${esc(repo.fullName)}')" style="font-size:9px;padding:3px 8px;white-space:nowrap">Collab</button>
   </div>`;
 }
 
@@ -4011,4 +4078,7 @@ async function createRepo() {
 /* ═══════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════════ */
+// Draw the sub-navigation for whichever destination we open on, so the strip is correct before
+// the first click rather than only after one.
+if (_openAt && _destOf(_openAt)) navTo(_openAt); else _renderDestSub(_activeDest, _activePage);
 loadDashboard();
