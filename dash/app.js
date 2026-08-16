@@ -770,7 +770,11 @@ function _categoryEditor(c) {
   const t = c.targeting || {};
   const r = c.rating || {};
   const style = c.style || {};
+  const m = c.monetization || {};
   const icon = _CAT_ICON[style.format] || '📝';
+  const lbl = (list, id) => (list || []).find(o => o.id === id)?.label || id || '—';
+  const freqLabel = lbl(CAT_META?.frequencies, c.frequency);
+
   const freqOpts = (CAT_META?.frequencies || []).map(f =>
     `<option value="${f.id}"${f.id === c.frequency ? ' selected' : ''}>${esc(f.label)}</option>`).join('');
   const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
@@ -787,42 +791,47 @@ function _categoryEditor(c) {
       : c.status === 'active'
         ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">⏸ 停止</button>` : '';
 
+  // Only the editorial prompt is open by default — it is the lever that matters and the one thing
+  // you come here to change. Everything else states its current value on the closed row, so the
+  // panel answers "how is this configured" without expanding anything.
+  const section = (title, summary, body, open = false) => `
+    <details class="neu-sec"${open ? ' open' : ''}>
+      <summary>${title}<span class="sum-val">${summary}</span><span class="chev">▶</span></summary>
+      <div class="neu-sec-body">${body}</div>
+    </details>`;
+
   return `
     <div class="p-header">
-      <div class="cat-tile-icon" style="font-size:34px;flex-shrink:0">${icon}</div>
+      <div class="p-icon-puck">${icon}</div>
       <div>
         <div class="p-title">${esc(c.name)}</div>
-        <div class="p-sub"><span style="color:${st.color}">${st.label}</span> · ${c.articleCount || 0}本公開
-          ${r.count ? ` · <span style="color:#FBBF24">★${r.average}</span>（${r.count}件）` : ' · 未評価'}
-          ${c.lastGeneratedAt ? ` · 最終 ${_catDate(c.lastGeneratedAt)}` : ''}</div>
+        <div class="p-sub"><span style="color:${st.color}">${st.label}</span> · ${freqLabel} · ${c.articleCount || 0}本
+          ${r.count ? ` · <span style="color:#FBBF24">★${r.average}</span>` : ''}</div>
       </div>
     </div>
 
-    <div class="p-section">
-      <div class="p-label">扱う範囲</div>
-      <div class="p-value">${esc(c.definition || '')}</div>
-    </div>
+    <div class="neu-well" style="font-size:11.5px;color:var(--m);line-height:1.65">${esc(c.definition || '')}</div>
 
-    <div class="p-section">
-      <div class="p-label">編集方針 — 生成される記事の切り口とトーンを決めます</div>
-      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="8">${esc(c.prompt || '')}</textarea>
+    ${section('編集方針', '', `
+      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="9">${esc(c.prompt || '')}</textarea>
+      <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
+        毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。
+      </div>
       ${c.promptSuggested && c.promptSuggested !== c.prompt
-        ? `<button class="act-btn" onclick="resetCategoryPrompt('${c.id}')">↺ 提案に戻す</button>` : ''}
-    </div>
+        ? `<button class="act-btn" style="margin-top:10px" onclick="resetCategoryPrompt('${c.id}')">↺ 提案に戻す</button>` : ''}`, true)}
 
-    <div class="p-section">
-      <div class="p-label">記事のかたち</div>
-      <div class="cat-grid cat-style">
+    ${section('記事のかたち',
+      `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
+      <div class="cat-grid cat-style neu-well">
         ${_styleField(c, 'format', '形式', CAT_META?.formats)}
         ${_styleField(c, 'voice', '語り口', CAT_META?.voices)}
         ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
         ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
-      </div>
-    </div>
+      </div>`)}
 
-    <div class="p-section">
-      <div class="p-label">読者と頻度</div>
-      <div class="cat-grid">
+    ${section('読者と頻度',
+      `${t.ageMin ?? 25}〜${t.ageMax ?? 45}歳 · ${(t.scale || 'mass') === 'niche' ? 'ニッチ' : 'マス'} · ${freqLabel}`, `
+      <div class="cat-grid neu-well">
         <label class="cat-field"><span>頻度</span>${sel(`cat-freq-${c.id}`, freqOpts)}</label>
         <label class="cat-field"><span>年齢</span><span class="cat-age">
           <input type="number" class="cat-in" id="cat-agemin-${c.id}" value="${t.ageMin ?? 25}" min="10" max="99">
@@ -833,20 +842,17 @@ function _categoryEditor(c) {
         <label class="cat-field"><span>読者規模</span>${sel(`cat-scale-${c.id}`, scaleOpts)}</label>
         <label class="cat-field cat-wide"><span>専門性</span>
           <input type="text" class="cat-in" id="cat-spec-${c.id}" value="${esc(t.specialization || '')}"
-            placeholder="例: 事業会社のマーケター（空欄なら専門を前提としない）"></label>
-      </div>
-    </div>
+            placeholder="空欄なら専門を前提としない"></label>
+      </div>`)}
 
-    <div class="p-section">
-      <div class="p-label">収益化</div>
-      ${_moneyField(c)}
-    </div>
+    ${section('収益化', lbl(CAT_META?.monetizationModes, m.mode || 'none'),
+      `<div class="neu-well">${_moneyField(c)}</div>`)}
 
     <div class="p-actions">
       <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
       ${statusActions}
       <button class="act-btn" onclick="generateNow('${c.id}')">✍️ 今すぐ1本</button>
-      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">🗑 削除</button>
+      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">🗑</button>
     </div>`;
 }
 
