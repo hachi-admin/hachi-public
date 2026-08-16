@@ -531,6 +531,37 @@ header{margin:12px;padding:10px 16px}
 /* ══════════════════════════════════════════════════════════════
    SOURCES + CHANNELS
 ══════════════════════════════════════════════════════════════ */
+/* ── Topic category cards (Note article pipeline) ───────────────────────── */
+.cat-card{background:var(--bg);box-shadow:var(--sh);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.cat-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.cat-name{font-size:13px;font-weight:700;color:var(--txt);flex:1;min-width:120px}
+.cat-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;box-shadow:var(--sh-sm);white-space:nowrap}
+.cat-rating{font-size:11px;display:flex;gap:5px;align-items:center;letter-spacing:1px}
+.cat-def{font-size:11px;color:var(--m);line-height:1.5;margin-bottom:10px}
+.cat-label{display:block;font-size:10px;color:var(--m2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.cat-prompt{
+  width:100%;background:var(--bg);box-shadow:var(--sh-in);border:none;border-radius:8px;
+  padding:10px;font-size:11.5px;color:var(--txt);line-height:1.6;resize:vertical;
+  font-family:inherit;outline:none;margin-bottom:10px;
+}
+.cat-prompt:focus{box-shadow:var(--sh-press)}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.cat-field{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--m2)}
+.cat-field.cat-wide{grid-column:1/-1}
+.cat-in{
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;color:var(--txt);
+  padding:6px 8px;border-radius:7px;font-size:11px;outline:none;font-family:inherit;min-height:32px;width:100%;
+}
+.cat-in:focus{box-shadow:var(--sh)}
+.cat-age{display:flex;align-items:center;gap:4px}
+.cat-age .cat-in{min-width:0}
+.cat-age span{font-size:10px;color:var(--m2)}
+.cat-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cat-foot{font-size:10px;color:var(--m2);margin-top:8px}
+.art-score{display:flex;gap:1px;flex-shrink:0}
+.art-star{background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:var(--div);padding:1px;transition:color .12s}
+.art-star:hover,.art-star.on{color:#FBBF24}
+
 .src-row{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--m2) 25%,transparent)}
 .src-row:last-child{border:none}
 .src-toggle{width:16px;height:16px;border-radius:50%;flex-shrink:0;margin-top:2px;cursor:pointer;transition:background .15s;border:none}

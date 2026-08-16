@@ -650,122 +650,259 @@ function setKTab(el, tab) {
   if (tab === 'topics') _loadTopics(); // lazy-load article topics on first open
 }
 
-// ─── Article topics (Note article pipeline) ──────────────────────────────────
-let TOPICS = [];
+// ─── Topic categories + articles (Note article pipeline) ─────────────────────
+// A topic category is a recurring content stream: an editable editorial prompt, an audience, a
+// cadence, and a star rating rolled up from the articles it produced. Individual articles get
+// their angle chosen per cycle by the article-angle agent, so this panel tunes the *stream*.
+let CATEGORIES = [];
+let CAT_ARTICLES = [];
+let CAT_META = null;   // option lists from /api/article-categories/meta
+let _catView = 'categories';
 
 async function _loadTopics() {
   const box = document.getElementById('k-topics');
   if (box && !box.dataset.loaded) box.innerHTML = '<div style="color:var(--m);font-size:11px;padding:8px 0">読み込み中…</div>';
   try {
-    const r = await fetch(apiUrl('/api/topics'), { headers: _authHeaders() });
-    const d = await r.json();
-    TOPICS = Array.isArray(d.topics) ? d.topics : [];
-  } catch { TOPICS = []; }
+    const [meta, cats, arts] = await Promise.all([
+      CAT_META ? Promise.resolve(CAT_META)
+        : fetch(apiUrl('/api/article-categories/meta'), { headers: _authHeaders() }).then(r => r.json()),
+      fetch(apiUrl('/api/article-categories'), { headers: _authHeaders() }).then(r => r.json()),
+      fetch(apiUrl('/api/articles?limit=100'), { headers: _authHeaders() }).then(r => r.json()),
+    ]);
+    CAT_META = meta;
+    CATEGORIES = Array.isArray(cats.categories) ? cats.categories : [];
+    CAT_ARTICLES = Array.isArray(arts.articles) ? arts.articles : [];
+  } catch { CATEGORIES = []; CAT_ARTICLES = []; }
   if (box) box.dataset.loaded = '1';
   _renderTopics();
+}
+
+function setCatView(v) { _catView = v; _renderTopics(); }
+
+const _catStars = (n) => '★'.repeat(Math.round(n)) + '☆'.repeat(Math.max(0, 5 - Math.round(n)));
+const _CAT_STATUS = {
+  suggested: { label: '未承認', color: '#FBBF24' },
+  active:    { label: '稼働中', color: '#34D399' },
+  paused:    { label: '停止中', color: '#94A3B8' },
+  blocked:   { label: '却下',   color: '#F87171' },
+};
+
+function _catDate(ts) {
+  if (!ts) return '';
+  const ms = ts._seconds ? ts._seconds * 1000 : (ts.seconds ? ts.seconds * 1000 : Date.parse(ts));
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : '';
 }
 
 function _renderTopics() {
   const box = document.getElementById('k-topics');
   if (!box) return;
-  const FREQ = ['daily', 'weekly', 'monthly'];
-  const freqSel = (id, cur) => `<select onchange="changeTopicFreq('${id}',this.value)" style="font-size:9px;background:var(--bg2);color:var(--fg);border:1px solid var(--bd);border-radius:4px;padding:1px 3px">${FREQ.map(f => `<option value="${f}"${f === cur ? ' selected' : ''}>${f}</option>`).join('')}</select>`;
-
-  const suggested = TOPICS.filter(t => t.status === 'suggested');
-  const active = TOPICS.filter(t => t.status === 'active');
-  const blocked = TOPICS.filter(t => t.status === 'blocked');
-
-  const row = (t, controls) => `<div class="src-row" data-id="${t.id}" style="display:block;padding:6px 8px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <div class="src-name">${esc(t.category)} <span style="color:var(--m);font-size:9px">${t.frequency}</span></div>
-        <div style="font-size:10px;color:var(--m);margin-top:2px">${esc(t.description)}</div>
-        ${t.rationale ? `<div style="font-size:9px;color:var(--m);margin-top:2px;opacity:.8">理由: ${esc(t.rationale)}</div>` : ''}
-        ${t.lastGeneratedAt ? `<div style="font-size:9px;color:#34D399;margin-top:2px">最終生成: ${esc(String(t.lastGeneratedAt).slice(0,10))}</div>` : ''}
-      </div>
-      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${controls}</div>
-    </div></div>`;
-
-  const secHd = (label, n) => `<div style="font-size:11px;font-weight:700;color:var(--acc);margin:10px 0 4px">${label} (${n})</div>`;
-  const empty = m => `<div style="color:var(--m);font-size:11px;padding:4px 0">${m}</div>`;
 
   const toolbar = `<div class="qs-card" style="flex-direction:column;gap:6px;align-items:stretch;margin-bottom:10px">
-    <div style="display:flex;gap:6px;align-items:center">
-      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">🧭 トピックを探す</button>
-      <span style="font-size:10px;color:var(--m)">note.com のトレンドから候補を提案します</span>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">🧭 カテゴリを探す</button>
+      <button class="save-btn" onclick="showArticleFromUrl()" style="font-size:11px">📝 URLから書く</button>
+      <span style="font-size:10px;color:var(--m)">note.com のトレンドから継続的なカテゴリを提案します</span>
     </div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-      <input class="form-input" id="new-topic-cat" placeholder="カテゴリ" style="font-size:11px;flex:0 0 130px">
-      <input class="form-input" id="new-topic-desc" placeholder="この記事の具体的な内容" style="font-size:11px;flex:1;min-width:160px">
-      <select id="new-topic-freq" style="font-size:11px;background:var(--bg2);color:var(--fg);border:1px solid var(--bd);border-radius:4px;padding:2px 4px">${FREQ.map(f => `<option value="${f}">${f}</option>`).join('')}</select>
-      <button class="save-btn" onclick="submitNewTopic()" style="font-size:11px">＋ 追加</button>
+    <div style="display:flex;gap:4px">
+      <button class="act-btn ${_catView === 'categories' ? 'resume' : ''}" onclick="setCatView('categories')" style="font-size:9px;padding:3px 10px">カテゴリ (${CATEGORIES.length})</button>
+      <button class="act-btn ${_catView === 'articles' ? 'resume' : ''}" onclick="setCatView('articles')" style="font-size:9px;padding:3px 10px">記事 (${CAT_ARTICLES.length})</button>
     </div>
   </div>`;
 
-  box.innerHTML = toolbar
-    + secHd('候補（承認待ち）', suggested.length)
-    + (suggested.length ? suggested.map(t => row(t,
-        `<button class="act-btn resume" onclick="approveTopic('${t.id}')" style="font-size:8px;padding:2px 6px">✅ 承認</button>
-         <button class="act-btn cancel" onclick="rejectTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🚫 却下</button>`)).join('') : empty('候補はありません。「トピックを探す」で提案を生成できます。'))
-    + secHd('有効（生成中）', active.length)
-    + (active.length ? active.map(t => row(t,
-        `${freqSel(t.id, t.frequency)}
-         <button class="act-btn cancel" onclick="deleteTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🗑</button>`)).join('') : empty('有効なトピックはありません。'))
-    + secHd('ブロック済み', blocked.length)
-    + (blocked.length ? blocked.map(t => row(t,
-        `<button class="act-btn resume" onclick="approveTopic('${t.id}')" style="font-size:8px;padding:2px 6px">↻ 復元</button>
-         <button class="act-btn cancel" onclick="deleteTopic('${t.id}')" style="font-size:8px;padding:2px 6px">🗑</button>`)).join('') : empty('なし'));
+  box.innerHTML = toolbar + (_catView === 'articles' ? _buildArticleRows() : _buildCategoryCards());
 }
 
-async function approveTopic(id) {
-  await fetch(apiUrl(`/api/topics/${id}/approve`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
-  showToast('トピックを有効にしました。', 'success');
+function _buildCategoryCards() {
+  if (!CATEGORIES.length) {
+    return `<div style="color:var(--m);font-size:11px;padding:8px 0">カテゴリがありません。「カテゴリを探す」で提案を生成できます。</div>`;
+  }
+  const order = { suggested: 0, active: 1, paused: 2, blocked: 3 };
+  return [...CATEGORIES].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)).map(c => {
+    const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
+    const t = c.targeting || {};
+    const r = c.rating || {};
+    const freqOpts = (CAT_META?.frequencies || []).map(f =>
+      `<option value="${f.id}"${f.id === c.frequency ? ' selected' : ''}>${esc(f.label)}</option>`).join('');
+    const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
+    const genderOpts = [['any', '男女問わず'], ['male', '男性中心'], ['female', '女性中心']].map(([v, l]) =>
+      `<option value="${v}"${v === (t.gender || 'any') ? ' selected' : ''}>${l}</option>`).join('');
+    const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
+      `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
+
+    const statusActions = c.status === 'suggested'
+      ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')" style="font-size:8px;padding:2px 6px">✅ 承認</button>
+         <button class="act-btn cancel" onclick="catAction('${c.id}','reject')" style="font-size:8px;padding:2px 6px">🚫 却下</button>`
+      : c.status === 'paused'
+        ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')" style="font-size:8px;padding:2px 6px">▶ 再開</button>`
+        : c.status === 'active'
+          ? `<button class="act-btn" onclick="catAction('${c.id}','pause')" style="font-size:8px;padding:2px 6px">⏸ 停止</button>`
+          : '';
+
+    return `<div class="cat-card" data-id="${c.id}">
+      <div class="cat-hd">
+        <div class="cat-name">${esc(c.name)}</div>
+        <span class="cat-pill" style="color:${st.color}">${st.label}</span>
+        <div class="cat-rating">${r.count
+          ? `<span style="color:#FBBF24">${_catStars(r.average)}</span><span style="color:var(--m)">${r.average} (${r.count})</span>`
+          : `<span style="color:var(--m)">未評価</span>`}</div>
+      </div>
+      <div class="cat-def">${esc(c.definition || '')}</div>
+
+      <label class="cat-label">編集方針 — 生成される記事の切り口とトーンを決めます</label>
+      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="4">${esc(c.prompt || '')}</textarea>
+
+      <div class="cat-grid">
+        <label class="cat-field"><span>頻度</span>${sel(`cat-freq-${c.id}`, freqOpts)}</label>
+        <label class="cat-field"><span>年齢</span><span class="cat-age">
+          <input type="number" class="cat-in" id="cat-agemin-${c.id}" value="${t.ageMin ?? 25}" min="10" max="99">
+          <span>〜</span>
+          <input type="number" class="cat-in" id="cat-agemax-${c.id}" value="${t.ageMax ?? 45}" min="10" max="99">
+        </span></label>
+        <label class="cat-field"><span>性別</span>${sel(`cat-gender-${c.id}`, genderOpts)}</label>
+        <label class="cat-field"><span>読者規模</span>${sel(`cat-scale-${c.id}`, scaleOpts)}</label>
+        <label class="cat-field cat-wide"><span>専門性</span>
+          <input type="text" class="cat-in" id="cat-spec-${c.id}" value="${esc(t.specialization || '')}"
+            placeholder="例: 事業会社のマーケター（空欄なら専門を前提としない）"></label>
+      </div>
+
+      <div class="cat-actions">
+        <button class="save-btn" onclick="saveCategory('${c.id}')" style="font-size:10px;padding:4px 12px">保存</button>
+        ${c.promptSuggested && c.promptSuggested !== c.prompt
+          ? `<button class="act-btn" onclick="resetCategoryPrompt('${c.id}')" style="font-size:8px;padding:2px 6px">↺ 提案に戻す</button>` : ''}
+        ${statusActions}
+        <button class="act-btn" onclick="generateNow('${c.id}')" style="font-size:8px;padding:2px 6px">✍️ 今すぐ1本</button>
+        <button class="act-btn cancel" onclick="deleteCategory('${c.id}')" style="font-size:8px;padding:2px 6px">🗑</button>
+      </div>
+      <div class="cat-foot">${c.articleCount ? `${c.articleCount}本公開` : 'まだ記事なし'}${c.lastGeneratedAt ? ` · 最終 ${_catDate(c.lastGeneratedAt)}` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function _buildArticleRows() {
+  if (!CAT_ARTICLES.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">記事がまだありません。</div>`;
+  const catName = (id) => CATEGORIES.find(c => c.id === id)?.name || (id ? '(削除済みカテゴリ)' : 'URL考察');
+  return CAT_ARTICLES.map(a => `<div class="src-row" data-id="${a.id}">
+    <div class="src-body">
+      <div class="src-name">${a.wikiUrl
+        ? `<a href="${esc(a.wikiUrl)}" target="_blank" rel="noopener" style="color:inherit">${esc(a.title || a.angle || '(無題)')}</a>`
+        : esc(a.title || a.angle || '(無題)')}</div>
+      <div class="src-meta">
+        <span style="color:#A78BFA">${esc(catName(a.categoryId))}</span>
+        ${a.articleKind ? `<span style="color:#60A5FA">${esc(a.articleKind)}</span>` : ''}
+        ${a.status !== 'published' ? `<span style="color:var(--error)">${esc(a.status)}</span>` : ''}
+        ${a.charCount ? `<span style="color:var(--m)">約${a.charCount.toLocaleString()}字</span>` : ''}
+        ${a.imageCount ? `<span style="color:var(--m)">画像${a.imageCount}（web${a.webImageCount ?? 0}）</span>` : ''}
+        <span style="color:var(--m)">${_catDate(a.publishedAt || a.createdAt)}</span>
+      </div>
+    </div>
+    <div class="art-score">${[1, 2, 3, 4, 5].map(n =>
+      `<button class="art-star${a.score >= n ? ' on' : ''}" onclick="scoreArticleRow('${a.id}',${n})">★</button>`).join('')}</div>
+  </div>`).join('');
+}
+
+const _catVal = (id) => document.getElementById(id)?.value ?? '';
+
+async function saveCategory(id) {
+  const body = {
+    prompt: _catVal(`cat-prompt-${id}`),
+    frequency: _catVal(`cat-freq-${id}`),
+    targeting: {
+      ageMin: Number(_catVal(`cat-agemin-${id}`)),
+      ageMax: Number(_catVal(`cat-agemax-${id}`)),
+      gender: _catVal(`cat-gender-${id}`),
+      scale: _catVal(`cat-scale-${id}`),
+      specialization: _catVal(`cat-spec-${id}`),
+    },
+  };
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('保存に失敗しました', 'error'); return; }
+  showToast('保存しました。次回以降の記事に反映されます。', 'success');
   _loadTopics();
 }
 
-function rejectTopic(id) {
-  const row = document.querySelector(`#k-topics .src-row[data-id="${id}"]`);
-  showConfirm('このトピックを却下しますか？', async () => {
-    await fetch(apiUrl(`/api/topics/${id}/reject`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
-    showToast('却下しました。', 'success');
+function resetCategoryPrompt(id) {
+  showConfirm('編集方針を最初の提案内容に戻しますか？', async () => {
+    await fetch(apiUrl(`/api/article-categories/${id}/reset-prompt`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+    showToast('提案内容に戻しました。', 'success');
     _loadTopics();
-  }, row);
+  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
 }
 
-function deleteTopic(id) {
-  const row = document.querySelector(`#k-topics .src-row[data-id="${id}"]`);
-  showConfirm('このトピックを削除しますか？', async () => {
-    await fetch(apiUrl(`/api/topics/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
+async function catAction(id, action) {
+  const labels = { approve: '承認', reject: '却下', pause: '停止', resume: '再開' };
+  const run = async () => {
+    await fetch(apiUrl(`/api/article-categories/${id}/${action}`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+    showToast(`${labels[action]}しました。`, 'success');
+    _loadTopics();
+  };
+  // Rejecting is the only irreversible one here — it marks the category "do not re-suggest".
+  if (action === 'reject') {
+    showConfirm('却下すると今後スカウトから再提案されません。よろしいですか？', run,
+      document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  } else { await run(); }
+}
+
+function deleteCategory(id) {
+  showConfirm('このカテゴリを完全に削除しますか？（生成済みの記事は残ります）', async () => {
+    await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
     _loadTopics();
-  }, row);
+  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
 }
 
-async function changeTopicFreq(id, frequency) {
-  await fetch(apiUrl(`/api/topics/${id}`), {
-    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ frequency })
-  }).catch(() => {});
-  showToast('頻度を更新しました。', 'success');
+async function generateNow(id) {
+  const res = await fetch(apiUrl(`/api/article-categories/${id}/generate`), { method: 'POST', headers: _authHeaders() }).catch(() => null);
+  showToast(res?.ok ? '記事を書き始めました。完成すると #articles に投稿されます。' : '起動に失敗しました', res?.ok ? 'success' : 'error');
 }
 
-async function submitNewTopic() {
-  const category = document.getElementById('new-topic-cat')?.value.trim();
-  const description = document.getElementById('new-topic-desc')?.value.trim();
-  const frequency = document.getElementById('new-topic-freq')?.value || 'weekly';
-  if (!category || !description) { showToast('カテゴリと内容を入力してください。', 'error'); return; }
-  await fetch(apiUrl('/api/topics'), {
-    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category, description, frequency, status: 'active' })
-  }).catch(() => {});
-  document.getElementById('new-topic-cat').value = '';
-  document.getElementById('new-topic-desc').value = '';
-  showToast('トピックを追加しました。', 'success');
+async function scoreArticleRow(id, score) {
+  const res = await fetch(apiUrl(`/api/articles/${id}/score`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ score }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('評価に失敗しました', 'error'); return; }
+  const out = await res.json().catch(() => ({}));
+  showToast(out.average ? `${score}点を記録（カテゴリ平均 ${out.average}）` : `${score}点を記録しました`, 'success');
   _loadTopics();
+}
+
+// Ad-hoc article from any URL — the dashboard twin of the /article Discord command.
+function showArticleFromUrl() {
+  document.getElementById('article-url-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'article-url-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:var(--bg);box-shadow:var(--sh-lg);border-radius:16px;width:min(520px,95vw);display:flex;flex-direction:column;padding:20px;gap:12px">
+      <div style="font-weight:700;font-size:14px;color:var(--txt,var(--fg))">📝 URLから考察記事を書く</div>
+      <div style="font-size:11px;color:var(--m)">YouTube動画・記事・論文など、URLなら何でも。題材を読み込んで背景を調べ、考察記事にします。</div>
+      <input class="form-input" id="afu-url" placeholder="https://www.youtube.com/watch?v=…" style="font-size:12px">
+      <input class="form-input" id="afu-note" placeholder="補足指示（任意）例: 日本の事例と比較して" style="font-size:12px">
+      <div style="display:flex;gap:8px">
+        <button class="save-btn" onclick="submitArticleFromUrl()">書き始める</button>
+        <button class="act-btn" onclick="document.getElementById('article-url-modal').remove()">キャンセル</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  document.getElementById('afu-url').focus();
+}
+
+async function submitArticleFromUrl() {
+  const url = _catVal('afu-url').trim();
+  if (!/^https?:\/\//i.test(url)) { showToast('http(s) で始まるURLを入れてください', 'error'); return; }
+  const res = await fetch(apiUrl('/api/articles/from-url'), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, note: _catVal('afu-note').trim() }),
+  }).catch(() => null);
+  document.getElementById('article-url-modal')?.remove();
+  showToast(res?.ok ? '記事を書き始めました。完成すると #articles に投稿されます。' : '起動に失敗しました', res?.ok ? 'success' : 'error');
 }
 
 async function scoutTopicsNow() {
-  showToast('トピックを探しています…（数十秒かかります）', 'info');
-  await fetch(apiUrl('/api/topics/scout'), { method: 'POST', headers: _authHeaders() }).catch(() => {});
+  showToast('カテゴリを探しています…（数十秒かかります）', 'info');
+  await fetch(apiUrl('/api/article-categories/scout'), { method: 'POST', headers: _authHeaders() }).catch(() => {});
   setTimeout(_loadTopics, 8000);
 }
 
