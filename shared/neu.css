@@ -12,8 +12,13 @@
   --acc:#5865f2;--grn:#10b981;--red:#ef4444;--yel:#f59e0b;--pur:#7c3aed;--blue:#3b82f6;
   --txt:#2b3350;--m:#5c6478;--m2:#717b92;
   --d-sh:#b6bfd0;--l-sh:#ffffff;
+  /* Soft UI keeps offsets tight (4–8px) and blurs generous (12–20px): past that the shadow stops
+     reading as a lit surface and starts reading as a drop shadow on a floating rectangle. */
   --sh:6px 6px 14px var(--d-sh),-6px -6px 14px var(--l-sh);
-  --sh-lg:10px 10px 22px var(--d-sh),-8px -8px 20px var(--l-sh);
+  --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
+  /* Scrim shares the palette's hue. A black wash is a different material system — it flattens
+     everything behind it instead of leaving the surface visible and merely dimmed. */
+  --scrim:color-mix(in srgb, #2b3350 42%, transparent);
   --sh-sm:4px 4px 9px var(--d-sh),-4px -4px 9px var(--l-sh);
   --sh-in:inset 3px 3px 6px var(--d-sh),inset -3px -3px 6px var(--l-sh);
   --sh-press:inset 2px 2px 4px var(--d-sh),inset -2px -2px 4px var(--l-sh);
@@ -23,7 +28,8 @@
   --txt:#e2e6ef;--m:#98a3b8;--m2:#6e7890;
   --d-sh:#141720;--l-sh:#3c4257;
   --sh:8px 8px 18px var(--d-sh),-6px -6px 14px var(--l-sh);
-  --sh-lg:13px 13px 28px var(--d-sh),-9px -9px 20px var(--l-sh);
+  --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
+  --scrim:color-mix(in srgb, #10131a 55%, transparent);
   --sh-sm:5px 5px 11px var(--d-sh),-4px -4px 8px var(--l-sh);
   --sh-in:inset 4px 4px 9px var(--d-sh),inset -4px -4px 9px var(--l-sh);
   --sh-press:inset 3px 3px 7px var(--d-sh),inset -3px -3px 7px var(--l-sh);
