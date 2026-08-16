@@ -27,10 +27,17 @@
   --sh-in:inset 3px 3px 6px var(--d-sh),inset -3px -3px 6px var(--l-sh);
   --sh-press:inset 2px 2px 4px var(--d-sh),inset -2px -2px 4px var(--l-sh);
 }
+/* Dark ground sits a step lighter than the usual near-black. Neumorphism needs the surface to be
+   a mid-tone: the material is defined by a shadow on one side and a *lighter* highlight on the
+   other, and on a near-black ground there is nowhere for that highlight to go, so every card
+   flattens into an outline. #31363f leaves room on both sides. */
 [data-theme="dark"]{
-  --bg:#2a2e37;--surf:#2a2e37;--card:#2a2e37;--brd:transparent;--div:#373d4d;
-  --txt:#e2e6ef;--m:#98a3b8;--m2:#6e7890;
-  --d-sh:#141720;--l-sh:#3c4257;
+  --bg:#31363f;--surf:#31363f;--card:#31363f;--brd:transparent;--div:#414855;
+  --txt:#e8ecf3;--m:#a3aec0;--m2:#939eb2;
+  --d-sh:#191d24;--l-sh:#454c58;
+  /* The light accent is 2.7:1 on this ground — it is the colour of every active nav pill and
+     link, all of it small text, so it has to be lifted rather than inherited. 5.3:1 here. */
+  --acc:#9aa4ff;
   --sh:8px 8px 18px var(--d-sh),-6px -6px 14px var(--l-sh);
   --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
   --scrim:color-mix(in srgb, #10131a 48%, transparent);

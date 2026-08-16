@@ -655,8 +655,15 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
 .acard .acard-name{overflow-wrap:anywhere}
-.acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
-.acard .acard-foot{display:flex;align-items:center;gap:6px}
+/* Chips line up with the name above them; centring them under a left-aligned title read as an
+   alignment accident. */
+.acard .acard-chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start}
+/* `overflow:hidden` on the shared .acard-foot clipped the shadow of anything raised inside it —
+   the monetization mark rendered as a sliced square. The footer clips its text instead. */
+.acard .acard-foot{display:flex;align-items:center;gap:8px;margin-top:8px;overflow:visible}
+.acard-rating,.acard-count{font-size:10px;color:var(--m2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.acard-count{margin-left:auto}
+.cat-chip.earns{font-size:9px;font-weight:700;color:var(--acc)}
 #detail-content .cat-prompt{min-height:150px}
 /* The editor is long. Keep its actions pinned to the bottom of the panel rather than making the
    user scroll back down to save. */

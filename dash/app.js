@@ -803,6 +803,10 @@ function _buildCategoryCards() {
 // Everything else lives behind the click — same two-level structure as the agents page.
 // Format marks reuse the dashboard's embossed .ni icon language rather than emoji. A full-colour
 // raster glyph sits *on* a neumorphic surface; an embossed mark is *part* of it.
+// The money state was an unlabelled icon whose shadow was clipped by the footer's overflow.
+// A named chip says which scheme is in play, which is the thing worth knowing at a glance.
+const _MONEY_LABEL = { amazon: 'Amazon', paid: '有料', sponsor: 'PR' };
+
 const _CAT_FMT = {
   news_reflection: 'news', analysis: 'analysis', narrative: 'narrative',
   tutorial: 'tutorial', listicle: 'listicle', review: 'review',
@@ -827,9 +831,10 @@ function _categoryTile(c) {
         <span class="chip">${st.label}</span>
         <span class="cat-chip">${esc(freq)}</span>
       </div>
-      <div class="acard-foot" style="margin-top:6px;justify-content:space-between">
-        <span style="font-size:10px;color:var(--m2)">${r.count ? `★${r.average}` : '—'}</span>
-        <span style="font-size:10px;color:var(--m2);display:inline-flex;align-items:center;gap:6px">${c.articleCount || 0}本${earns ? '<i class="ni ni-money" style="width:18px;height:18px;border-radius:6px" aria-hidden="true"></i>' : ''}</span>
+      <div class="acard-foot">
+        <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
+        <span class="acard-count">${c.articleCount || 0}本</span>
+        ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
       </div>
     </div>
   </div>`;
