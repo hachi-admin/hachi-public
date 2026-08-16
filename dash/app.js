@@ -720,7 +720,7 @@ function _buildCategoryCards() {
   const cards = [...CATEGORIES]
     .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
     .map(_categoryTile).join('');
-  return `<div class="agent-grid loaded">${cards}</div>`;
+  return `<div class="cat-tile-grid loaded">${cards}</div>`;
 }
 
 // One tile answers only: what is this, is it running, is it any good, when does it fire next.
@@ -760,6 +760,7 @@ function openCategoryDetail(id) {
   const c = CATEGORIES.find(x => x.id === id);
   if (!c) return;
   document.getElementById('detail-content').innerHTML = _categoryEditor(c);
+  document.getElementById('detail-panel')?.classList.add('panel-wide');
   document.getElementById('detail-overlay').classList.add('open');
   _moneyChanged(c.id);
 }
@@ -841,7 +842,7 @@ function _categoryEditor(c) {
       ${_moneyField(c)}
     </div>
 
-    <div class="p-section" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <div class="p-actions">
       <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
       ${statusActions}
       <button class="act-btn" onclick="generateNow('${c.id}')">✍️ 今すぐ1本</button>
@@ -2272,7 +2273,10 @@ function openDetail(id) {
   document.getElementById('detail-overlay').classList.add('open');
 }
 
-function closeDetail() { document.getElementById('detail-overlay').classList.remove('open'); }
+function closeDetail() {
+  document.getElementById('detail-overlay').classList.remove('open');
+  document.getElementById('detail-panel')?.classList.remove('panel-wide');
+}
 function closeDetailIfBg(e) { if (e.target === document.getElementById('detail-overlay')) closeDetail(); }
 
 /* ═══════════════════════════════════════════════════════════

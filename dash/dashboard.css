@@ -414,6 +414,17 @@ header{margin:12px;padding:10px 16px}
 .orch-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 .feed-item{display:flex;gap:7px;align-items:flex-start;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--m2) 25%,transparent)}
 .feed-item:last-child{border:none}
+/* A queue is chronological, so it stays a list rather than becoming a grid — but it borrows the
+   card grammar: a status edge you read without focusing, and a whole-row hit area. */
+#task-feed .feed-item{
+  padding:10px 10px 10px 12px;margin-bottom:6px;border-bottom:none;border-radius:10px;
+  box-shadow:var(--sh-sm);border-left:3px solid transparent;transition:box-shadow .15s,transform .12s;
+}
+#task-feed .feed-item:hover{box-shadow:var(--sh);transform:translateX(2px)}
+#task-feed .feed-item:has(.feed-dot.running){border-left-color:var(--blue)}
+#task-feed .feed-item:has(.feed-dot.failed){border-left-color:var(--red)}
+#task-feed .feed-item:has(.feed-dot.completed){border-left-color:color-mix(in srgb,var(--grn) 45%,transparent)}
+#task-feed .feed-item:has(.feed-dot.pending){border-left-color:var(--m2)}
 .feed-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px}
 .feed-dot.completed{background:var(--grn)}.feed-dot.running{background:var(--blue);animation:pulse 1.2s infinite}
 .feed-dot.failed{background:var(--red)}.feed-dot.pending{background:var(--m2)}.feed-dot.cancelled{background:color-mix(in srgb,var(--m) 40%,transparent)}
@@ -444,7 +455,11 @@ header{margin:12px;padding:10px 16px}
 .panel{
   background:var(--bg);box-shadow:var(--sh-lg);border-radius:14px;
   width:min(500px,95vw);max-height:85vh;overflow-y:auto;padding:22px;position:relative;
+  overscroll-behavior:contain;   /* stop the page behind scrolling once the panel bottoms out */
 }
+/* An editor is not a read-only detail: four style selects plus five targeting fields need room
+   to breathe, so editing panels get a wider column on desktop. */
+.panel.panel-wide{width:min(680px,95vw)}
 .panel::-webkit-scrollbar{width:4px}.panel::-webkit-scrollbar-thumb{background:var(--div);border-radius:2px}
 .p-close{
   position:absolute;top:14px;right:14px;background:var(--bg);box-shadow:var(--sh-sm);
@@ -553,10 +568,21 @@ header{margin:12px;padding:10px 16px}
   padding:6px 8px;border-radius:7px;font-size:11px;outline:none;font-family:inherit;min-height:32px;width:100%;
 }
 .cat-in:focus{box-shadow:var(--sh)}
+/* Category tiles carry Japanese names, which need more width than the agent grid's 158px.
+   Sized so two fit a phone and four-to-six a desktop, without a lone orphan on the last row. */
+.cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
+.acard .acard-name{overflow-wrap:anywhere}
 .acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
 .acard .acard-foot{display:flex;align-items:center;gap:6px}
 #detail-content .cat-prompt{min-height:150px}
+/* The editor is long. Keep its actions pinned to the bottom of the panel rather than making the
+   user scroll back down to save. */
+.p-actions{
+  position:sticky;bottom:-22px;margin:14px -22px -22px;padding:14px 22px;
+  background:var(--bg);box-shadow:0 -6px 14px var(--d-sh);
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-radius:0 0 14px 14px;
+}
 .cat-money{background:color-mix(in srgb,var(--grn) 7%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
 .cat-style{background:color-mix(in srgb,var(--m2) 6%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
 .cat-style-field{gap:4px}
@@ -936,6 +962,15 @@ header{margin:12px;padding:10px 16px}
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE — NARROW TABLET 768–900px
 ══════════════════════════════════════════════════════════════ */
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.panel{animation:none}}
+
+/* Tablet: three tiles read better than two stretched ones. */
+@media(min-width:768px) and (max-width:1023px){
+  .cat-tile-grid{grid-template-columns:repeat(3,1fr)}
+  .cat-grid.cat-style{grid-template-columns:repeat(2,1fr)}
+}
+
 @media(min-width:768px) and (max-width:900px){
   .analytics-kpi-row{grid-template-columns:1fr 1fr}
   .analytics-chart-pair{grid-template-columns:1fr}
@@ -986,6 +1021,28 @@ header{margin:12px;padding:10px 16px}
   /* Analytics page: collapse multi-column grids to 2/1 on phone */
   .analytics-kpi-row{grid-template-columns:1fr 1fr}
   .analytics-chart-pair{grid-template-columns:1fr}
+  /* Detail overlay becomes a bottom sheet: full width, anchored to the thumb, not a floating
+     box that leaves dead space above and below on a tall screen. */
+  .overlay{align-items:flex-end}
+  .panel,.panel.panel-wide{
+    width:100%;max-width:100%;max-height:92vh;
+    border-radius:18px 18px 0 0;padding:18px 16px 16px;
+    animation:sheetUp .22s cubic-bezier(.22,1,.36,1);
+  }
+  .p-actions{margin:14px -16px -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-radius:0}
+  .p-close{top:10px;right:10px;width:40px;height:40px}
+  .cat-tile-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .cat-tile-icon{font-size:22px}
+  /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
+  .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
+  .cat-hint{min-height:0}
+  .cat-in{min-height:44px;font-size:16px}   /* 16px stops iOS zooming the page on focus */
+  /* Queue rows: comfortable thumb target, and the action button kept clear of the row's own
+     tap area so cancelling and opening are not the same gesture. */
+  #task-feed .feed-item{padding:12px 10px;min-height:56px;align-items:center}
+  #task-feed .feed-item .act-btn{min-width:44px;min-height:44px}
+  .feed-text{font-size:13px}
+  .cat-prompt{font-size:16px}
   /* Touch targets: minimum 44×44px for all interactive controls */
   .cat-tab,.qcat{min-height:44px;padding:8px 14px}
   .tab-btn{min-height:40px;padding:7px 14px}
