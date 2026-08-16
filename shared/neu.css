@@ -18,7 +18,8 @@
   --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
   /* Scrim shares the palette's hue. A black wash is a different material system — it flattens
      everything behind it instead of leaving the surface visible and merely dimmed. */
-  --scrim:color-mix(in srgb, #2b3350 42%, transparent);
+  --scrim:color-mix(in srgb, #2b3350 34%, transparent);
+  --focus:var(--acc);
   --sh-sm:4px 4px 9px var(--d-sh),-4px -4px 9px var(--l-sh);
   --sh-in:inset 3px 3px 6px var(--d-sh),inset -3px -3px 6px var(--l-sh);
   --sh-press:inset 2px 2px 4px var(--d-sh),inset -2px -2px 4px var(--l-sh);
@@ -29,7 +30,8 @@
   --d-sh:#141720;--l-sh:#3c4257;
   --sh:8px 8px 18px var(--d-sh),-6px -6px 14px var(--l-sh);
   --sh-lg:8px 8px 20px var(--d-sh),-8px -8px 20px var(--l-sh);
-  --scrim:color-mix(in srgb, #10131a 55%, transparent);
+  --scrim:color-mix(in srgb, #10131a 48%, transparent);
+  --focus:#8b95ff;
   --sh-sm:5px 5px 11px var(--d-sh),-4px -4px 8px var(--l-sh);
   --sh-in:inset 4px 4px 9px var(--d-sh),inset -4px -4px 9px var(--l-sh);
   --sh-press:inset 3px 3px 7px var(--d-sh),inset -3px -3px 7px var(--l-sh);
@@ -149,4 +151,34 @@ footer a{color:var(--acc)}
 }
 @media (prefers-reduced-motion:reduce){
   *,::before,::after{animation-duration:.001ms!important;transition-duration:.001ms!important}
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   FOCUS & CONTRAST
+   Soft UI carries state in shadow, which is exactly the cue a low-vision or
+   keyboard user cannot rely on. Every interactive element therefore gets a
+   second affordance that survives with the shadows removed: a solid focus ring
+   on keyboard entry, and real borders when the OS asks for more contrast.
+══════════════════════════════════════════════════════════════ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:3px;
+  border-radius:12px;
+}
+/* Inset controls sit inside a well, where an outset ring would be clipped by the
+   parent's rounding — bring it inside instead. */
+:where(input, select, textarea):focus-visible{outline-offset:1px}
+
+@media(prefers-contrast:more){
+  :where(button, .acard, .card, .neu-well, .panel, .cat-in, .cat-prompt){
+    border:1px solid var(--m);
+  }
+  :where(.chip, .cat-chip){border:1px solid currentColor}
+}
+
+/* Shadows are decorative here, not semantic: if the user has asked for reduced
+   transparency the interface must still be readable. */
+@media(prefers-reduced-transparency:reduce){
+  .overlay{background:color-mix(in srgb, var(--txt) 70%, transparent)}
 }

@@ -797,8 +797,8 @@
      AGENT DETAIL OVERLAY
 ════════════════════════════════════════════════ -->
 <div class="overlay" id="detail-overlay" onclick="closeDetailIfBg(event)">
-  <div class="panel" id="detail-panel">
-    <button class="p-close" onclick="closeDetail()">✕</button>
+  <div class="panel" id="detail-panel" role="dialog" aria-modal="true" tabindex="-1">
+    <button class="p-close" onclick="closeDetail()" aria-label="閉じる">✕</button>
     <div id="detail-content"></div>
   </div>
 </div>

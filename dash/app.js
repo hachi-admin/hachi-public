@@ -274,6 +274,21 @@ function _renderAll(d) {
 ══════════════════════════════════════════════════════════════ */
 let _activePage = 'overview';
 
+/* ═══════════════════════════════════════════════════════════
+   KEYBOARD ACTIVATION
+   Several surfaces are clickable divs (cards, KPI tiles, queue rows). A div is
+   not focusable or activatable by keyboard, so any element marked
+   role="button" is activated here on Enter/Space — one handler rather than an
+   onkeydown attribute repeated on every template.
+══════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest?.('[role="button"]');
+  if (!el || el.tagName === 'BUTTON' || el.tagName === 'A') return;
+  e.preventDefault();
+  el.click();
+});
+
 function navTo(pageId) {
   _activePage = pageId;
   const swap = () => {
@@ -443,7 +458,8 @@ function _renderAgentGrid() {
     const displayDesc = isJP && reg.descJp ? reg.descJp : (reg.desc || '');
     const statusLabel = t[status] || status;
     const catLabel    = t['cat-' + (reg.category || '').toLowerCase()] || reg.category || '';
-    return `<div class="acard ${status} ${enabled ? '' : 'disabled'}"
+    return `<div class="acard ${status} ${enabled ? '' : 'disabled'}" role="button" tabindex="0"
+      aria-label="${esc(reg.name)} の詳細を開く"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${(reg.colors || []).join('|')}"
       data-category="${reg.category || ''}" data-level="${reg.level || 1}"
@@ -555,7 +571,7 @@ function _renderKpiRow() {
   ];
   document.getElementById('kpi-row').innerHTML = statuses.map(({s,key,color}) => {
     const n = (bs[s] || []).length;
-    return `<div class="kpi" onclick="openTaskModal('${s}')" style="border-top:2px solid ${color}">
+    return `<div class="kpi" role="button" tabindex="0" aria-label="${esc(s)} のタスクを開く" onclick="openTaskModal('${s}')" style="border-top:2px solid ${color}">
       <div class="kpi-label">${t[key]}</div>
       <div class="kpi-value" style="color:${color}">${n}</div>
       <div class="kpi-hint">${t['click-view']}</div>
@@ -628,7 +644,7 @@ function _renderTaskFeed() {
       : (t.id && (t.status === 'failed' || t.status === 'cancelled') ? `<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻</button>` : '');
     const timeStr = isUpcoming ? `Queued ${relTime(t.createdAt)} · P${t.priority ?? 3}` : `${fmtDate(t.updatedAt)} · ${relTime(t.updatedAt)}`;
     const clickable = t.id ? `style="cursor:pointer" onclick="openTaskDetail('${t.id}')"` : '';
-    return `<div class="feed-item" ${clickable}>
+    return `<div class="feed-item" ${clickable ? `role="button" tabindex="0" aria-label="タスクの詳細を開く" ${clickable}` : ''}>
       <div class="feed-dot ${t.status}"></div>
       <div class="feed-text">${esc(t.goal)}
         <div class="feed-type"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span>${agentChip(t.type)} ${timeStr}</div>
@@ -739,7 +755,10 @@ function _categoryTile(c) {
   const money = _MONEY_ICON[(c.monetization || {}).mode] || '';
   const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
-  return `<div class="acard ${statusClass}" data-id="${c.id}" onclick="openCategoryDetail('${c.id}')">
+  return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
+    aria-label="${esc(c.name)} の設定を開く"
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
+    onclick="openCategoryDetail('${c.id}')">
     <div class="cat-tile-icon">${icon}</div>
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
@@ -761,7 +780,11 @@ function openCategoryDetail(id) {
   if (!c) return;
   document.getElementById('detail-content').innerHTML = _categoryEditor(c);
   document.getElementById('detail-panel')?.classList.add('panel-wide');
-  document.getElementById('detail-overlay').classList.add('open');
+  const ov = document.getElementById('detail-overlay');
+  ov.classList.add('open');
+  // Move focus into the dialog so keyboard and screen-reader users land inside it rather than
+  // continuing to tab through the page behind.
+  document.getElementById('detail-panel')?.focus();
   _moneyChanged(c.id);
 }
 
@@ -874,7 +897,9 @@ function _buildArticleRows() {
       </div>
     </div>
     <div class="art-score">${[1, 2, 3, 4, 5].map(n =>
-      `<button class="art-star${a.score >= n ? ' on' : ''}" onclick="scoreArticleRow('${a.id}',${n})">★</button>`).join('')}</div>
+      `<button type="button" class="art-star${a.score >= n ? ' on' : ''}"
+        aria-label="${n}点をつける" aria-pressed="${a.score === n ? 'true' : 'false'}"
+        onclick="scoreArticleRow('${a.id}',${n})">★</button>`).join('')}</div>
   </div>`).join('');
 }
 
@@ -1080,7 +1105,10 @@ function _buildSourceRows(sources) {
     const tc = s.type === 'rss' ? '#60A5FA' : s.type === 'url' ? '#A78BFA' : '#34D399';
     const dc = s.domain === 'news' ? '#FBBF24' : '#2DD4BF';
     return `<div class="src-row" data-domain="${s.domain}" data-id="${s.id}">
-      <div class="src-toggle ${s.enabled ? 'on':'off'}" onclick="toggleSource('${s.id}',${!s.enabled})"></div>
+      <button type="button" class="src-toggle ${s.enabled ? 'on':'off'}" role="switch"
+        aria-checked="${s.enabled ? 'true' : 'false'}"
+        aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
+        onclick="toggleSource('${s.id}',${!s.enabled})"></button>
       <div class="src-body">
         <div class="src-name">${esc(s.name)}</div>
         <div class="src-meta">
@@ -2297,7 +2325,7 @@ function openTaskModal(status) {
   document.getElementById('detail-content').innerHTML = `
     <div class="p-title">${esc(title)}</div>
     <div style="margin-top:14px">
-      ${tasks.length ? tasks.map(t => `<div class="tl-item" ${t.id ? `onclick="openTaskDetail('${t.id}')" style="cursor:pointer"`:''}>
+      ${tasks.length ? tasks.map(t => `<div class="tl-item" ${t.id ? `role="button" tabindex="0" aria-label="タスクの詳細を開く" onclick="openTaskDetail('${t.id}')" style="cursor:pointer"`:''}>
         <div class="feed-dot ${t.status}" style="margin-top:4px;flex-shrink:0"></div>
         <div class="tl-body">
           <div class="tl-goal">${esc(t.goal)}</div>
@@ -3565,7 +3593,8 @@ function _renderLiveChannels(guild) {
       .sort((a,b) => (a.position||0)-(b.position||0));
     sections.push(`
       <div style="margin-bottom:2px">
-        <div class="ch-tree-cat" onclick="this.classList.toggle('collapsed');this.nextElementSibling.classList.toggle('hidden')">
+        <div class="ch-tree-cat" role="button" tabindex="0" aria-expanded="true"
+          onclick="this.classList.toggle('collapsed');this.setAttribute('aria-expanded', String(!this.classList.contains('collapsed')));this.nextElementSibling.classList.toggle('hidden')">
           <span class="ch-tree-cat-icon">▾</span>
           <span>📁 ${esc(cat.name)}</span>
           <span style="font-size:9px;color:var(--m2);margin-left:auto">${children.length}</span>
