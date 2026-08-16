@@ -3348,6 +3348,11 @@ Rules:
 function _markdownToHtml(md) {
   const blocks = [];
 
+  // Wiki files carry a YAML front-matter block (slug, entity_type, content_hash, …). It is
+  // storage metadata, not article text — rendered as markdown it becomes a horizontal rule
+  // followed by twenty lines of `key: value` before the reader reaches the first sentence.
+  md = String(md ?? '').replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+
   // 1. Extract <details>/<summary> blocks (editorial agent uses these for collapsibles)
   md = md.replace(/<details>([\s\S]*?)<\/details>/gi, (_, inner) => {
     const idx = blocks.length;
