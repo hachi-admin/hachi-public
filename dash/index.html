@@ -178,12 +178,15 @@
       <button class="tab-btn" id="wiki-tab-files" onclick="setWikiTab('files')" data-i18n="wiki-files-tab">ファイル</button>
     </div>
     <div class="docs-layout">
-      <div class="docs-tree-panel" id="wiki-tree" style="position:relative">
+      <div class="docs-tree-panel" id="wiki-tree">
         <!-- Floating multi-select button -->
         <button class="wiki-fab" id="wiki-fab" onclick="toggleWikiSelect()" title="Select multiple files for quiz/vocab prompt">＋</button>
       </div>
       <div class="docs-reader" id="wiki-reader">
-        <div class="docs-welcome" data-i18n="wiki-welcome">Wikiページを左から選択</div>
+        <button class="wiki-back" id="wiki-back" onclick="closeWikiPage()">一覧にもどる</button>
+        <div id="wiki-reader-body">
+          <div class="docs-welcome" data-i18n="wiki-welcome">Wikiページを左から選択</div>
+        </div>
       </div>
     </div>
     <!-- Multi-select toolbar (hidden by default) -->

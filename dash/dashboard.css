@@ -1271,3 +1271,48 @@ body:has(.mob-more-sheet.open) .page-area{
   .note-cat-name{flex:1 1 auto}
   .note-bar{display:none} /* at this width the bar is too short to compare — the numbers carry it */
 }
+
+/* ══════════════════════════════════════════════════════════════
+   WIKI — LIST → DETAIL ON A PHONE
+══════════════════════════════════════════════════════════════
+   Desktop keeps both panes: a permanently visible index beside the article is the point of a
+   wiki. A phone cannot hold both, and the old attempt — a 160px scroller stacked above the
+   reader — gave the index too little room to be useful, no way back to it once a page opened,
+   and the two panes overlapped, so the article showed through the list. One pane at a time. */
+.wiki-back{display:none}
+.wiki-nobody{color:var(--m);font-size:.72rem;padding:14px 0}
+
+@media(max-width:767px){
+  /* `position` and `top` are reset together. The panel was carrying the desktop sticky offset
+     (top:80px) with an inline position:relative that beat the stylesheet's `static` — so on a
+     phone it sat 80px below its own grid row, printed on top of the article underneath. */
+  #page-wiki .docs-tree-panel{position:static;top:auto}
+
+  /* Only the pane in play is in the layout at all, so nothing can overlap. */
+  #page-wiki .docs-layout > .docs-reader{display:none}
+  #page-wiki .docs-layout.reading > .docs-tree-panel{display:none}
+  #page-wiki .docs-layout.reading > .docs-reader{display:block}
+
+  /* The index gets the screen rather than a 160px window into itself, and a title is allowed to
+     wrap: truncating every Japanese headline to the same 「なぜAIは「文字」を数え…」 makes the
+     list unusable for choosing between them. */
+  #page-wiki .docs-tree-panel{max-height:none;padding:12px 8px}
+  #page-wiki .wiki-flat-item{align-items:flex-start;padding:12px;min-height:44px;margin-bottom:8px}
+  #page-wiki .wiki-flat-title{white-space:normal;overflow:visible;line-height:1.5}
+  #page-wiki .wiki-cat-badge{margin-top:2px}
+
+  .wiki-back{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--bg);box-shadow:var(--sh-sm);border:none;border-radius:99px;
+    color:var(--acc);font-family:inherit;font-size:.72rem;font-weight:700;
+    padding:0 16px;height:36px;margin-bottom:14px;cursor:pointer;
+  }
+  .wiki-back::before{
+    content:'';width:14px;height:14px;background-color:currentColor;
+    -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;
+    -webkit-mask-size:contain;mask-size:contain;
+    -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 5.5L8 12l6.5 6.5'/%3E%3C/svg%3E");
+    mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 5.5L8 12l6.5 6.5'/%3E%3C/svg%3E");
+  }
+  .wiki-back:active{box-shadow:var(--sh-press)}
+}
