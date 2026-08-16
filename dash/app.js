@@ -338,7 +338,10 @@ function navTo(target) {
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
   if (document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
-    document.startViewTransition(swap);
+    // Tapping a second destination before the first transition settles aborts it, and an aborted
+    // transition rejects. Nothing is waiting on that promise, so it surfaced as an unhandled
+    // rejection in the console on every fast tap — noise that buries a real error.
+    document.startViewTransition(swap).finished.catch(() => {});
   } else {
     swap();
   }
