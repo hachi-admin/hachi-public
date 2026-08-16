@@ -108,7 +108,7 @@ header{margin:12px;padding:10px 16px}
 
 /* hbtn overrides for dashboard */
 .hbtn{flex-shrink:0}
-.hbtn.pill{border-radius:8px;width:auto;padding:0 10px;font-size:.75rem;height:36px}
+.hbtn.pill{border-radius:999px;width:auto;padding:0 10px;font-size:.75rem;height:36px}
 
 /* Dropdown overrides */
 .ndrop-panel{right:0;width:200px;overflow-y:auto;max-height:360px;top:calc(100% + 8px)}
@@ -137,7 +137,7 @@ header{margin:12px;padding:10px 16px}
   align-items:stretch;gap:6px;
 }
 .mob-tab{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;
   gap:4px;border:none;background:none;color:var(--m);
   font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.01em;
   padding:6px 2px;border-radius:14px;
@@ -150,6 +150,10 @@ header{margin:12px;padding:10px 16px}
 .mob-tab .ni{width:34px;height:34px;border-radius:12px;box-shadow:none;background:transparent;transition:box-shadow .18s,color .18s}
 .mob-tab.active{color:var(--txt)}
 .mob-tab.active .ni{box-shadow:var(--sh-press);color:var(--acc);background:var(--bg)}
+/* Only the selected tab says its name. Five labels at once is five things asking to be read; the
+   icon plus the press is enough for the four you are not on. */
+.mob-tab span{max-height:0;opacity:0;transition:max-height .18s,opacity .18s}
+.mob-tab.active span{max-height:1.4em;opacity:1}
 .mob-tab:active .ni{box-shadow:var(--sh-press)}
 .mob-tab-badge{
   position:absolute;top:4px;right:50%;
@@ -198,7 +202,7 @@ header{margin:12px;padding:10px 16px}
   z-index:999;opacity:0;pointer-events:none;
   transition:opacity .22s,transform .22s;
   max-width:calc(100vw - 32px);text-align:center;white-space:pre-wrap;
-  border-left:3px solid var(--div);
+
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.toast-error{color:var(--error);border-color:var(--error)}
@@ -280,7 +284,7 @@ header{margin:12px;padding:10px 16px}
 .asb-label{font-size:9px;color:var(--m2);margin-top:3px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
 .asb-sep{width:1px;align-self:stretch;background:var(--div);margin:0 8px;flex:none}
 
-.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:20px}
 .acard{
   background:var(--bg);box-shadow:var(--sh);
   border-radius:12px;padding:14px 12px;cursor:pointer;
@@ -304,7 +308,7 @@ header{margin:12px;padding:10px 16px}
 .acard-name{font-size:12px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
 .acard-desc{font-size:10px;color:var(--m);line-height:1.35}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:20px}
 .card{
   position:relative;background:var(--bg);box-shadow:var(--sh);
   border-radius:14px;padding:12px;position:relative;
@@ -693,7 +697,8 @@ body:has(.mob-more-sheet.open) .page-area{
 /* ══════════════════════════════════════════════════════════════
    INBOX / VAULTS / BASES / FACT CHECKS
 ══════════════════════════════════════════════════════════════ */
-.inbox-item{background:var(--bg);box-shadow:var(--sh);border-left:3px solid var(--yel);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.inbox-item{background:var(--bg);box-shadow:var(--sh);border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative}
+.inbox-item::before{content:'';position:absolute;top:12px;right:12px;width:7px;height:7px;border-radius:50%;background:var(--yel);box-shadow:var(--sh-sm)}
 .inbox-action{font-size:13px;font-weight:600;color:var(--txt)}
 .inbox-why{font-size:11px;color:var(--m);margin-top:3px;line-height:1.4}
 .inbox-cmd{font-size:10px;font-family:ui-monospace,monospace;background:var(--d-sh);padding:5px 9px;border-radius:6px;margin-top:6px;color:var(--m);word-break:break-all}
@@ -859,7 +864,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .docs-content table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
 .docs-content th{background:color-mix(in srgb,var(--d-sh) 20%,transparent);color:var(--txt);font-weight:700;padding:8px 10px;text-align:left;border-bottom:1px solid var(--div)}
 .docs-content td{padding:7px 10px;border-top:1px solid color-mix(in srgb,var(--div) 50%,transparent)}
-.docs-content blockquote{border-left:3px solid var(--acc);padding:8px 12px;margin:8px 0;color:var(--m);background:color-mix(in srgb,var(--acc) 5%,transparent);border-radius:0 8px 8px 0}
+.docs-content blockquote{box-shadow:var(--sh-in);padding:12px 14px;margin:10px 0;color:var(--m);border-radius:12px}
 .docs-content a{color:var(--acc)}
 .docs-content hr{border:none;border-top:1px solid var(--div);margin:16px 0}
 .docs-content strong{font-weight:700;color:var(--txt)}
@@ -1019,7 +1024,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .dash-error{
   max-width:480px;margin:40px auto;padding:20px;
   background:var(--bg);box-shadow:var(--sh);border-radius:14px;
-  border-left:4px solid var(--red);
+
 }
 .dash-error-title{font-size:14px;font-weight:700;color:var(--red);margin-bottom:8px}
 .dash-error-msg{font-size:12px;color:var(--m);line-height:1.6}
@@ -1071,7 +1076,7 @@ body:has(.mob-more-sheet.open) .page-area{
   /* Page header: stack title + action button on small screens */
   .page-hd{flex-wrap:wrap;gap:8px}
   .page-hd .save-btn{margin-left:auto}
-  .grid,.agent-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .grid,.agent-grid{grid-template-columns:repeat(2,1fr);gap:16px}
   .card{padding:8px}
   .card .agent-desc{-webkit-line-clamp:1}
   .card .freq-text{display:none}
