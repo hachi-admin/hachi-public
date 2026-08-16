@@ -16,29 +16,14 @@
      FLOATING HEADER
 ════════════════════════════════════════════════ -->
 <header>
-  <a href="../" class="logo" style="text-decoration:none"><span class="logo-gem">⚙️</span> Hachi<span class="logo-dash">Dash</span></a>
+  <a href="../" class="logo" style="text-decoration:none"><i class="ni ni-mark logo-gem" aria-hidden="true"></i> Hachi<span class="logo-dash">Dash</span></a>
 
   <nav class="nav-pills" role="tablist">
-    <button class="nav-pill active" data-page="overview" role="tab">概要</button>
-    <button class="nav-pill" data-page="tasks" role="tab">
-      タスク<span id="tasks-badge" class="nav-badge" style="display:none"></span>
-    </button>
-    <button class="nav-pill" data-page="inbox" role="tab">
-      受信箱<span id="inbox-badge" class="nav-badge warn" style="display:none"></span>
-    </button>
-    <button class="nav-pill" data-page="docs" role="tab">ドキュメント</button>
-    <div class="ndrop" id="more-nav-drop">
-      <button class="nav-pill" onclick="toggleDrop('more-nav-drop')" title="More pages" aria-label="More">⋯</button>
-      <div class="ndrop-panel" id="more-nav-panel">
-        <button class="ndrop-opt" onclick="navTo('wiki');toggleDrop('more-nav-drop')"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
-        <button class="ndrop-opt" onclick="navTo('channels');toggleDrop('more-nav-drop')"><i class="ni ni-channels" aria-hidden="true"></i> チャンネル</button>
-        <button class="ndrop-opt" onclick="navTo('repos');toggleDrop('more-nav-drop')"><i class="ni ni-repos" aria-hidden="true"></i> リポジトリ</button>
-        <hr class="ndrop-sep">
-        <button class="ndrop-opt" onclick="navTo('analytics');toggleDrop('more-nav-drop')"><i class="ni ni-analytics" aria-hidden="true"></i> 分析</button>
-        <button class="ndrop-opt" onclick="navTo('knowledge');toggleDrop('more-nav-drop')"><i class="ni ni-sources" aria-hidden="true"></i> ソース</button>
-        <button class="ndrop-opt" onclick="navTo('settings');toggleDrop('more-nav-drop')"><i class="ni ni-settings" aria-hidden="true"></i> 設定</button>
-      </div>
-    </div>
+    <button class="nav-pill active" data-dest="today" role="tab">今日<span id="tasks-badge" class="nav-badge" style="display:none"></span><span id="inbox-badge" class="nav-badge warn" style="display:none"></span></button>
+    <button class="nav-pill" data-dest="articles" role="tab">記事</button>
+    <button class="nav-pill" data-dest="knowledge" role="tab">知識</button>
+    <button class="nav-pill" data-dest="ops" role="tab">運用</button>
+    <button class="nav-pill" data-dest="system" role="tab">設定</button>
   </nav>
 
   <div class="header-controls">
@@ -53,7 +38,7 @@
         <div style="padding:0 12px 8px;font-size:10px;color:var(--m2)" id="user-detail-login"></div>
         <hr class="ndrop-sep">
         <div style="padding:6px 12px">
-          <div style="font-size:10px;color:var(--m);margin-bottom:4px">コンテンツ言語</div>
+          <div style="font-size:10px;color:var(--m);margin-bottom:4px">記事の言語</div>
           <select class="form-select" id="lang-select-h" style="font-size:11px;width:100%" onchange="setProjectLanguage(this.value)">
             <option value="JP">Japanese（日本語）</option>
             <option value="EN">English</option>
@@ -63,18 +48,20 @@
         <button class="ndrop-opt" onclick="logoutUser()" style="color:var(--red)">サインアウト</button>
       </div>
     </div>
-    <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
-    <button class="hbtn" id="refresh-btn" onclick="loadDashboard()" title="Refresh">↺</button>
+    <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="表示テーマ" aria-label="表示テーマ"><i class="ni ni-theme" aria-hidden="true"></i></button>
+    <button class="hbtn" id="refresh-btn" onclick="loadDashboard()" title="再読み込み" aria-label="再読み込み"><i class="ni ni-refresh" aria-hidden="true"></i></button>
   </div>
 </header>
 
 <!-- ═══════════════════════════════════════════════
      PAGES
 ════════════════════════════════════════════════ -->
+<nav class="dest-sub" id="dest-sub" role="tablist" aria-label="セクション"></nav>
+
 <main class="page-area">
 
   <!-- ── OVERVIEW ─────────────────────────────── -->
-  <section class="page active" id="page-overview" data-mob-panel="overview">
+  <section class="page" id="page-overview" data-dest="ops">
 
     <!-- Agent stats summary bar -->
     <div id="agent-stats-box" class="agent-stats-box"></div>
@@ -83,10 +70,10 @@
     <div class="filter-bar">
       
       <button class="cat-tab active" data-cat="all" onclick="setCatFilter(this,'all')" data-i18n="all">すべて</button>
-      <button class="cat-tab" data-cat="Intelligence" onclick="setCatFilter(this,'Intelligence')" data-i18n="cat-intelligence">インテリジェンス</button>
-      <button class="cat-tab" data-cat="Knowledge" onclick="setCatFilter(this,'Knowledge')" data-i18n="cat-knowledge">ナレッジ</button>
+      <button class="cat-tab" data-cat="Intelligence" onclick="setCatFilter(this,'Intelligence')" data-i18n="cat-intelligence">情報</button>
+      <button class="cat-tab" data-cat="Knowledge" onclick="setCatFilter(this,'Knowledge')" data-i18n="cat-knowledge">知識</button>
       <button class="cat-tab" data-cat="Development" onclick="setCatFilter(this,'Development')" data-i18n="cat-development">開発</button>
-      <button class="cat-tab" data-cat="Content" onclick="setCatFilter(this,'Content')" data-i18n="cat-content">コンテンツ</button>
+      <button class="cat-tab" data-cat="Content" onclick="setCatFilter(this,'Content')" data-i18n="cat-content">制作</button>
       <span style="margin-left:auto"></span>
       <div class="av-theme-bar">
         <button class="av-theme-btn active" onclick="setAvTheme('classic',this)">Classic</button>
@@ -119,7 +106,7 @@
   </section>
 
   <!-- ── TASKS ─────────────────────────────────── -->
-  <section class="page" id="page-tasks" data-mob-panel="tasks">
+  <section class="page active" id="page-tasks" data-dest="today">
     <div class="page-hd">
       <div>
         <div class="page-title">タスク</div>
@@ -140,7 +127,7 @@
   </section>
 
   <!-- ── INBOX ──────────────────────────────────── -->
-  <section class="page" id="page-inbox" data-mob-panel="inbox">
+  <section class="page" id="page-inbox" data-dest="today">
     <div class="page-hd">
       <div class="page-title">受信箱</div>
       <div class="page-sub" data-i18n="inbox-sub">ローカルアクション待ちのアイテム</div>
@@ -161,7 +148,7 @@
   </section>
 
   <!-- ── DOCS ───────────────────────────────────── -->
-  <section class="page" id="page-docs" data-mob-panel="docs">
+  <section class="page" id="page-docs" data-dest="system">
     <div class="page-hd"><div class="page-title">ドキュメント</div></div>
     <div class="docs-layout">
       <div class="docs-tree-panel" id="docs-tree"></div>
@@ -171,8 +158,16 @@
     </div>
   </section>
 
+  <!-- ── ARTICLES ───────────────────────────────── -->
+  <section class="page" id="page-articles" data-dest="articles">
+    <div class="page-hd">
+      <div class="page-title">記事</div>
+    </div>
+    <div id="k-topics" class="feed-box"></div>
+  </section>
+
   <!-- ── WIKI VIEWER ──────────────────────────── -->
-  <section class="page" id="page-wiki" data-mob-panel="wiki">
+  <section class="page" id="page-wiki" data-dest="knowledge">
     <div class="page-hd">
       <div class="page-title">Wiki</div>
       <input class="wiki-search-input" id="wiki-search" type="text" placeholder="Search…" oninput="_wikiSearchInput(this.value)" />
@@ -194,14 +189,14 @@
     <!-- Multi-select toolbar (hidden by default) -->
     <div class="wiki-select-bar" id="wiki-select-bar" style="display:none">
       <span id="wiki-select-count">0件選択</span>
-      <button class="save-btn" onclick="showWikiMultiPrompt('quiz')">✏️ クイズプロンプト</button>
-      <button class="save-btn" onclick="showWikiMultiPrompt('vocab')">📖 ボキャブラリープロンプト</button>
-      <button class="refresh-btn" onclick="toggleWikiSelect()">✕ キャンセル</button>
+      <button class="save-btn" onclick="showWikiMultiPrompt('quiz')">クイズプロンプト</button>
+      <button class="save-btn" onclick="showWikiMultiPrompt('vocab')">単語プロンプト</button>
+      <button class="refresh-btn" onclick="toggleWikiSelect()">キャンセル</button>
     </div>
   </section>
 
   <!-- ── SOURCES (was Knowledge) ───────────────── -->
-  <section class="page" id="page-knowledge" data-mob-panel="knowledge">
+  <section class="page" id="page-knowledge" data-dest="knowledge">
     <div class="page-hd">
       <div class="page-title">ソース</div>
     </div>
@@ -213,7 +208,6 @@
       <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">マージ</button>
       <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">ヴォールト</button>
       <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')" data-i18n="src-bases">ベース</button>
-      <button class="tab-btn" data-ktab="topics" onclick="setKTab(this,'topics')">記事カテゴリ</button>
     </div>
 
     <div class="tab-content">
@@ -223,12 +217,11 @@
       <div id="k-merges" class="feed-box hidden"></div>
       <div id="k-vaults" class="feed-box hidden"></div>
       <div id="k-bases" class="feed-box hidden"></div>
-      <div id="k-topics" class="feed-box hidden"></div>
     </div>
   </section>
 
   <!-- ── ANALYTICS ──────────────────────────────── -->
-  <section class="page" id="page-analytics" data-mob-panel="analytics">
+  <section class="page" id="page-analytics" data-dest="ops">
     <div class="page-hd">
       <div class="page-title">分析</div>
       <button class="refresh-btn" onclick="_loadAnalytics()" style="font-size:11px">&#8635; 更新</button>
@@ -302,7 +295,7 @@
   </section>
 
   <!-- ── SETTINGS ───────────────────────────────── -->
-  <section class="page" id="page-settings" data-mob-panel="settings">
+  <section class="page" id="page-settings" data-dest="system">
     <div class="page-hd"><div class="page-title">設定</div></div>
 
     <div class="settings-layout">
@@ -331,12 +324,12 @@
               <div style="font-size:10px;color:var(--m);margin-top:4px">エージェントのレビュー閾値とタスク承認フローを制御します。</div>
             </div>
             <div class="qs-field">
-              <label class="form-label">コンテンツ言語</label>
+              <label class="form-label">記事の言語</label>
               <select class="form-select" id="lang-select-s" onchange="setProjectLanguage(this.value)">
                 <option value="JP">Japanese（日本語）</option>
                 <option value="EN">English</option>
               </select>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">AI生成コンテンツ（ニュース・Wiki・要約）のデフォルト出力言語。ユーザーごとに <code>/lang</code> で上書き可能。</div>
+              <div style="font-size:10px;color:var(--m);margin-top:4px">AI生成記事（ニュース・Wiki・要約）のデフォルト出力言語。ユーザーごとに <code>/lang</code> で上書き可能。</div>
             </div>
             <div class="qs-field">
               <label class="form-label">Flash 上書き</label>
@@ -567,7 +560,7 @@
   </section>
 
   <!-- ── CHANNELS ───────────────────────────────── -->
-  <section class="page" id="page-channels" data-mob-panel="channels">
+  <section class="page" id="page-channels" data-dest="ops">
     <div class="page-hd">
       <div>
         <div class="page-title">Discord チャンネル</div>
@@ -690,7 +683,7 @@
   </section>
 
   <!-- ── REPOS ─────────────────────────────────── -->
-  <section class="page" id="page-repos" data-mob-panel="repos">
+  <section class="page" id="page-repos" data-dest="ops">
     <div class="page-hd">
       <div>
         <div class="page-title">GitHub リポジトリ</div>
@@ -740,65 +733,36 @@
      MOBILE BOTTOM TAB BAR
 ════════════════════════════════════════════════ -->
 <nav class="mob-tab-bar" role="tablist">
-  <button class="mob-tab active" data-page="overview" onclick="navTo('overview')">
-    <i class="ni ni-agents" aria-hidden="true"></i>
-    <span>エージェント</span>
-  </button>
-  <button class="mob-tab" data-page="tasks" onclick="navTo('tasks')">
-    <i class="ni ni-tasks" aria-hidden="true"></i>
-    <span>タスク</span>
+  <button class="mob-tab active" data-dest="today" onclick="navTo('today')">
+    <i class="ni ni-today" aria-hidden="true"></i>
+    <span>今日</span>
     <span id="mob-tasks-badge" class="mob-tab-badge" style="display:none"></span>
-  </button>
-  <button class="mob-tab" data-page="inbox" onclick="navTo('inbox')">
-    <i class="ni ni-inbox" aria-hidden="true"></i>
-    <span>受信箱</span>
     <span id="mob-inbox-badge" class="mob-tab-badge warn" style="display:none"></span>
   </button>
-  <button class="mob-tab" data-page="docs" onclick="navTo('docs')">
-    <i class="ni ni-docs" aria-hidden="true"></i>
-    <span>ドキュメント</span>
+  <button class="mob-tab" data-dest="articles" onclick="navTo('articles')">
+    <i class="ni ni-articles" aria-hidden="true"></i>
+    <span>記事</span>
   </button>
-  <button class="mob-tab" data-page="more" onclick="openMoreSheet()">
-    <i class="ni ni-more" aria-hidden="true"></i>
-    <span>その他</span>
+  <button class="mob-tab" data-dest="knowledge" onclick="navTo('knowledge')">
+    <i class="ni ni-sources" aria-hidden="true"></i>
+    <span>知識</span>
+  </button>
+  <button class="mob-tab" data-dest="ops" onclick="navTo('ops')">
+    <i class="ni ni-agents" aria-hidden="true"></i>
+    <span>運用</span>
+  </button>
+  <button class="mob-tab" data-dest="system" onclick="navTo('system')">
+    <i class="ni ni-settings" aria-hidden="true"></i>
+    <span>設定</span>
   </button>
 </nav>
-
-<!-- ═══════════════════════════════════════════════
-     MOBILE MORE SHEET  (⋯ menu)
-════════════════════════════════════════════════ -->
-<div class="mob-more-sheet" id="mob-more-sheet" onclick="closeMoreSheet(event)">
-  <div class="mob-more-inner">
-    <div class="mob-more-header">
-      <span class="mob-more-title">メニュー</span>
-      <button class="hbtn" onclick="closeMoreSheet()">✕</button>
-    </div>
-
-    <!-- Primary secondary pages -->
-    <button class="mob-more-opt" onclick="navTo('wiki');closeMoreSheet()"><i class="ni ni-wiki" aria-hidden="true"></i> Wiki</button>
-    <button class="mob-more-opt" onclick="navTo('channels');closeMoreSheet()"><i class="ni ni-channels" aria-hidden="true"></i> チャンネル</button>
-    <button class="mob-more-opt" onclick="navTo('repos');closeMoreSheet()"><i class="ni ni-repos" aria-hidden="true"></i> リポジトリ</button>
-
-    <div class="mob-more-sep"></div>
-
-    <!-- Less-frequent pages -->
-    <button class="mob-more-opt" onclick="navTo('analytics');closeMoreSheet()"><i class="ni ni-analytics" aria-hidden="true"></i> 分析</button>
-    <button class="mob-more-opt" onclick="navTo('knowledge');closeMoreSheet()"><i class="ni ni-sources" aria-hidden="true"></i> ソース</button>
-    <button class="mob-more-opt" onclick="navTo('settings');closeMoreSheet()"><i class="ni ni-settings" aria-hidden="true"></i> 設定</button>
-
-    <div class="mob-more-sep"></div>
-
-    <button class="mob-more-opt" onclick="loadDashboard();closeMoreSheet()">↺ 更新</button>
-    <button class="mob-more-opt" onclick="toggleTheme();closeMoreSheet()"><i class="ni ni-theme" aria-hidden="true"></i> テーマ</button>
-  </div>
-</div>
 
 <!-- ═══════════════════════════════════════════════
      AGENT DETAIL OVERLAY
 ════════════════════════════════════════════════ -->
 <div class="overlay" id="detail-overlay" onclick="closeDetailIfBg(event)">
   <div class="panel" id="detail-panel" role="dialog" aria-modal="true" tabindex="-1">
-    <button class="p-close" onclick="closeDetail()" aria-label="閉じる">✕</button>
+    <button class="p-close" onclick="closeDetail()" aria-label="閉じる"><i class="ni ni-close" aria-hidden="true"></i></button>
     <div id="detail-content"></div>
   </div>
 </div>
@@ -808,7 +772,7 @@
 ════════════════════════════════════════════════ -->
 <div class="overlay" id="loc-overlay" onclick="closeLocOverlay(event)">
   <div class="panel" style="max-width:360px">
-    <button class="p-close" onclick="closeLocOverlay()">✕</button>
+    <button class="p-close" onclick="closeLocOverlay()" aria-label="閉じる"><i class="ni ni-close" aria-hidden="true"></i></button>
     <div class="p-title">位置情報プロフィール</div>
     <div id="loc-modal-content" style="margin-top:14px"></div>
   </div>

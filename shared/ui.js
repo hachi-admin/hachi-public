@@ -8,17 +8,24 @@
 const root = document.documentElement;
 const themeBtn = document.getElementById('theme-btn');
 
+// Pages that give the toggle a real icon (an <i class="ni">) own their own mark — writing
+// textContent here would silently wipe it out, which is exactly what happened to the dashboard's
+// theme button. Only pages still using a text glyph get one written for them.
+function _paintThemeBtn(t) {
+  if (!themeBtn || themeBtn.querySelector('.ni')) return;
+  themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+
 (function initTheme() {
-  const stored = localStorage.getItem('nogem-theme');
-  const t = stored || 'light';
+  const t = localStorage.getItem('nogem-theme') || 'light';
   root.setAttribute('data-theme', t);
-  if (themeBtn) themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+  _paintThemeBtn(t);
 })();
 
 function toggleTheme() {
   const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   root.setAttribute('data-theme', t);
-  if (themeBtn) themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+  _paintThemeBtn(t);
   localStorage.setItem('nogem-theme', t);
   window.dispatchEvent(new CustomEvent('themechange', { detail: t }));
 }
