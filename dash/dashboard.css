@@ -67,9 +67,10 @@ header{margin:12px;padding:10px 16px}
 /* The tile's own identity mark: bigger, and recessed so it reads as stamped into the card. */
 .ni-lg{width:46px;height:46px;border-radius:14px;box-shadow:var(--sh-press)}
 .ni-lg::before{font-size:13px}
-/* Panel header mark — larger, and raised rather than recessed: it is the subject of the panel,
-   so it sits above the surface instead of being stamped into it. */
-.ni-xl{width:56px;height:56px;border-radius:18px;box-shadow:var(--sh)}
+/* Panel header mark — same recessed treatment as the tile, just larger. Both are an object's
+   identity stamped into its surface, and a raised chip on an already-raised card would put two
+   outset shadows in the same place, which is the collision fixed elsewhere in this file. */
+.ni-xl{width:56px;height:56px;border-radius:18px;box-shadow:var(--sh-press)}
 .ni-xl::before{font-size:16px}
 .ni-tasks::before   { content: '✓'; font-size:14px; font-weight:900; }
 .ni-inbox::before   { content: '!'; font-size:15px; font-weight:900; }
