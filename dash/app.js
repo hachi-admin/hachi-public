@@ -717,49 +717,110 @@ function _buildCategoryCards() {
     return `<div style="color:var(--m);font-size:11px;padding:8px 0">カテゴリがありません。「カテゴリを探す」で提案を生成できます。</div>`;
   }
   const order = { suggested: 0, active: 1, paused: 2, blocked: 3 };
-  return [...CATEGORIES].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)).map(c => {
-    const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
-    const t = c.targeting || {};
-    const r = c.rating || {};
-    const freqOpts = (CAT_META?.frequencies || []).map(f =>
-      `<option value="${f.id}"${f.id === c.frequency ? ' selected' : ''}>${esc(f.label)}</option>`).join('');
-    const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
-    const genderOpts = [['any', '男女問わず'], ['male', '男性中心'], ['female', '女性中心']].map(([v, l]) =>
-      `<option value="${v}"${v === (t.gender || 'any') ? ' selected' : ''}>${l}</option>`).join('');
-    const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
-      `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
+  const cards = [...CATEGORIES]
+    .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
+    .map(_categoryTile).join('');
+  return `<div class="agent-grid loaded">${cards}</div>`;
+}
 
-    const statusActions = c.status === 'suggested'
-      ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')" style="font-size:8px;padding:2px 6px">✅ 承認</button>
-         <button class="act-btn cancel" onclick="catAction('${c.id}','reject')" style="font-size:8px;padding:2px 6px">🚫 却下</button>`
-      : c.status === 'paused'
-        ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')" style="font-size:8px;padding:2px 6px">▶ 再開</button>`
-        : c.status === 'active'
-          ? `<button class="act-btn" onclick="catAction('${c.id}','pause')" style="font-size:8px;padding:2px 6px">⏸ 停止</button>`
-          : '';
+// One tile answers only: what is this, is it running, is it any good, when does it fire next.
+// Everything else lives behind the click — same two-level structure as the agents page.
+const _CAT_ICON = {
+  news_reflection: '📡', analysis: '📊', narrative: '📖',
+  tutorial: '🛠', listicle: '📋', review: '🎬',
+};
+const _MONEY_ICON = { amazon: '🛒', note_money: '💹', both: '🛒💹', paid: '🔒', none: '' };
 
-    return `<div class="cat-card" data-id="${c.id}">
-      <div class="cat-hd">
-        <div class="cat-name">${esc(c.name)}</div>
-        <span class="cat-pill" style="color:${st.color}">${st.label}</span>
-        <div class="cat-rating">${r.count
-          ? `<span style="color:#FBBF24">${_catStars(r.average)}</span><span style="color:var(--m)">${r.average} (${r.count})</span>`
-          : `<span style="color:var(--m)">未評価</span>`}</div>
+function _categoryTile(c) {
+  const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
+  const r = c.rating || {};
+  const style = c.style || {};
+  const icon = _CAT_ICON[style.format] || '📝';
+  const money = _MONEY_ICON[(c.monetization || {}).mode] || '';
+  const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
+  const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
+  return `<div class="acard ${statusClass}" data-id="${c.id}" onclick="openCategoryDetail('${c.id}')">
+    <div class="cat-tile-icon">${icon}</div>
+    <div class="acard-info">
+      <div class="acard-name">${esc(c.name)}</div>
+      <div class="acard-chips" style="margin-top:4px">
+        <span class="chip" style="color:${st.color}">${st.label}</span>
+        <span class="cat-chip">${esc(freq)}</span>
       </div>
-      <div class="cat-def">${esc(c.definition || '')}</div>
+      <div class="acard-foot" style="margin-top:6px;justify-content:space-between">
+        <span style="font-size:10px;color:${r.count ? '#FBBF24' : 'var(--m2)'}">${r.count ? `★${r.average}` : '未評価'}</span>
+        <span style="font-size:10px;color:var(--m2)">${c.articleCount || 0}本 ${money}</span>
+      </div>
+    </div>
+  </div>`;
+}
 
-      <label class="cat-label">編集方針 — 生成される記事の切り口とトーンを決めます</label>
-      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="4">${esc(c.prompt || '')}</textarea>
+// The full editor, opened in the shared detail overlay.
+function openCategoryDetail(id) {
+  const c = CATEGORIES.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('detail-content').innerHTML = _categoryEditor(c);
+  document.getElementById('detail-overlay').classList.add('open');
+  _moneyChanged(c.id);
+}
 
-      <label class="cat-label">記事のかたち — このカテゴリらしさを決めます</label>
+function _categoryEditor(c) {
+  const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
+  const t = c.targeting || {};
+  const r = c.rating || {};
+  const style = c.style || {};
+  const icon = _CAT_ICON[style.format] || '📝';
+  const freqOpts = (CAT_META?.frequencies || []).map(f =>
+    `<option value="${f.id}"${f.id === c.frequency ? ' selected' : ''}>${esc(f.label)}</option>`).join('');
+  const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
+  const genderOpts = [['any', '男女問わず'], ['male', '男性中心'], ['female', '女性中心']].map(([v, l]) =>
+    `<option value="${v}"${v === (t.gender || 'any') ? ' selected' : ''}>${l}</option>`).join('');
+  const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
+    `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
+
+  const statusActions = c.status === 'suggested'
+    ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')">✅ 承認</button>
+       <button class="act-btn cancel" onclick="catAction('${c.id}','reject')">🚫 却下</button>`
+    : c.status === 'paused'
+      ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')">▶ 再開</button>`
+      : c.status === 'active'
+        ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">⏸ 停止</button>` : '';
+
+  return `
+    <div class="p-header">
+      <div class="cat-tile-icon" style="font-size:34px;flex-shrink:0">${icon}</div>
+      <div>
+        <div class="p-title">${esc(c.name)}</div>
+        <div class="p-sub"><span style="color:${st.color}">${st.label}</span> · ${c.articleCount || 0}本公開
+          ${r.count ? ` · <span style="color:#FBBF24">★${r.average}</span>（${r.count}件）` : ' · 未評価'}
+          ${c.lastGeneratedAt ? ` · 最終 ${_catDate(c.lastGeneratedAt)}` : ''}</div>
+      </div>
+    </div>
+
+    <div class="p-section">
+      <div class="p-label">扱う範囲</div>
+      <div class="p-value">${esc(c.definition || '')}</div>
+    </div>
+
+    <div class="p-section">
+      <div class="p-label">編集方針 — 生成される記事の切り口とトーンを決めます</div>
+      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="8">${esc(c.prompt || '')}</textarea>
+      ${c.promptSuggested && c.promptSuggested !== c.prompt
+        ? `<button class="act-btn" onclick="resetCategoryPrompt('${c.id}')">↺ 提案に戻す</button>` : ''}
+    </div>
+
+    <div class="p-section">
+      <div class="p-label">記事のかたち</div>
       <div class="cat-grid cat-style">
         ${_styleField(c, 'format', '形式', CAT_META?.formats)}
         ${_styleField(c, 'voice', '語り口', CAT_META?.voices)}
         ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
         ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
       </div>
+    </div>
 
-      <label class="cat-label">読者と頻度</label>
+    <div class="p-section">
+      <div class="p-label">読者と頻度</div>
       <div class="cat-grid">
         <label class="cat-field"><span>頻度</span>${sel(`cat-freq-${c.id}`, freqOpts)}</label>
         <label class="cat-field"><span>年齢</span><span class="cat-age">
@@ -773,21 +834,19 @@ function _buildCategoryCards() {
           <input type="text" class="cat-in" id="cat-spec-${c.id}" value="${esc(t.specialization || '')}"
             placeholder="例: 事業会社のマーケター（空欄なら専門を前提としない）"></label>
       </div>
+    </div>
 
-      <label class="cat-label">収益化</label>
+    <div class="p-section">
+      <div class="p-label">収益化</div>
       ${_moneyField(c)}
+    </div>
 
-      <div class="cat-actions">
-        <button class="save-btn" onclick="saveCategory('${c.id}')" style="font-size:10px;padding:4px 12px">保存</button>
-        ${c.promptSuggested && c.promptSuggested !== c.prompt
-          ? `<button class="act-btn" onclick="resetCategoryPrompt('${c.id}')" style="font-size:8px;padding:2px 6px">↺ 提案に戻す</button>` : ''}
-        ${statusActions}
-        <button class="act-btn" onclick="generateNow('${c.id}')" style="font-size:8px;padding:2px 6px">✍️ 今すぐ1本</button>
-        <button class="act-btn cancel" onclick="deleteCategory('${c.id}')" style="font-size:8px;padding:2px 6px">🗑</button>
-      </div>
-      <div class="cat-foot">${c.articleCount ? `${c.articleCount}本公開` : 'まだ記事なし'}${c.lastGeneratedAt ? ` · 最終 ${_catDate(c.lastGeneratedAt)}` : ''}</div>
+    <div class="p-section" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
+      ${statusActions}
+      <button class="act-btn" onclick="generateNow('${c.id}')">✍️ 今すぐ1本</button>
+      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">🗑 削除</button>
     </div>`;
-  }).join('');
 }
 
 function _buildArticleRows() {
@@ -911,7 +970,7 @@ async function saveCategory(id) {
   }).catch(() => null);
   if (!res?.ok) { showToast('保存に失敗しました', 'error'); return; }
   showToast('保存しました。次回以降の記事に反映されます。', 'success');
-  _loadTopics();
+  closeDetail(); _loadTopics();
 }
 
 function resetCategoryPrompt(id) {
@@ -927,7 +986,7 @@ async function catAction(id, action) {
   const run = async () => {
     await fetch(apiUrl(`/api/article-categories/${id}/${action}`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
     showToast(`${labels[action]}しました。`, 'success');
-    _loadTopics();
+    closeDetail(); _loadTopics();
   };
   // Rejecting is the only irreversible one here — it marks the category "do not re-suggest".
   if (action === 'reject') {
@@ -940,7 +999,7 @@ function deleteCategory(id) {
   showConfirm('このカテゴリを完全に削除しますか？（生成済みの記事は残ります）', async () => {
     await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
-    _loadTopics();
+    closeDetail(); _loadTopics();
   }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
 }
 
