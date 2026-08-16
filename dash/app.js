@@ -715,8 +715,8 @@ function _renderTopics() {
 
   const toolbar = `<div class="qs-card" style="flex-direction:column;gap:6px;align-items:stretch;margin-bottom:10px">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">🧭 カテゴリを探す</button>
-      <button class="save-btn" onclick="showArticleFromUrl()" style="font-size:11px">📝 URLから書く</button>
+      <button class="save-btn" onclick="scoutTopicsNow()" style="font-size:11px">カテゴリを探す</button>
+      <button class="save-btn" onclick="showArticleFromUrl()" style="font-size:11px">URLから書く</button>
       <span style="font-size:10px;color:var(--m)">note.com のトレンドから継続的なカテゴリを提案します</span>
     </div>
     <div style="display:flex;gap:4px">
@@ -741,25 +741,26 @@ function _buildCategoryCards() {
 
 // One tile answers only: what is this, is it running, is it any good, when does it fire next.
 // Everything else lives behind the click — same two-level structure as the agents page.
-const _CAT_ICON = {
-  news_reflection: '📡', analysis: '📊', narrative: '📖',
-  tutorial: '🛠', listicle: '📋', review: '🎬',
+// Format marks reuse the dashboard's embossed .ni icon language rather than emoji. A full-colour
+// raster glyph sits *on* a neumorphic surface; an embossed mark is *part* of it.
+const _CAT_FMT = {
+  news_reflection: 'news', analysis: 'analysis', narrative: 'narrative',
+  tutorial: 'tutorial', listicle: 'listicle', review: 'review',
 };
-const _MONEY_ICON = { amazon: '🛒', note_money: '💹', both: '🛒💹', paid: '🔒', none: '' };
 
 function _categoryTile(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const r = c.rating || {};
   const style = c.style || {};
-  const icon = _CAT_ICON[style.format] || '📝';
-  const money = _MONEY_ICON[(c.monetization || {}).mode] || '';
+  const fmt = _CAT_FMT[style.format] || 'analysis';
+  const earns = ((c.monetization || {}).mode || 'none') !== 'none';
   const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
   return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
-    <div class="cat-tile-icon">${icon}</div>
+    <i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
@@ -768,7 +769,7 @@ function _categoryTile(c) {
       </div>
       <div class="acard-foot" style="margin-top:6px;justify-content:space-between">
         <span style="font-size:10px;color:var(--m2)">${r.count ? `★${r.average}` : '—'}</span>
-        <span style="font-size:10px;color:var(--m2)">${c.articleCount || 0}本 ${money}</span>
+        <span style="font-size:10px;color:var(--m2);display:inline-flex;align-items:center;gap:6px">${c.articleCount || 0}本${earns ? '<i class="ni ni-money" style="width:18px;height:18px;border-radius:6px" aria-hidden="true"></i>' : ''}</span>
       </div>
     </div>
   </div>`;
@@ -794,7 +795,7 @@ function _categoryEditor(c) {
   const r = c.rating || {};
   const style = c.style || {};
   const m = c.monetization || {};
-  const icon = _CAT_ICON[style.format] || '📝';
+  const fmt = _CAT_FMT[style.format] || 'analysis';
   const lbl = (list, id) => (list || []).find(o => o.id === id)?.label || id || '—';
   const freqLabel = lbl(CAT_META?.frequencies, c.frequency);
 
@@ -807,12 +808,12 @@ function _categoryEditor(c) {
     `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
 
   const statusActions = c.status === 'suggested'
-    ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')">✅ 承認</button>
-       <button class="act-btn cancel" onclick="catAction('${c.id}','reject')">🚫 却下</button>`
+    ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')">承認</button>
+       <button class="act-btn cancel" onclick="catAction('${c.id}','reject')">却下</button>`
     : c.status === 'paused'
-      ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')">▶ 再開</button>`
+      ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')">再開</button>`
       : c.status === 'active'
-        ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">⏸ 停止</button>` : '';
+        ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">停止</button>` : '';
 
   // Only the editorial prompt is open by default — it is the lever that matters and the one thing
   // you come here to change. Everything else states its current value on the closed row, so the
@@ -825,7 +826,7 @@ function _categoryEditor(c) {
 
   return `
     <div class="p-header">
-      <div class="p-icon-puck">${icon}</div>
+      <i class="ni ni-xl ni-fmt-${fmt}" aria-hidden="true"></i>
       <div>
         <div class="p-title">${esc(c.name)}</div>
         <div class="p-sub">${st.label} · ${freqLabel} · ${c.articleCount || 0}本${r.count ? ` · ★${r.average}` : ''}</div>
@@ -840,7 +841,7 @@ function _categoryEditor(c) {
         毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。
       </div>
       ${c.promptSuggested && c.promptSuggested !== c.prompt
-        ? `<button class="act-btn" style="margin-top:10px" onclick="resetCategoryPrompt('${c.id}')">↺ 提案に戻す</button>` : ''}`, true)}
+        ? `<button class="act-btn" style="margin-top:10px" onclick="resetCategoryPrompt('${c.id}')">提案に戻す</button>` : ''}`, true)}
 
     ${section('記事のかたち',
       `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
@@ -873,8 +874,8 @@ function _categoryEditor(c) {
     <div class="p-actions">
       <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
       ${statusActions}
-      <button class="act-btn" onclick="generateNow('${c.id}')">✍️ 今すぐ1本</button>
-      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">🗑</button>
+      <button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>
+      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">削除</button>
     </div>`;
 }
 
