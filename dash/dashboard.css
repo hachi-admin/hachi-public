@@ -553,6 +553,10 @@ header{margin:12px;padding:10px 16px}
   padding:6px 8px;border-radius:7px;font-size:11px;outline:none;font-family:inherit;min-height:32px;width:100%;
 }
 .cat-in:focus{box-shadow:var(--sh)}
+.cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
+.acard .acard-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.acard .acard-foot{display:flex;align-items:center;gap:6px}
+#detail-content .cat-prompt{min-height:150px}
 .cat-money{background:color-mix(in srgb,var(--grn) 7%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
 .cat-style{background:color-mix(in srgb,var(--m2) 6%,transparent);border-radius:10px;padding:10px;margin-bottom:10px}
 .cat-style-field{gap:4px}
