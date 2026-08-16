@@ -3113,9 +3113,25 @@ function _renderWikiFiles(files) {
   if (fab) treeEl.appendChild(fab);
 }
 
+/* On a phone the wiki was a 160px-tall list stacked above the article with no way back to it —
+   and the two panes overlapped, so the article showed through the list. It is now list → detail:
+   one pane at a time, with a back control. Desktop keeps both panes side by side, where having
+   the index permanently visible is the point. */
+function openWikiReading() {
+  document.querySelector('#page-wiki .docs-layout')?.classList.add('reading');
+  document.getElementById('wiki-reader')?.scrollTo({ top: 0 });
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function closeWikiPage() {
+  document.querySelector('#page-wiki .docs-layout')?.classList.remove('reading');
+  document.querySelectorAll('#wiki-tree .docs-tree-item').forEach(b => b.classList.remove('active'));
+}
+
 async function loadWikiFile(btn, path) {
   if (!path) return;
-  const reader = document.getElementById('wiki-reader');
+  openWikiReading();
+  const reader = document.getElementById('wiki-reader-body');
   reader.innerHTML = '<div class="docs-loading">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(path)}`), { headers: _authHeaders() });
@@ -3125,7 +3141,9 @@ async function loadWikiFile(btn, path) {
       return;
     }
     const data = await res.json();
-    reader.innerHTML = `<div class="docs-content"><h1>${esc(data.title||path)}</h1>${_markdownToHtml(data.content||'')}</div>`;
+    reader.innerHTML = `<div class="docs-content"><h1>${esc(data.title||path)}</h1>${
+      data.content ? _markdownToHtml(data.content)
+                   : `<p class="wiki-nobody">本文を読み込めませんでした${data.contentError ? `（${esc(data.contentError)}）` : ''}。</p>`}</div>`;
     if (window.mermaid) {
       const nodes = reader.querySelectorAll('.mermaid');
       if (nodes.length) mermaid.run({ nodes }).catch(()=>{});
@@ -3138,7 +3156,8 @@ async function loadWikiFile(btn, path) {
 async function loadWikiPage(btn, slug, title) {
   if (!slug) return;
   document.querySelectorAll('#wiki-tree .docs-tree-item').forEach(b => b.classList.toggle('active', b === btn));
-  const reader = document.getElementById('wiki-reader');
+  openWikiReading();
+  const reader = document.getElementById('wiki-reader-body');
   reader.innerHTML = '<div class="docs-loading">読み込み中…</div>';
   try {
     const res = await fetch(apiUrl(`/api/wiki/pages/${encodeURIComponent(slug)}`), { headers: _authHeaders() });
@@ -3159,7 +3178,8 @@ async function loadWikiPage(btn, slug, title) {
           <button class="wiki-open-btn" onclick="showWikiPrompt('quiz','${esc(storeSlug)}','${esc(storeTitle)}')">クイズ</button>
           <button class="wiki-open-btn" onclick="showWikiPrompt('vocab','${esc(storeSlug)}','${esc(storeTitle)}')">単語</button>
         </div>
-        ${_markdownToHtml(storeContent)}
+        ${storeContent ? _markdownToHtml(storeContent)
+          : `<p class="wiki-nobody">本文を読み込めませんでした${data.contentError ? `（${esc(data.contentError)}）` : ''}。</p>`}
         ${qs ? `<div style="margin-top:20px;border-top:1px solid var(--div);padding-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--m2);margin-bottom:6px">フォローアップ候補</div>${qs}</div>` : ''}
       </div>`;
     if (window.mermaid) {
