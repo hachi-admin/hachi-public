@@ -309,13 +309,12 @@ header{margin:12px;padding:10px 16px}
 /* Status as a raised pip in the corner: same surface, same light, just a small object sitting on
    it. Colour is confined to a 7px dot instead of running the height of the card. */
 .acard{position:relative}
-.acard.running::before,.acard.failed::before,.acard.done::before{
+/* The agent card's status moved into the corner badge beside its level; only the older
+   .card variant still uses a standalone dot. */
+.card.running::before,.card.failed::before,.card.done::before{
   content:'';position:absolute;top:11px;right:11px;width:7px;height:7px;border-radius:50%;
   box-shadow:var(--sh-sm);
 }
-.acard.running::before{background:var(--blue);animation:agentFloat 2.6s ease-in-out infinite}
-.acard.failed::before{background:var(--red)}
-.acard.done::before{background:color-mix(in srgb,var(--grn) 70%,var(--bg))}
 .acard.disabled{opacity:.45;filter:grayscale(.5)}
 .avatar{image-rendering:pixelated;image-rendering:crisp-edges;display:block;margin:0 auto 2px}
 .acard-name{font-size:12px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
@@ -1541,9 +1540,9 @@ body:has(.mob-more-sheet.open) .page-area{
   70%  { outline-color: transparent; outline-offset: 6px; }
   100% { outline-color: transparent; outline-offset: 6px; }
 }
-.acard.running::before {
+.acard.running .acard-dot {
   outline: 2px solid transparent;
-  animation: agentFloat 2.6s ease-in-out infinite, halo 2.4s ease-out infinite;
+  animation: halo 2.4s ease-out infinite;
 }
 
 /* ── Content arrives, rather than appearing ── */
@@ -1551,18 +1550,13 @@ body:has(.mob-more-sheet.open) .page-area{
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
 }
-/* Staggered so a grid resolves as a wave. Capped at eight: past that the last card would wait
-   long enough to feel broken rather than deliberate. */
-.cat-tile-grid.loaded > *,
-#agent-grid > * { animation: rise .34s cubic-bezier(.22,1,.36,1) backwards; }
-.cat-tile-grid.loaded > *:nth-child(1),  #agent-grid > *:nth-child(1)  { animation-delay: .02s }
-.cat-tile-grid.loaded > *:nth-child(2),  #agent-grid > *:nth-child(2)  { animation-delay: .05s }
-.cat-tile-grid.loaded > *:nth-child(3),  #agent-grid > *:nth-child(3)  { animation-delay: .08s }
-.cat-tile-grid.loaded > *:nth-child(4),  #agent-grid > *:nth-child(4)  { animation-delay: .11s }
-.cat-tile-grid.loaded > *:nth-child(5),  #agent-grid > *:nth-child(5)  { animation-delay: .14s }
-.cat-tile-grid.loaded > *:nth-child(6),  #agent-grid > *:nth-child(6)  { animation-delay: .17s }
-.cat-tile-grid.loaded > *:nth-child(7),  #agent-grid > *:nth-child(7)  { animation-delay: .20s }
-.cat-tile-grid.loaded > *:nth-child(n+8),#agent-grid > *:nth-child(n+8){ animation-delay: .23s }
+/* Applied to the container, not staggered across children.
+   The staggered version used `backwards` fill, which holds each child at opacity 0 until its
+   delay elapses — so in any situation where animations do not actually run, the content never
+   became visible at all. That is a wave worth losing: a grid that fades in as one is nearly as
+   good, and it cannot hide the page. */
+.cat-tile-grid.loaded,
+#agent-grid { animation: rise .36s cubic-bezier(.22,1,.36,1); }
 
 /* A row that just arrived in the feed says so, once. */
 @keyframes flashIn {
@@ -1596,7 +1590,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .live-dot.off { background:var(--m2) }
 
 @media (prefers-reduced-motion: reduce) {
-  .acard.running, .card.running, .acard.running::before,
+  .acard.running, .card.running, .acard.running .acard-dot,
   .cat-tile-grid.loaded > *, #agent-grid > *, .feed-item.is-new,
   #refresh-btn.busy .ni, .live-dot.on { animation: none !important }
   .acard:active, .kpi:active, .wiki-flat-item:active { transform: none }
@@ -1613,28 +1607,34 @@ body:has(.mob-more-sheet.open) .page-area{
    agent is actually for. */
 .acard-typed{position:relative;overflow:hidden}
 
-/* A rail rather than a border: colour on the edge of a neumorphic card fights the material, but
-   a short mark inside it reads as a tab on a file. */
-.acard-typed::after{
-  content:'';position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;
-  background:var(--type-colour,var(--m2));opacity:.9;
-}
+/* No rail. Colour on or beside a neumorphic card flattens it — the surface is supposed to be one
+   material catching one light. Type is carried by the avatar's own palette instead, which is the
+   only thing on the card that was already allowed to have colour. */
 .acard-typed[data-cat="intelligence"]{--type-colour:#4C6FE7}
 .acard-typed[data-cat="knowledge"]   {--type-colour:#8B5CF6}
 .acard-typed[data-cat="development"] {--type-colour:#0EA5A0}
 .acard-typed[data-cat="content"]     {--type-colour:#E0724A}
 .acard-typed[data-cat="other"]       {--type-colour:#94A3B8}
 
-/* Permission level, top-right. Pressed into the card so it reads as stamped rather than applied,
-   and the tooltip says what the number permits — L5 can change code, which "Lv5" does not convey. */
-.acard-lv{
+/* Status and permission read as one thing in the corner, because they answer one question:
+   is this running, and how much is it allowed to do. Pressed in, so it reads as stamped. */
+.acard-badge{
   position:absolute;top:9px;right:9px;z-index:2;
+  display:inline-flex;align-items:center;gap:5px;
   font-size:.52rem;font-weight:800;letter-spacing:.04em;
   color:var(--m2);background:var(--bg);box-shadow:var(--sh-press);
-  padding:3px 7px;border-radius:99px;cursor:help;
+  padding:3px 8px;border-radius:99px;cursor:help;
 }
-/* Only the level that can change the world outside this system is coloured. */
-.acard-typed[data-lv="5"] .acard-lv{color:var(--type-colour)}
+.acard-dot{width:5px;height:5px;border-radius:50%;background:var(--m2);flex-shrink:0}
+.acard.done .acard-dot,.acard.idle .acard-dot{background:var(--grn)}
+.acard.running .acard-dot{background:var(--blue)}
+.acard.failed .acard-dot{background:var(--red)}
+.acard.disabled .acard-dot{background:var(--m2)}
+.acard-typed[data-lv="5"] .acard-badge{color:var(--type-colour)}
+
+/* The avatar is the type marker, so it gets room to be one. Higher levels draw larger and the
+   box grows with them rather than cropping. */
+.acard-face{display:flex;justify-content:center;align-items:flex-end;min-height:76px;margin-bottom:6px}
 
 /* The one line that says what this agent is for. Two lines maximum: a card that scrolls is a card
    nobody reads. */
@@ -1648,3 +1648,15 @@ body:has(.mob-more-sheet.open) .page-area{
   letter-spacing:.03em;margin-right:auto;
 }
 .acard-nums{gap:6px}
+
+/* A named group, so a chip is identifiable as an agent, a task route or a tag rather than being
+   three kinds of pill that look the same. Capped, with a count for the remainder — a channel with
+   six routes was burying its own name under them. */
+.ch-group{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.ch-group-label{
+  font-size:.52rem;font-weight:800;letter-spacing:.06em;color:var(--m2);
+  text-transform:uppercase;margin-right:1px;
+}
+.ch-chip.more{color:var(--m2);box-shadow:var(--sh-press);font-weight:800;padding:4px 7px}
+.ch-chip.tag{font-size:.55rem;padding:3px 4px 3px 8px}
+.ch-chip.add{padding:4px 10px;font-size:.68rem;line-height:1}
