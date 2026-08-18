@@ -135,9 +135,60 @@ const FLOWS = [
 /* ═══════════════════════════════════════════════════════════
    BOOTSTRAP — load data then render
 ══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   PRESENCE
+══════════════════════════════════════════════════════════════
+   A number that snaps from 0 to 50 is read as "the page rendered". The same number counting up
+   is read as "this is the value". The difference costs one animation frame loop and is most of
+   what separates a control room from a report. */
+
+/** Count an element's number up to its value. Honours reduced-motion by simply setting it. */
+function countUp(el, to, { duration = 620 } = {}) {
+  if (!el) return;
+  const target = Number(to) || 0;
+  if (matchMedia('(prefers-reduced-motion:reduce)').matches || target === 0) {
+    el.textContent = String(target); return;
+  }
+  const from = Number(el.dataset.shown ?? 0);
+  el.dataset.shown = String(target);
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / duration);
+    // Ease-out: fast at first, settling on the value rather than crawling to it.
+    const v = from + (target - from) * (1 - (1 - p) ** 3);
+    el.textContent = String(Math.round(v));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  // The animation is decoration; the number is not. If frames never run — a background tab, a
+  // throttled renderer, a headless browser — the value must still be right, so the end state is
+  // written unconditionally rather than depending on the last frame arriving.
+  setTimeout(() => { el.textContent = String(target); }, duration + 90);
+}
+
+/** Animate every counter inside a container that carries data-count. */
+function _animateCounters(root = document) {
+  root.querySelectorAll('[data-count]').forEach((el) => countUp(el, el.dataset.count));
+}
+
+/** Mark rows that were not in the feed last render, so new work announces itself once. */
+const _seenFeedIds = new Set();
+function _markNewFeedRows(selector = '#task-feed .feed-item') {
+  const first = _seenFeedIds.size === 0;
+  document.querySelectorAll(selector).forEach((el) => {
+    const id = el.dataset.id || el.textContent.slice(0, 40);
+    if (!_seenFeedIds.has(id)) {
+      _seenFeedIds.add(id);
+      // Nothing is "new" on the first paint — everything would flash at once and mean nothing.
+      if (!first) el.classList.add('is-new');
+    }
+  });
+}
+
 async function loadDashboard() {
   if (!await _ensureAuth()) return;
   _renderUserPill();
+  document.getElementById('refresh-btn')?.classList.add('busy');
 
   const loaderId = '_dash-load-overlay';
   const isInitial = !document.getElementById(loaderId);
@@ -244,6 +295,16 @@ function _applyData(d) {
   window._factChecks     = d.factChecks    || [];
   window._knowledgeData  = d.knowledgeData || {};
   window._routingRows    = d.routing?.rows || [];
+  // Presence: counters animate to their value and genuinely new feed rows announce themselves.
+  // Done here rather than inside each renderer so every panel gets it without remembering to.
+  document.getElementById('refresh-btn')?.classList.remove('busy');
+  // The header dot is the one always-visible sign that something is actually running. Green and
+  // pulsing when an agent is working, grey when the system is merely up.
+  const anyRunning = Object.values(DETAIL_DATA || {}).some((a) => a?.status === 'running');
+  const dot = document.getElementById('live-dot');
+  if (dot) dot.className = `live-dot ${anyRunning ? 'on' : 'off'}`;
+  requestAnimationFrame(() => { _animateCounters(); _markNewFeedRows(); });
+
 }
 
 function _renderAll(d) {
@@ -490,15 +551,15 @@ function _renderAgentStatsBox() {
   const pending = (TASK_STATS.upcoming || []).length;
   const t = _I18N[PROJECT_LANG] || _I18N.JP;
   document.getElementById('agent-stats-box').innerHTML = `
-    <div class="asb-stat"><div class="asb-val">${REGISTRY.length}</div><div class="asb-label">${t['stat-agents']}</div></div>
+    <div class="asb-stat"><div class="asb-val" data-count="${REGISTRY.length}">0</div><div class="asb-label">${t['stat-agents']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val${running ? ' run' : ''}">${running}</div><div class="asb-label">${t['stat-running']}</div></div>
+    <div class="asb-stat"><div class="asb-val${running ? ' run' : ''}" data-count="${running}">0</div><div class="asb-label">${t['stat-running']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val${failed ? ' fail' : ''}">${failed}</div><div class="asb-label">${t['stat-failed']}</div></div>
+    <div class="asb-stat"><div class="asb-val${failed ? ' fail' : ''}" data-count="${failed}">0</div><div class="asb-label">${t['stat-failed']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val">${enabled}</div><div class="asb-label">${t['stat-enabled']}</div></div>
+    <div class="asb-stat"><div class="asb-val" data-count="${enabled}">0</div><div class="asb-label">${t['stat-enabled']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val">${pending}</div><div class="asb-label">${t['stat-pending']}</div></div>
+    <div class="asb-stat"><div class="asb-val" data-count="${pending}">0</div><div class="asb-label">${t['stat-pending']}</div></div>
   `;
 }
 
@@ -640,7 +701,7 @@ function _renderKpiRow() {
     // only while it means something — a red 0 reads as an alarm that is not sounding.
     return `<div class="kpi" role="button" tabindex="0" aria-label="${esc(s)} のタスクを開く" onclick="openTaskModal('${s}')">
       <div class="kpi-label">${t[key]}</div>
-      <div class="kpi-value" style="color:${n > 0 ? color : 'var(--m2)'}">${n}</div>
+      <div class="kpi-value" style="color:${n > 0 ? color : 'var(--m2)'}" data-count="${n}">0</div>
       <div class="kpi-hint">${t['click-view']}</div>
     </div>`;
   }).join('');
