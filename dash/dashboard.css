@@ -1369,3 +1369,86 @@ body:has(.mob-more-sheet.open) .page-area{
 .src-row .act-btn.cancel:hover,
 #task-feed .act-btn.cancel:hover,
 .feed-item .act-btn.cancel:hover{opacity:1}
+
+/* ══════════════════════════════════════════════════════════════
+   CATEGORY — HOW A CYCLE RUNS
+══════════════════════════════════════════════════════════════
+   Separated from 「記事のかたち」 because these three do not describe the writing; they decide
+   whether a human sees it first, what it costs to make, and what the timeline sees. */
+.cat-run{display:flex;flex-direction:column;gap:18px}
+.cat-run small{
+  display:block;font-size:.62rem;color:var(--m2);line-height:1.6;margin-top:5px;
+  grid-column:1 / -1;
+}
+.cat-toggle{
+  display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 14px;
+}
+.cat-toggle > span:first-child{font-size:.72rem;color:var(--txt);font-weight:600}
+
+/* Pressed = on. The same "selection is the press" gesture the nav uses, so a switch reads as
+   part of the same material rather than as a borrowed web control. */
+.cat-switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0}
+.cat-switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:2;width:100%;height:100%}
+.cat-switch-track{
+  position:absolute;inset:0;border-radius:99px;background:var(--bg);
+  box-shadow:var(--sh-press);transition:box-shadow .18s;
+}
+.cat-switch-track::after{
+  content:'';position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:50%;
+  background:var(--bg);box-shadow:var(--sh-sm);transition:transform .18s,background .18s;
+}
+.cat-switch input:checked + .cat-switch-track::after{
+  transform:translateX(20px);background:var(--acc);
+}
+.cat-switch input:focus-visible + .cat-switch-track{outline:2px solid var(--acc);outline-offset:2px}
+
+/* ══════════════════════════════════════════════════════════════
+   EXPERIMENT
+══════════════════════════════════════════════════════════════
+   Designed around withholding. Most of the time the honest answer is "not yet", and that has to
+   read as a legitimate state rather than as a broken panel — so the waiting verdict gets the same
+   weight and the same box as a decided one. */
+.exp-head{display:flex;flex-direction:column;gap:5px}
+.exp-title{font-size:1rem;font-weight:800;color:var(--txt)}
+.exp-note{font-size:.66rem;color:var(--m);line-height:1.65}
+
+.exp-arms{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.exp-arm{background:var(--bg);box-shadow:var(--sh-in);border-radius:14px;padding:14px 16px}
+.exp-arm-name{font-size:.66rem;font-weight:800;color:var(--m2);letter-spacing:.06em}
+.exp-arm-name span{font-weight:600;color:var(--m2);margin-left:4px}
+.exp-arm-val{font-size:1.5rem;font-weight:800;color:var(--txt);font-variant-numeric:tabular-nums;line-height:1.2}
+.exp-arm-sub{font-size:.62rem;color:var(--m2)}
+
+.exp-verdict{
+  display:flex;flex-direction:column;gap:3px;
+  background:var(--bg);box-shadow:var(--sh-sm);border-radius:14px;padding:14px 16px;
+}
+.exp-verdict b{font-size:.82rem;color:var(--txt)}
+.exp-verdict span{font-size:.64rem;color:var(--m)}
+/* Waiting is not a warning. It is the correct state for most of an experiment's life. */
+.exp-verdict.wait b{color:var(--m)}
+.exp-verdict.win b{color:var(--grn)}
+.exp-verdict.lose b{color:var(--m)}
+
+.exp-prog{display:flex;align-items:center;gap:12px;font-size:.68rem;color:var(--txt)}
+.exp-prog > span:first-child{width:14px;font-weight:800;color:var(--m2)}
+.exp-prog-n{font-variant-numeric:tabular-nums;color:var(--m2);font-size:.64rem;white-space:nowrap}
+
+.exp-applied{display:flex;align-items:flex-start;gap:14px;
+  background:var(--bg);box-shadow:var(--sh-in);border-radius:14px;padding:14px 16px}
+.exp-applied b{font-size:1.3rem;font-weight:800;color:var(--grn);font-variant-numeric:tabular-nums;line-height:1.2}
+.exp-applied.bad b{color:var(--yel)}
+.exp-applied span{font-size:.64rem;color:var(--m);line-height:1.7}
+
+.exp-tag{font-size:.6rem;font-weight:800;padding:1px 7px;border-radius:99px;
+  background:var(--bg);box-shadow:var(--sh-press);color:var(--m2)}
+.exp-tag.arm-B{color:var(--acc)}
+
+@media(max-width:560px){ .exp-arms{grid-template-columns:1fr} }
+
+/* The category panel hides its bars on a phone because the numbers carry the comparison there.
+   In the experiment panel the bar IS the information — it shows distance to the threshold, which
+   a bare "2/10" states but does not make felt. Keep it. */
+@media(max-width:560px){
+  .exp-prog .note-bar{display:block;min-width:60px}
+}
