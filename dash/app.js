@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '2';
+const DASH_BUILD = '3';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -574,6 +574,16 @@ function _renderAgentStatsBox() {
 /* ═══════════════════════════════════════════════════════════
    OVERVIEW — AGENT GRID
 ══════════════════════════════════════════════════════════════ */
+/* What each permission level actually permits. Shown on the badge rather than explained in a
+   legend nobody opens — the number alone means nothing until you know 5 can change code. */
+const _LEVEL_HINT = {
+  1: 'L1 観察 — 読むだけ。ツールを使わない',
+  2: 'L2 調査 — 検索・取得など外部を読める',
+  3: 'L3 執筆 — wiki や Firestore に書ける',
+  4: 'L4 運用 — 外部サービスに書き込める',
+  5: 'L5 開発 — コードとインフラを変更できる',
+};
+
 let _avTheme = localStorage.getItem('avTheme') || 'classic';
 let _catFilter = 'all', _lvFilter = null, _trigFilter = null;
 
@@ -595,7 +605,12 @@ function _renderAgentGrid() {
     const displayDesc = isJP && reg.descJp ? reg.descJp : (reg.desc || '');
     const statusLabel = t[status] || status;
     const catLabel    = t['cat-' + (reg.category || '').toLowerCase()] || reg.category || '';
-    return `<div class="acard ${status} ${enabled ? '' : 'disabled'}" role="button" tabindex="0"
+    // Permission level is the one property that says what this agent is allowed to do to the
+    // outside world, and it was buried in a text line. It becomes a corner badge, and the card
+    // carries a type colour so a glance sorts the roster without reading.
+    const lv = reg.level || 1;
+    const cat = (reg.category || 'other').toLowerCase();
+    return `<div class="acard acard-typed ${status} ${enabled ? '' : 'disabled'}" data-cat="${esc(cat)}" data-lv="${lv}" role="button" tabindex="0"
       aria-label="${esc(reg.name)} の詳細を開く"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${(reg.colors || []).join('|')}"
@@ -604,6 +619,7 @@ function _renderAgentGrid() {
       data-tools="${esc((reg.tools || []).join(','))}"
       data-spark="${spark}" data-tokens="${d.tokensUsed || 0}"
       data-anim="${status}" onclick="openDetail('${reg.id}')">
+      <span class="acard-lv" title="${esc(_LEVEL_HINT[lv] || '')}">L${lv}</span>
       <div style="display:flex;justify-content:center;margin-bottom:4px">
         <canvas class="avatar" width="${SCALE*8}" height="${SCALE*8}" style="image-rendering:pixelated"></canvas>
       </div>
@@ -612,10 +628,11 @@ function _renderAgentGrid() {
         <!-- A name and an unlabelled bar said almost nothing: not what the agent is for, not what
              the bar measures, not what it costs. These four facts answer "what is this, when does
              it run, how close is it to its ceiling, what is it costing me" without opening it. -->
-        <div class="acard-role">${esc(catLabel)}${reg.level ? ` · Lv${reg.level}` : ''}</div>
+        <div class="acard-desc">${esc(displayDesc)}</div>
         <div class="acard-when">${esc(t['trig-' + trig] || trig)}</div>
         <div class="tok-bar-wrap" title="${(d.tokensUsed || 0).toLocaleString()} / ${(d.tokenLimit || 0).toLocaleString()} tokens"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
         <div class="acard-nums">
+          <span class="acard-cat">${esc(catLabel)}</span>
           <span class="acard-pct"${pct > 80 ? ' data-hot="1"' : ''}>${pct}%</span>
           <span class="acard-cost">${costEst > 0 ? '$' + costEst.toFixed(2) : '—'}</span>
         </div>
@@ -3986,38 +4003,51 @@ function _renderLiveChannels(guild) {
     const cls = ['ch-tree-item', isReg ? 'registered' : ''].filter(Boolean).join(' ');
     const agents = regCh?.agents || [];
 
-    // Routing: show which task types route to this channel (via its key)
+    // Routing: which task types route here via its key.
     const chKey = regCh?.key || '';
     const routedTasks = chKey ? (routingByChKey[chKey] || []) : [];
-    const routePills = routedTasks.length
-      ? `<div class="ch-tree-agents" style="margin-top:2px">${routedTasks.map(t=>`<span class="ch-tree-agent-pill" style="background:var(--accent-bg);color:var(--m2)">${esc(t.replace(/_/g,' '))}</span>`).join('')}</div>`
-      : '';
 
-    const agentPills = agents.length
-      ? `<div class="ch-tree-agents">${agents.map(a => `<span class="ch-tree-agent-pill">${esc(a.replace('-agent',''))}</span>`).join('')}</div>`
-      : '';
+    const agentPills = agents.map((a) =>
+      `<span class="ch-chip agent">${esc(a.replace('-agent', ''))}</span>`).join('');
+    const routePills = routedTasks.map((t) =>
+      `<span class="ch-chip route">${esc(t.replace(/_/g, ' '))}</span>`).join('');
 
-    // Forum channel: show tags + add-tag button
+    // Forum tags. These were hardcoded #1a1a2e on #a5b4fc — a dark-theme chip dropped into a light
+    // interface — and they shared the name row, so four tags pushed the channel off the edge.
+    // They now sit on their own line in the same material as everything else.
     const availTags = ch.availableTags || [];
-    const tagSection = isForum
-      ? `<div class="ch-tree-agents" style="margin-top:3px">
-          ${availTags.map(tag=>`<span class="ch-tree-agent-pill" style="background:#1a1a2e;color:#a5b4fc" title="Tag ID: ${esc(tag.id)}">${tag.emoji?tag.emoji+' ':''}${esc(tag.name)}<button onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')" style="margin-left:3px;background:none;border:none;color:var(--m2);cursor:pointer;font-size:9px;padding:0" title="Remove"><i class="ni ni-close" aria-hidden="true"></i></button></span>`).join('')}
-          <button class="ch-plus-btn" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')" title="Add tag">${(_I18N[PROJECT_LANG]||_I18N.JP)['ch-add-tag']}</button>
-        </div>`
+    const tagChips = isForum
+      ? availTags.map((tag) => `<span class="ch-chip tag" title="Tag ID: ${esc(tag.id)}">
+          ${tag.emoji ? `<span class="ch-chip-emoji">${tag.emoji}</span>` : ''}${esc(tag.name)}
+          <button class="ch-chip-x" aria-label="${esc(tag.name)} を削除"
+            onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')">
+            <i class="ni ni-close" aria-hidden="true"></i></button>
+        </span>`).join('')
+      : '';
+
+    const addTag = isForum
+      ? `<button class="ch-chip add" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')"
+           title="タグを追加">＋ ${(_I18N[PROJECT_LANG] || _I18N.JP)['ch-add-tag']}</button>`
+      : '';
+
+    // A second row, only when there is something to put on it. Meta on the name row is what made
+    // the row overflow in the first place.
+    const meta = (agentPills || routePills || tagChips || addTag)
+      ? `<div class="ch-meta">${agentPills}${routePills}${tagChips}${addTag}</div>`
       : '';
 
     const plusBtn = canInteract
-      ? `<button class="ch-plus-btn" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)" title="Assign agents">+</button>`
+      ? `<button class="ch-plus-btn" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)" title="エージェントを割り当てる" aria-label="エージェントを割り当てる">＋</button>`
       : '';
 
     return `<div class="${cls}" title="ID: ${esc(ch.id)}">
-      <span style="flex-shrink:0">${icon}</span>
-      <span class="ch-tree-item-name">${esc(ch.name)}</span>
-      ${isReg ? `<span class="ch-tree-check" title="Key: ${esc(chKey)}">✓</span>` : ''}
-      ${agentPills}
-      ${routePills}
-      ${tagSection}
-      ${plusBtn}
+      <div class="ch-row">
+        <span class="ch-icon">${icon}</span>
+        <span class="ch-tree-item-name">${esc(ch.name)}</span>
+        ${isReg ? `<span class="ch-tree-check" title="Key: ${esc(chKey)}">登録済</span>` : ''}
+        ${plusBtn}
+      </div>
+      ${meta}
     </div>`;
   }
 
