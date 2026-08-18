@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '4';
+const DASH_BUILD = '5';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -558,17 +558,23 @@ function agentPalette(category, level = 1) {
   ];
 }
 
-/** Pixels per cell. A level 5 avatar is half again the size of a level 1. */
-function agentScale(level = 1) {
-  return [5, 6, 7, 8, 9][Math.min(5, Math.max(1, Number(level) || 1)) - 1];
+/** Rendered size in CSS pixels. A level 5 avatar is nearly twice a level 1; the grid resolution
+ *  is independent of this, which is what lets the art get finer without changing the layout. */
+function agentPx(level = 1) {
+  return [40, 48, 56, 64, 72][Math.min(5, Math.max(1, Number(level) || 1)) - 1];
 }
 
+/* Size-agnostic: the grid states its own resolution. Avatars were 8x8, which was fine at 40px and
+   coarse at 72px — a level 5 agent draws nine screen pixels per cell and every edge is a staircase.
+   Reading grid.length lets 8 and 16 coexist while they are redrawn. */
 function drawGrid(ctx, grid, cm, blink, scale) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  if (!grid) return;
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    let v = grid[y]?.[x]; const c = (blink && v === 3) ? cm[1] : cm[v];
-    if (c) { ctx.fillStyle = c; ctx.fillRect(x * scale, y * scale, scale, scale); }
+  if (!grid?.length) return;
+  const n = grid.length;
+  const px = (ctx.canvas.width / n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < (grid[y]?.length ?? 0); x++) {
+    const v = grid[y][x]; const c = (blink && v === 3) ? cm[1] : cm[v];
+    if (c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x * px), Math.round(y * px), Math.ceil(px), Math.ceil(px)); }
   }
 }
 
@@ -673,7 +679,7 @@ function _renderAgentGrid() {
       aria-label="${esc(reg.name)} の詳細を開く"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${agentPalette(reg.category, lv).join('|')}"
-      data-scale="${agentScale(lv)}"
+      data-px="${agentPx(lv)}"
       data-category="${reg.category || ''}" data-level="${reg.level || 1}"
       data-trigger="${trig}" data-name="${esc(reg.name)}"
       data-tools="${esc((reg.tools || []).join(','))}"
@@ -683,7 +689,7 @@ function _renderAgentGrid() {
         <span class="acard-dot" aria-hidden="true"></span>L${lv}
       </span>
       <div class="acard-face">
-        <canvas class="avatar" width="${agentScale(lv)*8}" height="${agentScale(lv)*8}" style="image-rendering:pixelated"></canvas>
+        <canvas class="avatar" width="${agentPx(lv)}" height="${agentPx(lv)}" style="image-rendering:pixelated"></canvas>
       </div>
       <div class="acard-info">
         <div class="acard-name">${esc(displayName)}</div>
@@ -738,7 +744,7 @@ function _startAvatarAnimations() {
         const initStr = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp.slice(0,1) : (reg.name||'?').slice(0,2).toUpperCase();
         ctx.fillText(initStr, cv.width/2, cv.height/2);
       } else {
-        drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink, Number(card.dataset.scale) || SCALE);
+        drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink);
       }
       if (anim === 'running') { const l = Math.floor((e/55)%48); ctx.fillStyle='rgba(0,0,0,.06)'; ctx.fillRect(0,l,48,2); }
       requestAnimationFrame(frame);
@@ -2756,7 +2762,7 @@ function openDetail(id) {
 
   // Draw avatar
   const dc = document.getElementById('detailCanvas');
-  if (dc) drawGrid(dc.getContext('2d'), AVATARS[reg.avatar], cmap(reg.colors), false, DS);
+  if (dc) drawGrid(dc.getContext('2d'), AVATARS[reg.avatar], cmap(agentPalette(reg.category, reg.level || 1)), false);
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -3945,9 +3951,11 @@ function _showAddTagForm(channelId) {
   pop.querySelector('#tag-name-input').focus();
 }
 
-async function _createChannelTag(channelId) {
-  const name = document.getElementById('tag-name-input')?.value?.trim();
-  const emoji = document.getElementById('tag-emoji-input')?.value?.trim() || undefined;
+/* `nameArg` lets a suggestion chip add a tag directly. Without it this read the form inputs
+   unconditionally, so a suggestion would have posted an empty name and failed silently. */
+async function _createChannelTag(channelId, nameArg, emojiArg) {
+  const name = nameArg || document.getElementById('tag-name-input')?.value?.trim();
+  const emoji = emojiArg || document.getElementById('tag-emoji-input')?.value?.trim() || undefined;
   const status = document.getElementById('tag-form-status');
   if (!name) { if (status) status.textContent = 'タグ名を入力してください'; return; }
   if (status) status.textContent = '追加中…';
@@ -3970,6 +3978,27 @@ async function _createChannelTag(channelId) {
     const ch = guild.channels.find(c => c.id === channelId);
     if (ch && tag) { ch.availableTags = (ch.availableTags || []); ch.availableTags.push(tag); _renderLiveChannels(guild); }
   }
+}
+
+/** Tags used elsewhere in this server that this channel does not have yet. */
+function _tagSuggestions(ch) {
+  const have = new Set((ch.availableTags || []).map((t) => t.name));
+  const seen = new Map();
+  const guild = _guildsData.find((g) => g.id === _selectedGuildId);
+  for (const other of guild?.channels ?? []) {
+    if (other.id === ch.id) continue;
+    for (const t of other.availableTags ?? []) {
+      if (have.has(t.name)) continue;
+      if (!seen.has(t.name)) seen.set(t.name, { name: t.name, emoji: t.emoji, n: 0 });
+      seen.get(t.name).n += 1;
+    }
+  }
+  // Most reused first: a tag three channels already share is a better suggestion than a one-off.
+  return [...seen.values()].sort((a, b) => b.n - a.n);
+}
+
+async function _addSuggestedTag(channelId, name, emoji) {
+  await _createChannelTag(channelId, name, emoji).catch(() => {});
 }
 
 async function _deleteChannelTag(channelId, tagId) {
@@ -4068,52 +4097,59 @@ function _renderLiveChannels(guild) {
     const chKey = regCh?.key || '';
     const routedTasks = chKey ? (routingByChKey[chKey] || []) : [];
 
-    // Chips were unlabelled, so an agent and a task-type route looked identical, and every one
-    // was rendered — a channel with six routes buried its own name. Each group is now named, and
-    // shows a few with a count for the rest.
-    const CHIP_CAP = 3;
-    const group = (items, cls, label, render) => {
-      if (!items.length) return '';
-      const shown = items.slice(0, CHIP_CAP).map(render).join('');
-      const rest = items.length - CHIP_CAP;
-      return `<span class="ch-group">
-        <span class="ch-group-label">${label}</span>${shown}${
-        rest > 0 ? `<span class="ch-chip more">+${rest}</span>` : ''}</span>`;
+    // What this channel is for, in a line. Derived from what actually posts here rather than
+    // written by hand: a channel's purpose is the agents assigned to it and the task results
+    // routed to it, and both were already on screen as unlabelled chips nobody could read.
+    const describe = () => {
+      const who = agents.map((a) => a.replace('-agent', ''));
+      const parts = [];
+      if (who.length === 1) parts.push(`${who[0]} が投稿`);
+      else if (who.length > 1) parts.push(`${who.slice(0, 2).join('・')}${who.length > 2 ? ` ほか${who.length - 2}` : ''} が投稿`);
+      if (routedTasks.length) parts.push(`${routedTasks.length}種類のタスク結果`);
+      if (isForum && (ch.availableTags || []).length) parts.push(`タグ${ch.availableTags.length}`);
+      return parts.join(' · ');
     };
+    const desc = describe();
+    const descLine = desc ? `<div class="ch-desc">${esc(desc)}</div>` : '';
 
-    const agentPills = group(agents, 'agent', 'エージェント',
-      (a) => `<span class="ch-chip agent">${esc(a.replace('-agent', ''))}</span>`);
-    const routePills = group(routedTasks, 'route', 'タスク',
-      (t) => `<span class="ch-chip route">${esc(t.replace(/_/g, ' '))}</span>`);
-
-    // Forum tags. They were hardcoded #1a1a2e chips — a dark-theme control in a light interface —
-    // and all of them rendered, so four tags pushed the channel name off the screen. Now: a count,
-    // two examples, and the full list behind the tooltip.
+    // Tags stay. The remove control does not: it only appears once a tag is selected, because a
+    // permanent × on every tag reads as four things asking to be deleted.
     const availTags = ch.availableTags || [];
-    const tagSection = isForum && availTags.length
-      ? `<span class="ch-group" title="${esc(availTags.map((t) => t.name).join(' / '))}">
-          <span class="ch-group-label">タグ ${availTags.length}</span>
-          ${availTags.slice(0, 2).map((tag) => `<span class="ch-chip tag">
-            ${tag.emoji ? `<span class="ch-chip-emoji">${tag.emoji}</span>` : ''}${esc(tag.name)}
-            <button class="ch-chip-x" aria-label="${esc(tag.name)} を削除"
-              onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')">
-              <i class="ni ni-close" aria-hidden="true"></i></button>
-          </span>`).join('')}
-          ${availTags.length > 2 ? `<span class="ch-chip more">+${availTags.length - 2}</span>` : ''}
-        </span>`
+    const tagChips = isForum
+      ? availTags.map((tag) => `<span class="ch-chip tag" role="button" tabindex="0"
+          onclick="event.stopPropagation();this.classList.toggle('armed')"
+          title="${esc(tag.name)}（タップで削除ボタン）">
+          ${tag.emoji ? `<span class="ch-chip-emoji">${tag.emoji}</span>` : ''}${esc(tag.name)}
+          <button class="ch-chip-x" aria-label="${esc(tag.name)} を削除"
+            onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')">
+            <i class="ni ni-close" aria-hidden="true"></i></button>
+        </span>`).join('')
       : '';
 
-    const addTag = isForum
-      ? `<button class="ch-chip add" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')"
-           title="タグを追加">＋</button>`
+    // Suggestions come from tags this server already uses elsewhere. A blank box asks the operator
+    // to invent a taxonomy; a list of what they have already chosen asks them to reuse one.
+    const suggestions = isForum ? _tagSuggestions(ch) : [];
+    const suggestChips = suggestions.slice(0, 3).map((t) =>
+      `<button class="ch-chip suggest" title="このタグを追加"
+         onclick="event.stopPropagation();_addSuggestedTag('${esc(ch.id)}','${esc(t.name)}','${esc(t.emoji || '')}')">
+         ${t.emoji ? `<span class="ch-chip-emoji">${t.emoji}</span>` : ''}${esc(t.name)}</button>`).join('');
+
+    const tagSection = isForum
+      ? `<div class="ch-tags">
+          <span class="ch-group-label">タグ</span>${tagChips}
+          ${suggestChips}
+          <button class="ch-chip add" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')"
+            title="新しいタグを作る">＋ タグ</button>
+        </div>`
       : '';
 
-    const meta = (agentPills || routePills || tagSection || addTag)
-      ? `<div class="ch-meta">${agentPills}${routePills}${tagSection}${addTag}</div>`
-      : '';
+    const meta = tagSection;
 
+    // Two bare + buttons on one card could not be told apart. This one is labelled for what it
+    // does — assign an agent — and the tag one lives inside the tag row and says タグ.
     const plusBtn = canInteract
-      ? `<button class="ch-plus-btn" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)" title="エージェントを割り当てる" aria-label="エージェントを割り当てる">＋</button>`
+      ? `<button class="ch-assign" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)"
+           title="このチャンネルに投稿するエージェントを選ぶ">＋ エージェント</button>`
       : '';
 
     return `<div class="${cls}" title="ID: ${esc(ch.id)}">
@@ -4121,9 +4157,10 @@ function _renderLiveChannels(guild) {
         <span class="ch-icon">${icon}</span>
         <span class="ch-tree-item-name">${esc(ch.name)}</span>
         ${isReg ? `<span class="ch-tree-check" title="Key: ${esc(chKey)}">登録済</span>` : ''}
-        ${plusBtn}
       </div>
+      ${descLine}
       ${meta}
+      <div class="ch-actions">${plusBtn}</div>
     </div>`;
   }
 

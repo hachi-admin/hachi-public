@@ -30,9 +30,19 @@ body { display:flex; flex-direction:column; height:100% }
 
 /* ── FLOATING HEADER (extends neu.css header) */
 header{margin:12px;padding:10px 16px}
-.logo{font-size:1rem;font-weight:800;color:var(--acc);white-space:nowrap;display:flex;align-items:center;gap:4px}
+/* The mark sat 4px from the wordmark and its drop-shadow bled over the H of Hachi. The gap is
+   now wide enough for the shadow to fall into, and the shadow is softer than the type it sits
+   beside so it reads as depth rather than as a smudge on the letter. */
+.logo{
+  font-size:1rem;font-weight:800;color:var(--acc);white-space:nowrap;
+  display:flex;align-items:center;gap:11px;padding-left:2px;
+}
 .logo-dash{color:var(--txt);font-family:'Righteous',sans-serif;font-weight:400;font-size:.95rem;letter-spacing:.02em}
-.logo-gem{font-style:normal;font-size:1rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,.12))}
+.logo-gem{
+  font-style:normal;font-size:1rem;flex-shrink:0;
+  /* No drop-shadow: it was the thing clipping the wordmark, and the mark already sits on a
+     neumorphic surface that supplies its own depth. */
+}
 
 /* ═══════════════════════════════════════════════════════════
    NEUMORPHIC ICON SYSTEM (.ni)
@@ -147,6 +157,15 @@ header{margin:12px;padding:10px 16px}
 /* hbtn overrides for dashboard */
 .hbtn{flex-shrink:0}
 .hbtn.pill{border-radius:999px;width:auto;padding:0 10px;font-size:.75rem;height:36px}
+
+/* The account avatar is a photograph in a round frame, so it has to be exactly square before it
+   is clipped — a non-square box makes object-fit crop off-centre and the circle read as an oval.
+   Sized in one place rather than by width/height attributes that CSS then contradicts. */
+#user-avatar{
+  width:28px;height:28px;min-width:28px;min-height:28px;
+  border-radius:50%;object-fit:cover;display:block;flex-shrink:0;aspect-ratio:1;
+}
+.user-pill-btn{gap:7px;padding:3px 10px 3px 3px}
 
 /* Dropdown overrides */
 .ndrop-panel{right:0;width:200px;overflow-y:auto;max-height:360px;top:calc(100% + 8px)}
@@ -1660,3 +1679,39 @@ body:has(.mob-more-sheet.open) .page-area{
 .ch-chip.more{color:var(--m2);box-shadow:var(--sh-press);font-weight:800;padding:4px 7px}
 .ch-chip.tag{font-size:.55rem;padding:3px 4px 3px 8px}
 .ch-chip.add{padding:4px 10px;font-size:.68rem;line-height:1}
+
+/* ── Channel: what it is for, and what can be done to it ────────────────────── */
+.ch-desc{font-size:.6rem;color:var(--m);line-height:1.5}
+
+.ch-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* A tag is not a delete button. The × only exists once the tag has been tapped, so a row of four
+   tags reads as four labels rather than four things asking to be removed. */
+.ch-chip.tag .ch-chip-x{
+  display:none;width:18px;height:18px;margin-left:2px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--red);opacity:1;
+}
+.ch-chip.tag.armed .ch-chip-x{display:inline-flex}
+.ch-chip.tag.armed{box-shadow:var(--sh-press)}
+.ch-chip.tag{cursor:pointer;padding:4px 9px}
+
+/* Suggestions are dashed: present, clearly not yet real. Drawn from tags this server already uses
+   elsewhere, because a blank box asks the operator to invent a taxonomy and a suggestion asks
+   them to reuse the one they have. */
+.ch-chip.suggest{
+  border:1px dashed var(--div);box-shadow:none;background:transparent;
+  color:var(--m2);cursor:pointer;font-family:inherit;font-weight:600;
+}
+.ch-chip.suggest:hover{color:var(--acc);border-color:var(--acc)}
+.ch-chip.suggest:active{box-shadow:var(--sh-press);border-style:solid}
+
+/* The two + buttons were indistinguishable. Each now says what it adds. */
+.ch-actions{display:flex;gap:6px;flex-wrap:wrap}
+.ch-assign{
+  font-size:.58rem;font-weight:700;color:var(--m);font-family:inherit;
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;border-radius:99px;
+  padding:5px 11px;cursor:pointer;transition:box-shadow .15s,color .15s;
+}
+.ch-assign:hover{color:var(--acc)}
+.ch-assign:active{box-shadow:var(--sh-press)}
+.ch-chip.add{color:var(--m);cursor:pointer;border:none;font-family:inherit;font-weight:700}
