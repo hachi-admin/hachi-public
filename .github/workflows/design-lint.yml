@@ -15,8 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The asset-version check diffs against the base branch; a shallow clone has no base to
+          # diff against and the check would pass by finding nothing — which is worse than absent.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Run design lint
         run: node scripts/design-lint.js
+
+      # A dashboard change that ships without a new ?v= is invisible to anyone with a warm cache.
+      - name: Asset version bumped
+        run: node scripts/check-asset-version.js origin/${{ github.base_ref || 'main' }}

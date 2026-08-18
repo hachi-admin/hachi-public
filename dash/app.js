@@ -1,3 +1,6 @@
+/* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
+const DASH_BUILD = '2';
+
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
    Auth: GitHub OAuth → JWT stored in localStorage.
@@ -302,7 +305,12 @@ function _applyData(d) {
   // pulsing when an agent is working, grey when the system is merely up.
   const anyRunning = Object.values(DETAIL_DATA || {}).some((a) => a?.status === 'running');
   const dot = document.getElementById('live-dot');
-  if (dot) dot.className = `live-dot ${anyRunning ? 'on' : 'off'}`;
+  if (dot) {
+    dot.className = `live-dot ${anyRunning ? 'on' : 'off'}`;
+    // The asset version, so "am I looking at the new build?" is answerable by long-pressing the
+    // dot rather than by diffing files against the server.
+    dot.title = `${anyRunning ? '稼働中' : '待機中'} · build ${DASH_BUILD}`;
+  }
   requestAnimationFrame(() => { _animateCounters(); _markNewFeedRows(); });
 
 }
