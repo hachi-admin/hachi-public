@@ -1452,3 +1452,90 @@ body:has(.mob-more-sheet.open) .page-area{
 @media(max-width:560px){
   .exp-prog .note-bar{display:block;min-width:60px}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   PRESENCE
+══════════════════════════════════════════════════════════════
+   The dashboard reported on a system rather than showing one. Everything below exists to make
+   the difference between "running" and "idle" visible without reading a label — a control room
+   rather than a printed report.
+
+   Every rule here is inside prefers-reduced-motion guards at the bottom: motion that cannot be
+   turned off is not a feature. */
+
+/* ── A card that is working looks like it ── */
+@keyframes breathe {
+  0%,100% { box-shadow: var(--sh-sm); }
+  50%     { box-shadow: var(--sh), 0 0 0 1px color-mix(in srgb, var(--blue) 22%, transparent); }
+}
+.acard.running,
+.card.running { animation: breathe 2.4s ease-in-out infinite; }
+
+/* The status dot already exists; give it a ring so it reads as live at a glance rather than as a
+   coloured pixel. Expressed as a scaling outline rather than a box-shadow: a one-directional
+   shadow would break the material's single light source, which the design lint enforces. */
+@keyframes halo {
+  0%   { outline-color: color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 0; }
+  70%  { outline-color: transparent; outline-offset: 6px; }
+  100% { outline-color: transparent; outline-offset: 6px; }
+}
+.acard.running::before {
+  outline: 2px solid transparent;
+  animation: agentFloat 2.6s ease-in-out infinite, halo 2.4s ease-out infinite;
+}
+
+/* ── Content arrives, rather than appearing ── */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Staggered so a grid resolves as a wave. Capped at eight: past that the last card would wait
+   long enough to feel broken rather than deliberate. */
+.cat-tile-grid.loaded > *,
+#agent-grid > * { animation: rise .34s cubic-bezier(.22,1,.36,1) backwards; }
+.cat-tile-grid.loaded > *:nth-child(1),  #agent-grid > *:nth-child(1)  { animation-delay: .02s }
+.cat-tile-grid.loaded > *:nth-child(2),  #agent-grid > *:nth-child(2)  { animation-delay: .05s }
+.cat-tile-grid.loaded > *:nth-child(3),  #agent-grid > *:nth-child(3)  { animation-delay: .08s }
+.cat-tile-grid.loaded > *:nth-child(4),  #agent-grid > *:nth-child(4)  { animation-delay: .11s }
+.cat-tile-grid.loaded > *:nth-child(5),  #agent-grid > *:nth-child(5)  { animation-delay: .14s }
+.cat-tile-grid.loaded > *:nth-child(6),  #agent-grid > *:nth-child(6)  { animation-delay: .17s }
+.cat-tile-grid.loaded > *:nth-child(7),  #agent-grid > *:nth-child(7)  { animation-delay: .20s }
+.cat-tile-grid.loaded > *:nth-child(n+8),#agent-grid > *:nth-child(n+8){ animation-delay: .23s }
+
+/* A row that just arrived in the feed says so, once. */
+@keyframes flashIn {
+  from { background: color-mix(in srgb, var(--blue) 14%, transparent); }
+  to   { background: transparent; }
+}
+.feed-item.is-new { animation: flashIn 1.6s ease-out; }
+
+/* ── Numbers count, rather than blink ── */
+.kpi-value, .asb-val, .exp-arm-val { transition: color .25s }
+.num-roll { display:inline-block; font-variant-numeric: tabular-nums }
+
+/* ── Pressability ── */
+/* Anything you can act on answers the finger. Neumorphism already has the gesture; it just was
+   not applied consistently. */
+.acard, .kpi, .wiki-flat-item, .src-row, .note-row, .cat-view-btn, .dest-sub-btn, .nav-pill {
+  transition: box-shadow .18s cubic-bezier(.22,1,.36,1), transform .18s cubic-bezier(.22,1,.36,1);
+}
+.acard:active, .kpi:active, .wiki-flat-item:active { transform: scale(.985) }
+
+/* ── The refresh control shows that it is working ── */
+@keyframes spin { to { transform: rotate(360deg) } }
+#refresh-btn.busy .ni { animation: spin .8s linear infinite; transform-origin: 50% 50% }
+
+/* ── Live indicator in the header ── */
+.live-dot {
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--grn);margin-right:6px;vertical-align:middle;
+}
+.live-dot.on { outline: 2px solid transparent; animation: halo 2.2s ease-out infinite }
+.live-dot.off { background:var(--m2) }
+
+@media (prefers-reduced-motion: reduce) {
+  .acard.running, .card.running, .acard.running::before,
+  .cat-tile-grid.loaded > *, #agent-grid > *, .feed-item.is-new,
+  #refresh-btn.busy .ni, .live-dot.on { animation: none !important }
+  .acard:active, .kpi:active, .wiki-flat-item:active { transform: none }
+}
