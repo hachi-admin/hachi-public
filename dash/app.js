@@ -792,14 +792,17 @@ function _renderTopics() {
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
       <button class="cat-view-btn${_catView === 'reception' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'reception'}" onclick="setCatView('reception')">note の反応</button>
+      <button class="cat-view-btn${_catView === 'experiment' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'experiment'}" onclick="setCatView('experiment')">実験</button>
     </div>
   </div>`;
 
   box.innerHTML = toolbar + (
     _catView === 'articles'  ? _buildArticleRows()  :
-    _catView === 'reception' ? _buildReception()    :
-                               _buildCategoryCards());
+    _catView === 'reception'  ? _buildReception()   :
+    _catView === 'experiment' ? _buildExperiment()  :
+                                _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
+  if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
 }
 
 function _buildCategoryCards() {
@@ -931,6 +934,20 @@ function _categoryEditor(c) {
         ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
       </div>`)}
 
+    ${section('動かし方',
+      `${(c.approvalMode ?? 'auto') === 'propose' ? '案を選ぶ' : '自動'} · ${style.enrichQA ? '読者Q&A有' : '読者Q&A無'} · ${style.heroTitle === false ? '画像文字なし' : '画像に文字'}`, `
+      <div class="cat-run neu-well">
+        <label class="cat-field"><span>サイクルの開始</span>
+          ${sel(`cat-approval-${c.id}`, (CAT_META?.approvalModes || [{ id: 'auto', label: '自動' }, { id: 'propose', label: '案を選ぶ' }])
+            .map(o => `<option value="${o.id}"${o.id === (c.approvalMode ?? 'auto') ? ' selected' : ''}>${esc(o.label)}</option>`).join(''))}
+          <small>「案を選ぶ」にすると、記事案を3〜4本出して #approvals で選んでから執筆します。</small>
+        </label>
+        ${_catToggle(c, 'enrichQA', '読者の疑問を織り込む', style.enrichQA !== false,
+          '書き上げたあと、読者が抱く疑問を洗い出して本文に溶かし込みます。1本あたり2エージェント分のコスト。')}
+        ${_catToggle(c, 'heroTitle', '見出し画像にタイトルを入れる', style.heroTitle !== false,
+          'note のタイムラインでは画像が先に読まれます。10〜15字を大きく載せます。')}
+      </div>`)}
+
     ${section('読者と頻度',
       `${t.ageMin ?? 25}〜${t.ageMax ?? 45}歳 · ${(t.scale || 'mass') === 'niche' ? 'ニッチ' : 'マス'} · ${freqLabel}`, `
       <div class="cat-grid neu-well">
@@ -1050,6 +1067,99 @@ function _buildReception() {
   </div>`;
 }
 
+/* ── Experiments ─────────────────────────────────────────────────────────────
+   The panel's job is as much to withhold a conclusion as to show one. Style measurements move
+   long before like counts do, so the arms fill with articles that cannot be scored yet — and a
+   dashboard that averaged two likes into a verdict would be worse than no dashboard. */
+let EXPERIMENTS = null;
+let _expErr = null;
+
+async function _loadExperiments() {
+  try {
+    const res = await fetch(apiUrl('/api/experiments'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    EXPERIMENTS = await res.json();
+    _expErr = null;
+  } catch (e) { _expErr = e.message; }
+  if (_catView === 'experiment') _renderTopics();
+}
+
+function _armCard(name, arm, label) {
+  return `<div class="exp-arm">
+    <div class="exp-arm-name">${name} <span>${esc(label)}</span></div>
+    <div class="exp-arm-val">${arm.n ? `♡${arm.meanLikes}` : '—'}</div>
+    <div class="exp-arm-sub">${arm.n}本${arm.n ? ` · 反応ゼロ ${arm.zeroLike}` : ''}</div>
+  </div>`;
+}
+
+function _buildExperiment() {
+  if (_expErr) return `<div class="note-empty">実験データを読み込めませんでした（${esc(_expErr)}）。</div>`;
+  if (!EXPERIMENTS) return `<div class="note-empty">読み込み中…</div>`;
+  const e = EXPERIMENTS.running;
+  if (!e) return `<div class="note-empty">実行中の実験はありません。<br><small>一度に1軸だけ。2つ同時に走らせると、どちらの結果も解釈できなくなります。</small></div>`;
+
+  const s = e.summary || {};
+  const min = EXPERIMENTS.minPerArm ?? 10;
+  const ax = (EXPERIMENTS.axes || {})[e.axis] || {};
+  const pct = (n) => Math.min(100, Math.round((n / min) * 100));
+
+  const verdict = s.verdict === 'insufficient'
+    ? `<div class="exp-verdict wait">
+         <b>まだ判定できません</b>
+         <span>各群${min}本必要。あと${s.needMore}本。</span>
+       </div>`
+    : `<div class="exp-verdict ${s.verdict === 'B' ? 'win' : s.verdict === 'A' ? 'lose' : ''}">
+         <b>${s.verdict === 'B' ? 'B（変更）が上' : s.verdict === 'A' ? 'A（現状）が上' : '差なし'}</b>
+         <span>確度: ${s.confidence === 'suggestive' ? '示唆あり' : '弱い（差 &lt;1）'}</span>
+       </div>`;
+
+  return `<div class="note-panel">
+    <div class="exp-head">
+      <div class="exp-title">${esc(s.label || e.axis)}</div>
+      <div class="exp-note">${esc(e.note || '')}</div>
+    </div>
+
+    <div class="exp-arms">
+      ${_armCard('A', s.A || { n: 0 }, '現状')}
+      ${_armCard('B', s.B || { n: 0 }, '変更')}
+    </div>
+
+    ${verdict}
+
+    <div class="note-block">
+      <h4 class="note-h">進捗</h4>
+      <div class="exp-prog"><span>A</span>${_noteBar(Math.min(s.A?.n ?? 0, min), min)}<span class="exp-prog-n">${s.A?.n ?? 0}/${min}</span></div>
+      <div class="exp-prog"><span>B</span>${_noteBar(Math.min(s.B?.n ?? 0, min), min)}<span class="exp-prog-n">${s.B?.n ?? 0}/${min}</span></div>
+      <p class="note-foot">${e.assigned}本に割り当て済み・うち反応を測れたのは${e.measurable}本。
+        公開直後の記事はまだ数えられません。</p>
+    </div>
+
+    ${s.applied !== null && s.applied !== undefined ? `<div class="note-block">
+      <h4 class="note-h">指示は守られたか</h4>
+      <div class="exp-applied ${s.applied < 0.5 ? 'bad' : ''}">
+        <b>${Math.round(s.applied * 100)}%</b>
+        <span>B群のうち、実際に文体が変わった記事の割合。<br>
+        ここが低いまま差が出なければ、それは「効果がない」ではなく「実行されていない」です。</span>
+      </div>
+    </div>` : ''}
+
+    ${(e.recent || []).length ? `<div class="note-block">
+      <h4 class="note-h">最近の記事</h4>
+      ${e.recent.slice().reverse().map(r => `<div class="note-row">
+        <div class="note-row-main">
+          <div class="note-row-title">${esc(r.title || '(執筆中)')}</div>
+          <div class="note-row-meta">
+            <span class="exp-tag arm-${r.arm}">${r.arm}</span>
+            ${r.sentenceCV !== null ? `<span class="note-tag">CV ${r.sentenceCV}</span>` : ''}
+            ${r.hasAuthorVoice === true ? '<span class="cat-chip earns">書き手あり</span>' : ''}
+          </div>
+        </div>
+        <div class="note-row-nums"><span class="note-likes">${r.likes === null ? '—' : '♡' + r.likes}</span></div>
+      </div>`).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
 function _buildArticleRows() {
   if (!CAT_ARTICLES.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">記事がまだありません。</div>`;
   const catName = (id) => CATEGORIES.find(c => c.id === id)?.name || (id ? '(削除済みカテゴリ)' : 'URL考察');
@@ -1077,6 +1187,19 @@ function _buildArticleRows() {
 // A style control: the select, plus the chosen option's one-line explanation underneath. The hint
 // updates on change, so the card explains what each setting actually does to the writing rather
 // than showing a bare enum the user has to remember the meaning of.
+/* A switch, not a select: these are on/off and the label carries the consequence, because the
+   cost of turning one on is not obvious from its name. */
+function _catToggle(c, key, label, on, hint) {
+  return `<label class="cat-field cat-toggle">
+    <span>${esc(label)}</span>
+    <span class="cat-switch">
+      <input type="checkbox" id="cat-${key}-${c.id}"${on ? ' checked' : ''}>
+      <span class="cat-switch-track" aria-hidden="true"></span>
+    </span>
+    <small>${esc(hint)}</small>
+  </label>`;
+}
+
 function _styleField(c, key, label, options) {
   const cur = (c.style || {})[key];
   const opts = options || [];
@@ -1146,14 +1269,18 @@ function _moneyChanged(id) {
 const _catVal = (id) => document.getElementById(id)?.value ?? '';
 
 async function saveCategory(id) {
+  const chk = (k) => !!document.getElementById(`cat-${k}-${id}`)?.checked;
   const body = {
     prompt: _catVal(`cat-prompt-${id}`),
     frequency: _catVal(`cat-freq-${id}`),
+    approvalMode: _catVal(`cat-approval-${id}`),
     style: {
       format: _catVal(`cat-format-${id}`),
       voice: _catVal(`cat-voice-${id}`),
       visualDensity: _catVal(`cat-visualDensity-${id}`),
       depth: _catVal(`cat-depth-${id}`),
+      enrichQA: chk('enrichQA'),
+      heroTitle: chk('heroTitle'),
     },
     monetization: {
       mode: _catVal(`cat-money-${id}`),
