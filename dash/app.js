@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '3';
+const DASH_BUILD = '4';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -515,6 +515,54 @@ function fmtDate(iso) {
 }
 function cmap(colors) { const [b,a,h,d] = colors; return {0:null,1:b,2:a,3:h,4:d}; }
 
+/* ── Agent identity: colour is type, size is permission ─────────────────────
+   The roster is 35 agents. Sorting it by eye needs two properties visible before any text is
+   read: what kind of thing this is, and how much it is allowed to do.
+
+   Type drives the avatar's own palette rather than a mark beside it — a coloured rail on the edge
+   of a neumorphic card fights the material, which is what the previous attempt did.
+
+   Permission drives size and weight. A level 5 agent can change code and infrastructure; it
+   should look heavier than one that may only read. The grid is a fixed 8×8, so mass comes from
+   scale and from contrast: higher levels get a deeper shadow colour and a brighter highlight,
+   which reads as more solid at the same silhouette. */
+const TYPE_HUE = {
+  intelligence: '#4C6FE7',
+  knowledge:    '#8B5CF6',
+  development:  '#0EA5A0',
+  content:      '#E0724A',
+  other:        '#94A3B8',
+};
+
+/** Mix two hex colours. `t` of 0 returns a, 1 returns b. */
+function _mix(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [ar, ag, ab] = p(a); const [br, bg, bb] = p(b);
+  const c = (x, y) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
+  return `#${c(ar, br)}${c(ag, bg)}${c(ab, bb)}`;
+}
+
+/**
+ * A 4-colour palette [base, accent, highlight, dark] for an agent, from its type and level.
+ * Higher levels are more saturated and more contrasted — the same shape, more weight.
+ */
+function agentPalette(category, level = 1) {
+  const hue = TYPE_HUE[String(category || 'other').toLowerCase()] ?? TYPE_HUE.other;
+  const lv = Math.min(5, Math.max(1, Number(level) || 1));
+  const strength = (lv - 1) / 4;                       // 0 at L1, 1 at L5
+  return [
+    _mix(_mix(hue, '#FFFFFF', 0.34 - strength * 0.24), hue, strength * 0.5), // base
+    _mix(hue, '#FFFFFF', 0.55 - strength * 0.25),                            // accent
+    _mix(hue, '#FFFFFF', 0.80 - strength * 0.20),                            // highlight
+    _mix(hue, '#0B1020', 0.34 + strength * 0.30),                            // dark / outline
+  ];
+}
+
+/** Pixels per cell. A level 5 avatar is half again the size of a level 1. */
+function agentScale(level = 1) {
+  return [5, 6, 7, 8, 9][Math.min(5, Math.max(1, Number(level) || 1)) - 1];
+}
+
 function drawGrid(ctx, grid, cm, blink, scale) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   if (!grid) return;
@@ -592,12 +640,23 @@ function _renderAgentGrid() {
   if (!grid) return;
   const t = _I18N[PROJECT_LANG] || _I18N.JP;
   const isJP = PROJECT_LANG === 'JP';
-  grid.innerHTML = REGISTRY.map(reg => {
+  // Ordered by what matters when scanning a roster of 35: how much an agent may do, then what
+  // kind of thing it is, then its name. Alphabetical put a level-5 code-writing agent between two
+  // observers, which is the least useful arrangement available.
+  const TYPE_ORDER = ['Intelligence', 'Knowledge', 'Development', 'Content'];
+  const sorted = [...REGISTRY].sort((a, b) =>
+    (b.level || 1) - (a.level || 1)
+    || (TYPE_ORDER.indexOf(a.category) + 1 || 99) - (TYPE_ORDER.indexOf(b.category) + 1 || 99)
+    || String(a.name).localeCompare(String(b.name)));
+
+  grid.innerHTML = sorted.map(reg => {
     const d = DETAIL_DATA[reg.id] || {};
     const status = d.status || 'idle';
     const enabled = d.enabled !== false;
     const pct = Math.min(100, Math.round(((d.tokensUsed || 0) / (d.tokenLimit || 1)) * 100));
-    const barColor = pct > 80 ? '#EF4444' : pct > 50 ? '#FBBF24' : reg.colors[0];
+    // The bar takes the agent's own type colour until it is near its ceiling, where the warning
+    // colours take over — two colour systems on one card would mean neither is read.
+    const barColor = pct > 80 ? '#EF4444' : pct > 50 ? '#FBBF24' : agentPalette(reg.category, reg.level || 1)[0];
     const costEst = (COST_BY_AGENT_7D[reg.id] || 0);
     const trig = (d.trigger || 'interactive');
     const spark = LAST_7_KEYS.map(k => (TASK_STATS.byDay?.[k]?.agentCounts?.[reg.id] || 0)).join(',');
@@ -613,15 +672,18 @@ function _renderAgentGrid() {
     return `<div class="acard acard-typed ${status} ${enabled ? '' : 'disabled'}" data-cat="${esc(cat)}" data-lv="${lv}" role="button" tabindex="0"
       aria-label="${esc(reg.name)} の詳細を開く"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
-      data-colors="${(reg.colors || []).join('|')}"
+      data-colors="${agentPalette(reg.category, lv).join('|')}"
+      data-scale="${agentScale(lv)}"
       data-category="${reg.category || ''}" data-level="${reg.level || 1}"
       data-trigger="${trig}" data-name="${esc(reg.name)}"
       data-tools="${esc((reg.tools || []).join(','))}"
       data-spark="${spark}" data-tokens="${d.tokensUsed || 0}"
       data-anim="${status}" onclick="openDetail('${reg.id}')">
-      <span class="acard-lv" title="${esc(_LEVEL_HINT[lv] || '')}">L${lv}</span>
-      <div style="display:flex;justify-content:center;margin-bottom:4px">
-        <canvas class="avatar" width="${SCALE*8}" height="${SCALE*8}" style="image-rendering:pixelated"></canvas>
+      <span class="acard-badge" title="${esc(_LEVEL_HINT[lv] || '')}">
+        <span class="acard-dot" aria-hidden="true"></span>L${lv}
+      </span>
+      <div class="acard-face">
+        <canvas class="avatar" width="${agentScale(lv)*8}" height="${agentScale(lv)*8}" style="image-rendering:pixelated"></canvas>
       </div>
       <div class="acard-info">
         <div class="acard-name">${esc(displayName)}</div>
@@ -632,7 +694,6 @@ function _renderAgentGrid() {
         <div class="acard-when">${esc(t['trig-' + trig] || trig)}</div>
         <div class="tok-bar-wrap" title="${(d.tokensUsed || 0).toLocaleString()} / ${(d.tokenLimit || 0).toLocaleString()} tokens"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
         <div class="acard-nums">
-          <span class="acard-cat">${esc(catLabel)}</span>
           <span class="acard-pct"${pct > 80 ? ' data-hot="1"' : ''}>${pct}%</span>
           <span class="acard-cost">${costEst > 0 ? '$' + costEst.toFixed(2) : '—'}</span>
         </div>
@@ -677,7 +738,7 @@ function _startAvatarAnimations() {
         const initStr = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp.slice(0,1) : (reg.name||'?').slice(0,2).toUpperCase();
         ctx.fillText(initStr, cv.width/2, cv.height/2);
       } else {
-        drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink, SCALE);
+        drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink, Number(card.dataset.scale) || SCALE);
       }
       if (anim === 'running') { const l = Math.floor((e/55)%48); ctx.fillStyle='rgba(0,0,0,.06)'; ctx.fillRect(0,l,48,2); }
       requestAnimationFrame(frame);
@@ -4007,33 +4068,48 @@ function _renderLiveChannels(guild) {
     const chKey = regCh?.key || '';
     const routedTasks = chKey ? (routingByChKey[chKey] || []) : [];
 
-    const agentPills = agents.map((a) =>
-      `<span class="ch-chip agent">${esc(a.replace('-agent', ''))}</span>`).join('');
-    const routePills = routedTasks.map((t) =>
-      `<span class="ch-chip route">${esc(t.replace(/_/g, ' '))}</span>`).join('');
+    // Chips were unlabelled, so an agent and a task-type route looked identical, and every one
+    // was rendered — a channel with six routes buried its own name. Each group is now named, and
+    // shows a few with a count for the rest.
+    const CHIP_CAP = 3;
+    const group = (items, cls, label, render) => {
+      if (!items.length) return '';
+      const shown = items.slice(0, CHIP_CAP).map(render).join('');
+      const rest = items.length - CHIP_CAP;
+      return `<span class="ch-group">
+        <span class="ch-group-label">${label}</span>${shown}${
+        rest > 0 ? `<span class="ch-chip more">+${rest}</span>` : ''}</span>`;
+    };
 
-    // Forum tags. These were hardcoded #1a1a2e on #a5b4fc — a dark-theme chip dropped into a light
-    // interface — and they shared the name row, so four tags pushed the channel off the edge.
-    // They now sit on their own line in the same material as everything else.
+    const agentPills = group(agents, 'agent', 'エージェント',
+      (a) => `<span class="ch-chip agent">${esc(a.replace('-agent', ''))}</span>`);
+    const routePills = group(routedTasks, 'route', 'タスク',
+      (t) => `<span class="ch-chip route">${esc(t.replace(/_/g, ' '))}</span>`);
+
+    // Forum tags. They were hardcoded #1a1a2e chips — a dark-theme control in a light interface —
+    // and all of them rendered, so four tags pushed the channel name off the screen. Now: a count,
+    // two examples, and the full list behind the tooltip.
     const availTags = ch.availableTags || [];
-    const tagChips = isForum
-      ? availTags.map((tag) => `<span class="ch-chip tag" title="Tag ID: ${esc(tag.id)}">
-          ${tag.emoji ? `<span class="ch-chip-emoji">${tag.emoji}</span>` : ''}${esc(tag.name)}
-          <button class="ch-chip-x" aria-label="${esc(tag.name)} を削除"
-            onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')">
-            <i class="ni ni-close" aria-hidden="true"></i></button>
-        </span>`).join('')
+    const tagSection = isForum && availTags.length
+      ? `<span class="ch-group" title="${esc(availTags.map((t) => t.name).join(' / '))}">
+          <span class="ch-group-label">タグ ${availTags.length}</span>
+          ${availTags.slice(0, 2).map((tag) => `<span class="ch-chip tag">
+            ${tag.emoji ? `<span class="ch-chip-emoji">${tag.emoji}</span>` : ''}${esc(tag.name)}
+            <button class="ch-chip-x" aria-label="${esc(tag.name)} を削除"
+              onclick="event.stopPropagation();_deleteChannelTag('${esc(ch.id)}','${esc(tag.id)}')">
+              <i class="ni ni-close" aria-hidden="true"></i></button>
+          </span>`).join('')}
+          ${availTags.length > 2 ? `<span class="ch-chip more">+${availTags.length - 2}</span>` : ''}
+        </span>`
       : '';
 
     const addTag = isForum
       ? `<button class="ch-chip add" onclick="event.stopPropagation();_showAddTagForm('${esc(ch.id)}')"
-           title="タグを追加">＋ ${(_I18N[PROJECT_LANG] || _I18N.JP)['ch-add-tag']}</button>`
+           title="タグを追加">＋</button>`
       : '';
 
-    // A second row, only when there is something to put on it. Meta on the name row is what made
-    // the row overflow in the first place.
-    const meta = (agentPills || routePills || tagChips || addTag)
-      ? `<div class="ch-meta">${agentPills}${routePills}${tagChips}${addTag}</div>`
+    const meta = (agentPills || routePills || tagSection || addTag)
+      ? `<div class="ch-meta">${agentPills}${routePills}${tagSection}${addTag}</div>`
       : '';
 
     const plusBtn = canInteract
