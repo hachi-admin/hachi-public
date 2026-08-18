@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '5';
+const DASH_BUILD = '6';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -52,7 +52,9 @@ function _renderUserPill() {
     avatarEl.style.display = '';
     nameEl.style.display = 'none';
     const pillBtn = document.getElementById('user-pill');
-    if (pillBtn) { pillBtn.style.padding = '3px'; pillBtn.style.borderRadius = '50%'; pillBtn.style.width = '36px'; pillBtn.style.height = '36px'; }
+    // Sizing lives in the stylesheet. These inline overrides fought it: the button became a
+    // 36px circle while the image kept its own box, so the photo read as a rounded square.
+    if (pillBtn) pillBtn.classList.add('has-avatar');
   } else {
     nameEl.textContent = p.name || p.sub || '—';
   }
@@ -558,10 +560,80 @@ function agentPalette(category, level = 1) {
   ];
 }
 
-/** Rendered size in CSS pixels. A level 5 avatar is nearly twice a level 1; the grid resolution
- *  is independent of this, which is what lets the art get finer without changing the layout. */
-function agentPx(level = 1) {
-  return [40, 48, 56, 64, 72][Math.min(5, Math.max(1, Number(level) || 1)) - 1];
+/** One size for every agent. Level is expressed in the drawing, not in the box — a card grid with
+ *  seven different avatar sizes reads as inconsistent rendering rather than as a hierarchy. */
+const AVATAR_PX = 64;
+
+/**
+ * Redraw a family's art for one specific agent.
+ *
+ * Two problems this solves. Thirty-five agents share fifteen drawings — `detective` alone covers
+ * five — so two cards could be identical but for their names. And permission was expressed as
+ * size, which made a level 1 agent look like a rendering mistake beside a level 5.
+ *
+ * Level now drives how complete the drawing is:
+ *
+ *   L1  two tones. The silhouette, nothing else.
+ *   L2  + highlight.
+ *   L3  the art as authored.
+ *   L4  + a rim, so the figure reads as lit from its own side.
+ *   L5  + a crest above it. Only the agents that can change code and infrastructure wear one.
+ *
+ * The distinguisher is a 3×3 mark in the lower right, chosen deterministically from the agent id,
+ * so two agents sharing a family are never the same image while still reading as relatives.
+ */
+const _MARKS = [
+  [[0,2,0],[2,2,2],[0,2,0]],   // diamond
+  [[2,0,2],[0,2,0],[2,0,2]],   // cross-hatch
+  [[2,2,2],[2,0,2],[2,2,2]],   // ring
+  [[0,0,2],[0,2,2],[2,2,2]],   // wedge
+  [[2,2,0],[2,2,0],[0,0,2]],   // block + dot
+  [[2,0,0],[0,2,0],[0,0,2]],   // slash
+  [[0,2,0],[2,0,2],[0,2,0]],   // lozenge
+  [[2,2,2],[0,2,0],[0,2,0]],   // pin
+];
+
+function _hash(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+
+function agentArt(family, agentId, level = 1, sharedFamily = true) {
+  const base = AVATARS[family];
+  if (!base?.length) return base;
+  const lv = Math.min(5, Math.max(1, Number(level) || 1));
+  const n = base.length;
+  const g = base.map((row) => [...row]);
+
+  // Completeness. Flattening tones is what makes a low level look like less of a thing without
+  // making it look broken.
+  if (lv === 1) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { if (g[y][x] === 2 || g[y][x] === 3) g[y][x] = 1; }
+  else if (lv === 2) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { if (g[y][x] === 3) g[y][x] = 2; }
+
+  // L4+: a rim on the empty cells that touch the figure's left edge.
+  if (lv >= 4) {
+    for (let y = 0; y < n; y++) for (let x = 1; x < n; x++) {
+      if (g[y][x] === 0 && g[y][x - 1] !== 0 && g[y][x - 1] !== 3) g[y][x] = 3;
+    }
+  }
+  // L5: a crest, drawn only where there is room so it never collides with the art.
+  if (lv >= 5) {
+    const mid = Math.floor(n / 2);
+    for (const [dy, dx] of [[0, mid - 1], [0, mid], [1, mid - 2], [1, mid + 1]]) {
+      if (g[dy]?.[dx] === 0) g[dy][dx] = 2;
+    }
+  }
+
+  // The distinguisher, only where a family is actually shared.
+  if (sharedFamily && agentId) {
+    const mark = _MARKS[_hash(agentId) % _MARKS.length];
+    const oy = n - 4, ox = n - 4;
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+      if (mark[y][x] && g[oy + y]?.[ox + x] === 0) g[oy + y][ox + x] = mark[y][x];
+    }
+  }
+  return g;
 }
 
 /* Size-agnostic: the grid states its own resolution. Avatars were 8x8, which was fine at 40px and
@@ -612,16 +684,19 @@ function _renderAgentStatsBox() {
   const enabled = Object.values(DETAIL_DATA).filter(d => d.enabled !== false).length;
   const pending = (TASK_STATS.upcoming || []).length;
   const t = _I18N[PROJECT_LANG] || _I18N.JP;
+  // One strip, at the top, answering "what is this system doing right now". The four task-state
+  // cards used to sit at the bottom of the same page saying half of it, so the answer was split
+  // across a scroll. The task states are clickable; the roster counts are not.
+  const bs = ALL_BY_STATUS || {};
+  const n = (k) => (bs[k] || []).length;
   document.getElementById('agent-stats-box').innerHTML = `
     <div class="asb-stat"><div class="asb-val" data-count="${REGISTRY.length}">0</div><div class="asb-label">${t['stat-agents']}</div></div>
-    <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val${running ? ' run' : ''}" data-count="${running}">0</div><div class="asb-label">${t['stat-running']}</div></div>
-    <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val${failed ? ' fail' : ''}" data-count="${failed}">0</div><div class="asb-label">${t['stat-failed']}</div></div>
-    <div class="asb-sep"></div>
     <div class="asb-stat"><div class="asb-val" data-count="${enabled}">0</div><div class="asb-label">${t['stat-enabled']}</div></div>
     <div class="asb-sep"></div>
-    <div class="asb-stat"><div class="asb-val" data-count="${pending}">0</div><div class="asb-label">${t['stat-pending']}</div></div>
+    <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('pending')"><div class="asb-val" data-count="${n('pending')}">0</div><div class="asb-label">${t['kpi-pending']}</div></div>
+    <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('running')"><div class="asb-val${n('running') ? ' run' : ''}" data-count="${n('running')}">0</div><div class="asb-label">${t['kpi-running']}</div></div>
+    <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('completed')"><div class="asb-val" data-count="${n('completed')}">0</div><div class="asb-label">${t['kpi-completed']}</div></div>
+    <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('failed')"><div class="asb-val${n('failed') ? ' fail' : ''}" data-count="${n('failed')}">0</div><div class="asb-label">${t['kpi-failed']}</div></div>
   `;
 }
 
@@ -655,6 +730,9 @@ function _renderAgentGrid() {
     || (TYPE_ORDER.indexOf(a.category) + 1 || 99) - (TYPE_ORDER.indexOf(b.category) + 1 || 99)
     || String(a.name).localeCompare(String(b.name)));
 
+  // A family used by one agent needs no distinguishing mark; adding one anyway would be noise.
+  const famCount = REGISTRY.reduce((m, r) => (m[r.avatar] = (m[r.avatar] || 0) + 1, m), {});
+
   grid.innerHTML = sorted.map(reg => {
     const d = DETAIL_DATA[reg.id] || {};
     const status = d.status || 'idle';
@@ -679,17 +757,18 @@ function _renderAgentGrid() {
       aria-label="${esc(reg.name)} の詳細を開く"
       data-agent="${reg.id}" data-avatar="${reg.avatar || ''}"
       data-colors="${agentPalette(reg.category, lv).join('|')}"
-      data-px="${agentPx(lv)}"
+      data-shared="${(famCount[reg.avatar] || 1) > 1 ? 1 : 0}"
       data-category="${reg.category || ''}" data-level="${reg.level || 1}"
       data-trigger="${trig}" data-name="${esc(reg.name)}"
       data-tools="${esc((reg.tools || []).join(','))}"
       data-spark="${spark}" data-tokens="${d.tokensUsed || 0}"
       data-anim="${status}" onclick="openDetail('${reg.id}')">
+      <span class="acard-trig" title="起動のしかた">${esc(t['trig-' + trig] || trig)}</span>
       <span class="acard-badge" title="${esc(_LEVEL_HINT[lv] || '')}">
         <span class="acard-dot" aria-hidden="true"></span>L${lv}
       </span>
       <div class="acard-face">
-        <canvas class="avatar" width="${agentPx(lv)}" height="${agentPx(lv)}" style="image-rendering:pixelated"></canvas>
+        <canvas class="avatar" width="${AVATAR_PX}" height="${AVATAR_PX}" style="image-rendering:pixelated"></canvas>
       </div>
       <div class="acard-info">
         <div class="acard-name">${esc(displayName)}</div>
@@ -697,7 +776,6 @@ function _renderAgentGrid() {
              the bar measures, not what it costs. These four facts answer "what is this, when does
              it run, how close is it to its ceiling, what is it costing me" without opening it. -->
         <div class="acard-desc">${esc(displayDesc)}</div>
-        <div class="acard-when">${esc(t['trig-' + trig] || trig)}</div>
         <div class="tok-bar-wrap" title="${(d.tokensUsed || 0).toLocaleString()} / ${(d.tokenLimit || 0).toLocaleString()} tokens"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
         <div class="acard-nums">
           <span class="acard-pct"${pct > 80 ? ' data-hot="1"' : ''}>${pct}%</span>
@@ -744,7 +822,9 @@ function _startAvatarAnimations() {
         const initStr = PROJECT_LANG === 'JP' && reg.nameJp ? reg.nameJp.slice(0,1) : (reg.name||'?').slice(0,2).toUpperCase();
         ctx.fillText(initStr, cv.width/2, cv.height/2);
       } else {
-        drawGrid(ctx, AVATARS[card.dataset.avatar], cmap(card.dataset.colors.split('|')), blink);
+        drawGrid(ctx,
+          agentArt(card.dataset.avatar, card.dataset.agent, Number(card.dataset.level) || 1, card.dataset.shared === '1'),
+          cmap(card.dataset.colors.split('|')), blink);
       }
       if (anim === 'running') { const l = Math.floor((e/55)%48); ctx.fillStyle='rgba(0,0,0,.06)'; ctx.fillRect(0,l,48,2); }
       requestAnimationFrame(frame);
@@ -777,26 +857,13 @@ function _applyAgentFilters() {
 /* ═══════════════════════════════════════════════════════════
    OVERVIEW — KPI + COST STRIP
 ══════════════════════════════════════════════════════════════ */
+/* The four task-state cards moved into the top strip (_renderAgentStats), so one glance answers
+   what the system is doing instead of half an answer at the top and half after a scroll. */
+/* The four task-state cards moved into the top strip (_renderAgentStats), so one glance answers
+   what the system is doing rather than half an answer at the top and half after a scroll.
+   The container is removed rather than left empty, so it takes no space. */
 function _renderKpiRow() {
-  const bs = ALL_BY_STATUS || {};
-  const t = _I18N[PROJECT_LANG] || _I18N.JP;
-  const statuses = [
-    { s:'pending',   key:'kpi-pending',   color:'#64748B' },
-    { s:'running',   key:'kpi-running',   color:'#38BDF8' },
-    { s:'completed', key:'kpi-completed', color:'#34D399' },
-    { s:'failed',    key:'kpi-failed',    color:'#EF4444' },
-  ];
-  document.getElementById('kpi-row').innerHTML = statuses.map(({s,key,color}) => {
-    const n = (bs[s] || []).length;
-    // No coloured edge: a stripe on the rim of a neumorphic card fights the material, which
-    // carries meaning through depth rather than paint. The count keeps the semantic colour, and
-    // only while it means something — a red 0 reads as an alarm that is not sounding.
-    return `<div class="kpi" role="button" tabindex="0" aria-label="${esc(s)} のタスクを開く" onclick="openTaskModal('${s}')">
-      <div class="kpi-label">${t[key]}</div>
-      <div class="kpi-value" style="color:${n > 0 ? color : 'var(--m2)'}" data-count="${n}">0</div>
-      <div class="kpi-hint">${t['click-view']}</div>
-    </div>`;
-  }).join('');
+  document.getElementById('kpi-row')?.remove();
 }
 
 function _renderCostStrip() {
@@ -866,7 +933,8 @@ function _renderTaskFeed() {
     const clickable = t.id ? `style="cursor:pointer" onclick="openTaskDetail('${t.id}')"` : '';
     return `<div class="feed-item" ${clickable ? `role="button" tabindex="0" aria-label="タスクの詳細を開く" ${clickable}` : ''}>
       <div class="feed-dot ${t.status}"></div>
-      <div class="feed-text">${esc(t.goal)}
+      <div class="feed-body">
+        <div class="feed-text" title="${esc(t.goal)}">${esc(t.goal)}</div>
         <div class="feed-type"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span>${agentChip(t.type)} ${timeStr}</div>
       </div>${btn}
     </div>`;
@@ -2762,7 +2830,11 @@ function openDetail(id) {
 
   // Draw avatar
   const dc = document.getElementById('detailCanvas');
-  if (dc) drawGrid(dc.getContext('2d'), AVATARS[reg.avatar], cmap(agentPalette(reg.category, reg.level || 1)), false);
+  if (dc) {
+    const shared = REGISTRY.filter((r) => r.avatar === reg.avatar).length > 1;
+    drawGrid(dc.getContext('2d'), agentArt(reg.avatar, reg.id, reg.level || 1, shared),
+      cmap(agentPalette(reg.category, reg.level || 1)), false);
+  }
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -4145,12 +4217,17 @@ function _renderLiveChannels(guild) {
 
     const meta = tagSection;
 
-    // Two bare + buttons on one card could not be told apart. This one is labelled for what it
-    // does — assign an agent — and the tag one lives inside the tag row and says タグ.
-    const plusBtn = canInteract
-      ? `<button class="ch-assign" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)"
-           title="このチャンネルに投稿するエージェントを選ぶ">＋ エージェント</button>`
+    // One button that both names the agents posting here and opens the picker. Two separate
+    // controls — one to see, one to change — is one more than the question needs.
+    const who = agents.map((a) => a.replace('-agent', ''));
+    const agentBtn = canInteract
+      ? `<button class="ch-agents" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)"
+           title="${who.length ? esc(who.join('、')) + ' が投稿します' : 'まだ割り当てなし'}">
+           <i class="ni ni-agents" aria-hidden="true"></i>${
+             who.length ? esc(who.slice(0, 2).join('、')) + (who.length > 2 ? ` +${who.length - 2}` : '')
+                        : 'エージェントなし'}</button>`
       : '';
+    const plusBtn = agentBtn;
 
     return `<div class="${cls}" title="ID: ${esc(ch.id)}">
       <div class="ch-row">
@@ -4171,13 +4248,23 @@ function _renderLiveChannels(guild) {
     const children = guild.channels
       .filter(c => c.parentId === cat.id)
       .sort((a,b) => (a.position||0)-(b.position||0));
+    // What a folder holds, counted rather than described by hand — a category's meaning is the
+    // channels inside it, and those change.
+    const kinds = children.reduce((m, c) => (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text']
+      = (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text'] || 0) + 1, m), {});
+    const regd = children.filter((c) => Object.values(CHANNELS || {}).some((r) => r?.id === c.id)).length;
+    const catDesc = [
+      kinds.text ? `テキスト${kinds.text}` : '', kinds.forum ? `フォーラム${kinds.forum}` : '',
+      kinds.voice ? `ボイス${kinds.voice}` : '', regd ? `登録済${regd}` : '',
+    ].filter(Boolean).join(' · ');
+
     sections.push(`
       <div style="margin-bottom:2px">
         <div class="ch-tree-cat" role="button" tabindex="0" aria-expanded="true"
           onclick="this.classList.toggle('collapsed');this.setAttribute('aria-expanded', String(!this.classList.contains('collapsed')));this.nextElementSibling.classList.toggle('hidden')">
           <span class="ch-tree-cat-icon">▾</span>
-          <span>📁 ${esc(cat.name)}</span>
-          <span style="font-size:9px;color:var(--m2);margin-left:auto">${children.length}</span>
+          <span class="ch-cat-name">📁 ${esc(cat.name)}</span>
+          ${catDesc ? `<span class="ch-cat-desc">${esc(catDesc)}</span>` : ''}
         </div>
         <div class="ch-tree-children">${children.map(chItem).join('') || '<div style="font-size:10px;color:var(--m2);padding:4px 8px">Empty</div>'}</div>
       </div>`);

@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=5">
-<link rel="stylesheet" href="dashboard.css?v=5">
+<link rel="stylesheet" href="../shared/neu.css?v=6">
+<link rel="stylesheet" href="dashboard.css?v=6">
 </head>
 <body>
 
@@ -574,35 +574,7 @@
     </div>
 
     <!-- Bot permissions info -->
-    <details style="background:var(--bg);box-shadow:var(--sh-sm);border-radius:12px;padding:12px 14px;margin-bottom:16px">
-      <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--txt);cursor:pointer">
-        Bot の表示範囲 — 必要な Discord 権限
-        <span style="color:var(--m);font-size:10px;font-weight:400">&#9660;</span>
-      </summary>
-      <div style="margin-top:10px;font-size:11px;color:var(--m);line-height:1.7">
-        <strong style="color:var(--txt)">問題:</strong> Bot はロールがアクセスできるチャンネルのみ表示されます。<br>
-        <strong style="color:var(--txt)">解決方法:</strong>
-        <ol style="margin:4px 0 8px 16px">
-          <li>サーバー設定 &#8594; ロール &#8594; 「Bot」ロールを作成</li>
-          <li>有効化: View Channels, Read Message History, Send Messages, Send in Threads, Embed Links, Manage Channels, Manage Messages</li>
-          <li>サーバーメンバーで Bot にこのロールを割り当て</li>
-          <li>プライベートチャンネルの場合: そのチャンネルの権限オーバーライドに Bot ロールを追加</li>
-        </ol>
-        <strong style="color:var(--txt)">必要な権限 (integer: 3271745):</strong>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">View Channels</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Read Message History</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Send Messages</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Send in Threads</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Create Threads</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Embed Links</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Attach Files</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Add Reactions</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Manage Channels</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">Manage Messages</span>
-        </div>
-      </div>
-    </details>
+    
 
     <!-- Guild picker (populated after fetch) -->
     <div id="guild-picker" style="display:none;margin-bottom:12px">
@@ -787,7 +759,7 @@
 ════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
-<script src="../shared/ui.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="../shared/ui.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
