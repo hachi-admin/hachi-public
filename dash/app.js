@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '9';
+const DASH_BUILD = '10';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1937,27 +1937,43 @@ function _renderFactChecks() {
     const c = fc.counts || {};
     const verdicts = fc.verdicts || [];
     const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
-    return { fc, bad: c.unsupported || 0, soft: c.partial || 0, total: verdicts.length, issues };
+    const rem = fc.remediation || null;
+    // A finding the system already corrected on the wiki is finished. Leaving it in the
+    // needs-attention list would train you to ignore the list, which is the failure mode this
+    // panel was rebuilt to avoid.
+    const handled = rem?.action === 'corrected' || rem?.action === 'none';
+    return { fc, rem, handled, bad: c.unsupported || 0, soft: c.partial || 0, total: verdicts.length, issues };
   });
 
-  const actionable = scored.filter((r) => r.bad > 0 || r.soft > 0);
+  const actionable = scored.filter((r) => !r.handled && (r.bad > 0 || r.soft > 0));
+  const corrected = scored.filter((r) => r.handled && r.bad > 0);
   const clean = scored.filter((r) => r.bad === 0 && r.soft === 0);
 
   if (!actionable.length) {
+    const sub = corrected.length
+      ? `${corrected.length}日分は自動で訂正済み。残り${clean.length}日分は指摘なし。`
+      : `直近${clean.length}日分、全ブロックが出典と一致しました。`;
     el.innerHTML = `<div class="fc-allclear">
       <span class="fc-ac-pip"></span>
       <div>
         <div class="fc-ac-head">対応が必要な指摘はありません</div>
-        <div class="fc-ac-sub">直近${clean.length}日分、全ブロックが出典と一致しました。</div>
+        <div class="fc-ac-sub">${esc(sub)}</div>
       </div>
     </div>`;
     return;
   }
 
-  const rows = actionable.map(({ fc, bad, soft, total, issues }) => {
-    const state = bad > 0
-      ? { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '記事を修正するか取り下げてください' }
-      : { cls: 'warn', head: `${soft}件が裏づけ不足`, act: '見出しの言い過ぎを確認してください' };
+  const rows = actionable.map(({ fc, rem, bad, soft, total, issues }) => {
+    // What the system did about it, so the row says why it is still here.
+    const ACT = {
+      approval_requested: { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '承認待ち — #approvals で判断してください' },
+      failed:             { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '自動訂正に失敗しました。手動で修正が必要です' },
+      skipped:            { cls: 'warn', head: `${bad || soft}件の指摘`, act: '公開時の本文がないため自動訂正できません' },
+    };
+    const state = ACT[rem?.action]
+      || (bad > 0
+        ? { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '記事を修正するか取り下げてください' }
+        : { cls: 'warn', head: `${soft}件が裏づけ不足`, act: '見出しの言い過ぎを確認してください' });
 
     return `<details class="fc-row ${state.cls}"${bad > 0 ? ' open' : ''}>
       <summary class="fc-sum">
@@ -1981,10 +1997,14 @@ function _renderFactChecks() {
 
   // The clean days still get acknowledged, so an empty-looking panel is never ambiguous about
   // whether the check ran at all.
+  // Corrections that went through are worth one line — not to be acted on, but so it is visible
+  // that the system found something and dealt with it.
+  const correctedNote = corrected.length
+    ? `<div class="fc-clean-note">${corrected.length}日分は自動で訂正済み</div>` : '';
   const cleanNote = clean.length
     ? `<div class="fc-clean-note">他${clean.length}日分は指摘なし</div>` : '';
 
-  el.innerHTML = rows + cleanNote;
+  el.innerHTML = rows + correctedNote + cleanNote;
 }
 
 /* ═══════════════════════════════════════════════════════════
