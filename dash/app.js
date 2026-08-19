@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '11';
+const DASH_BUILD = '12';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4208,6 +4208,34 @@ function _markdownToHtml(md) {
     const hm = line.match(/^(#{1,6}) (.+)$/);
     if (hm) { flush(); out.push(`<h${hm[1].length}>${_inline(hm[2])}</h${hm[1].length}>`); continue; }
 
+    /* Tables.
+       A pipe row followed by a separator row (|---|---|). Without this the pipes survived
+       escaping and rendered as literal `| A | B |` lines inside a paragraph — so every table in
+       every document looked like a mistake. Detected here rather than in _inline because a table
+       spans lines, and consumed in one go so the row loop never sees its body. */
+    if (line.includes('|') && /^\s*\|?[\s:-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1] ?? '')) {
+      const cells = (row) => row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+      // Alignment comes from the separator row's colons, the one piece of formatting a markdown
+      // table carries that a reader actually notices — numbers right, labels left.
+      const align = cells(lines[i + 1]).map((c) => (
+        /^:.*:$/.test(c) ? 'center' : /:$/.test(c) ? 'right' : /^:/.test(c) ? 'left' : ''
+      ));
+      const head = cells(line);
+      const body = [];
+      let j = i + 2;
+      for (; j < lines.length && lines[j].includes('|') && lines[j].trim(); j++) body.push(cells(lines[j]));
+
+      flush();
+      const th = head.map((c, n) => `<th${align[n] ? ` style="text-align:${align[n]}"` : ''}>${_inline(c)}</th>`).join('');
+      const rows = body.map((r) =>
+        `<tr>${r.map((c, n) => `<td${align[n] ? ` style="text-align:${align[n]}"` : ''}>${_inline(c)}</td>`).join('')}</tr>`
+      ).join('');
+      // Wide tables scroll inside their own container so the page body never scrolls sideways.
+      out.push(`<div class="md-table-wrap"><table class="md-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`);
+      i = j - 1;
+      continue;
+    }
+
     // Blockquote — group consecutive > lines into one <blockquote>
     const bq = line.match(/^&gt; ?(.*)$/);
     if (bq) {
@@ -4273,6 +4301,9 @@ function _inline(text) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Images before links: ![alt](src) also matches the link pattern, so links first would turn
+    // every image into a link with a stray leading "!".
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 

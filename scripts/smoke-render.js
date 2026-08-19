@@ -43,7 +43,7 @@ const sandbox = {
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline'];
 
 let code = '';
 let missing = 0;
@@ -120,6 +120,34 @@ run('_tagSuggestions excludes existing', () => {
   const out = api._tagSuggestions({ id:'c1', name:'bug-reports', availableTags:[{name:'緊急'}] }, [], ['log_monitor']);
   if (out.some(t => t.name === '緊急')) throw new Error('suggested a tag the channel already has');
   return out.map(t => t.name).join(' ');
+});
+// The docs renderer had no table or image support; documents using them rendered as literal
+// pipes and stray "!". These assert the output actually contains the elements.
+run('_markdownToHtml table',   () => {
+  const out = api._markdownToHtml('# H\n\n| 種類 | 説明 |\n|---|---:|\n| A | 1 |\n| B | 2 |\n\nafter');
+  if (!/<table class="md-table">/.test(out)) throw new Error('no table element');
+  if (!/<th[^>]*>種類<\/th>/.test(out)) throw new Error('header cell missing');
+  if (!/text-align:right/.test(out)) throw new Error('alignment from separator row ignored');
+  if (/\|/.test(out.replace(/<[^>]+>/g, ''))) throw new Error('raw pipes leaked into the text');
+  if (!/after/.test(out)) throw new Error('content after the table was swallowed');
+  return 'ok';
+});
+run('_markdownToHtml no table', () => {
+  // A lone pipe in prose must not be mistaken for a table.
+  const out = api._markdownToHtml('a | b is not a table');
+  if (/<table/.test(out)) throw new Error('false positive table');
+  return 'ok';
+});
+run('_inline image',           () => {
+  const out = api._inline('![hero](https://x/y.png)');
+  if (!/<img src="https:\/\/x\/y.png" alt="hero"/.test(out)) throw new Error('image not rendered');
+  if (/<a /.test(out)) throw new Error('image was turned into a link');
+  return 'ok';
+});
+run('_inline link still works', () => {
+  const out = api._inline('[t](https://x)');
+  if (!/<a href="https:\/\/x"/.test(out)) throw new Error('link broken');
+  return 'ok';
 });
 run('_tagVocabFor unknown channel', () => {
   const out = api._tagVocabFor({ name:'random-channel' }, [], []);
