@@ -30,6 +30,7 @@ const el = () => ({ set innerHTML(v) { store.last = v; }, get innerHTML() { retu
 const sandbox = {
   esc, document:{ getElementById: () => el(), querySelectorAll: () => [], querySelector: () => null },
   window:{}, console, relTime:(d)=>'3分前', fmtDate:(d)=>'08-19', _catDate:(d)=>'08-19',
+  _wikiSelectMode:false, _wikiSelected:new Set(),
   PROJECT_LANG:'JP', _I18N:{ JP:{ 'empty-factchecks':'なし','empty-sources':'なし','empty-blocked':'なし' } },
   CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], COSTS:{}, REGISTRY:[],
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
@@ -37,7 +38,7 @@ const sandbox = {
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard'];
 
 let code = '';
 let missing = 0;
@@ -78,6 +79,9 @@ run('_renderFactChecks bad',   () => { sandbox.window._factChecks = [{id:'2026-0
 run('_buildSourceRows',        () => api._buildSourceRows([{id:'s1',name:'ITmedia AI+',type:'rss',domain:'news',url:'https://www.itmedia.co.jp/news/rss.xml',enabled:true},{id:'s2',name:'停止中ソース',type:'url',domain:'web',url:'not a url',enabled:false}]));
 run('_buildSourceRows empty',  () => api._buildSourceRows([]));
 run('_buildArticleRows empty', () => api._buildArticleRows());
+run('_wikiCard full',          () => api._wikiCard({ slug:'ai-agents', title:'AIエージェントの設計', category:'技術', summary:'エージェントの責務分割について。', concepts:['責務分割','権限'], updatedAt:new Date().toISOString() }));
+// Older pages predate the summary field; the card must degrade rather than render a blank block.
+run('_wikiCard no summary',    () => api._wikiCard({ slug:'old', title:'古いページ' }));
 
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);

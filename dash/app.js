@@ -3577,6 +3577,38 @@ function _wikiSearchInput(q) {
 // keep old name working for any existing callers
 function filterWikiPages(q) { _wikiSearchInput(q); }
 
+/* A wiki page card, note.com's homepage shape: title, an excerpt of the actual writing, and the
+   concepts it covers. The tree only ever showed titles, which made the wiki a filing cabinet —
+   you had to open a page to find out whether it was the one you wanted. */
+function _wikiCard(p) {
+  const selAttr = _wikiSelectMode ? `data-wiki-sel="${esc(p.slug)}"` : '';
+  const selBox = _wikiSelectMode
+    ? `<input type="checkbox" class="wiki-sel-cb" ${_wikiSelected.has(p.slug) ? 'checked' : ''}
+         onclick="event.stopPropagation();_wikiToggleSel('${esc(p.slug)}')">`
+    : '';
+  const concepts = (p.concepts || []).slice(0, 3)
+    .map((c) => `<span class="wc-tag">${esc(c)}</span>`).join('');
+  // No summary is the honest case for older pages — say so rather than leaving a blank block,
+  // which reads as a loading failure.
+  const body = p.summary
+    ? `<div class="wc-sum">${esc(p.summary)}</div>`
+    : `<div class="wc-sum wc-empty">要約なし</div>`;
+
+  return `<button class="wiki-card${_wikiSelected.has(p.slug) ? ' wiki-sel-active' : ''}" ${selAttr}
+      onclick="loadWikiPage(this,'${esc(p.slug)}','${esc(p.title)}')">
+    ${selBox}
+    <div class="wc-head">
+      <span class="wc-title">${esc(p.title)}</span>
+      ${p.category ? `<span class="wc-cat">${esc(p.category)}</span>` : ''}
+    </div>
+    ${body}
+    <div class="wc-foot">
+      ${concepts}
+      ${p.updatedAt ? `<span class="wc-date">${esc(relTime(p.updatedAt))}</span>` : ''}
+    </div>
+  </button>`;
+}
+
 function _wikiItemBtn(id, label, badge, isFile) {
   const selAttr = _wikiSelectMode ? `data-wiki-sel="${esc(id)}"` : '';
   const checked = _wikiSelected.has(id) ? 'checked' : '';
@@ -3627,20 +3659,27 @@ function _renderWikiTree(pages) {
   }
 
   if (_wikiQuery) {
-    treeEl.innerHTML = `<div class="wiki-count">${pages.length}${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-results-label']}</div>` +
-      pages.map(p => _wikiItemBtn(p.slug, p.title, p.category, false)).join('');
+    treeEl.innerHTML = `<div class="wiki-count">${pages.length}${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-results-label']}</div>`
+      + `<div class="wiki-col">${pages.map(_wikiCard).join('')}</div>`;
   } else {
-    const recent = pages.slice(0, 10);
+    const recent = pages.slice(0, 12);
     const groups = {};
     for (const p of pages) { const c = p.category||'General'; (groups[c]||(groups[c]=[])).push(p); }
     const catCount = Object.keys(groups).length;
     const _wt=_I18N[PROJECT_LANG]||_I18N.JP;
+    /* Recent pages scroll sideways, the way note's homepage puts its newest work in a rail: the
+       most recent handful is what you actually came for, and a rail shows more of them in the
+       height a stacked list spends on three. Categories below stay vertical, in two columns on a
+       wide screen, because those are browsed rather than skimmed. */
     treeEl.innerHTML =
       `<div class="wiki-count">${pages.length} ${_wt['wiki-pages-label']} · ${catCount} ${_wt['wiki-cats-label']}</div>` +
-      `<div class="docs-section"><div class="docs-section-label">${_wt['wiki-recent-label']}</div>${recent.map(p=>_wikiItemBtn(p.slug,p.title,p.category,false)).join('')}</div>` +
+      `<div class="docs-section">
+         <div class="docs-section-label">${_wt['wiki-recent-label']}</div>
+         <div class="wiki-rail">${recent.map(_wikiCard).join('')}</div>
+       </div>` +
       Object.entries(groups).map(([cat,ps])=>`<details class="wiki-cat-group">
         <summary class="docs-section-label wiki-cat-summary">${esc(cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
-        ${ps.map(p=>_wikiItemBtn(p.slug,p.title,'',false)).join('')}
+        <div class="wiki-col">${ps.map(_wikiCard).join('')}</div>
       </details>`).join('');
   }
   if (fab) treeEl.appendChild(fab);
