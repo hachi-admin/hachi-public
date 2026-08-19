@@ -320,7 +320,8 @@
     <div class="settings-layout">
       <!-- Sidebar navigation -->
       <nav class="settings-nav" id="settings-nav">
-        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">一般</button>
+        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'overview')">概要</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'general')">一般</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI プロバイダー</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">メール</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">管理</button>
@@ -329,8 +330,25 @@
       <!-- Content panel -->
       <div class="settings-panel">
 
+        <!-- OVERVIEW — what the configuration currently *is*, and whether the things it depends
+             on are actually working. The page opened onto a wall of controls grouped by
+             subsystem, which answers "what can I change" and never answers "what is set right
+             now" or "is anything broken" — so there was no reason to open it. -->
+        <div class="settings-section active" id="ss-overview">
+          <div class="section-hd" style="margin-top:0">現在の設定</div>
+          <div id="settings-summary" class="set-summary"></div>
+
+          <div class="section-hd" style="margin-top:22px">接続状況</div>
+          <div style="font-size:10px;color:var(--m2);margin-bottom:10px;line-height:1.5">
+            外部サービスとの接続。ここが切れると、原因が分かりにくい形で機能が止まります。
+          </div>
+          <div id="settings-connections" class="conn-grid">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
+          </div>
+        </div>
+
         <!-- GENERAL -->
-        <div class="settings-section active" id="ss-general">
+        <div class="settings-section" id="ss-general">
           <div class="section-hd" style="margin-top:0">一般設定</div>
           <div class="qs-card" style="flex-direction:column">
             <div class="qs-field">

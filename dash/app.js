@@ -440,7 +440,9 @@ function _initPage(pageId) {
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
-  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
+  // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
+  // only fires when a nav button is clicked.
+  if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
   if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); _renderChannelCtxList(); }
   if (pageId === 'repos') _initReposPage();
 }
@@ -2084,9 +2086,107 @@ function _renderSettings(channels) {
 function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
+  if (id === 'overview') _renderSettingsOverview();
   if (id === 'general') _renderSettingsLocation();
   if (id === 'mail') _loadMailAccounts();
   if (id === 'providers') _loadProviders();
+}
+
+/* ── Settings overview ───────────────────────────────────────
+   The settings page was a wall of controls grouped by subsystem, which answers "what can I
+   change" and never answers "what is set right now" or "is anything broken". Most of the
+   controls are also set-once — IMAP hosts, provider keys, dashboard users — so the page had no
+   reason to be opened twice. This gives it one: the current configuration as sentences you can
+   read, and the state of the connections everything else depends on. */
+function _renderSettingsOverview() {
+  const el = document.getElementById('settings-summary');
+  if (el) {
+    const INTENSITY_LABEL = { thorough: '慎重', balanced: '標準', fast: '高速' };
+    const lines = [
+      ['記事の言語', PROJECT_LANG === 'JP' ? '日本語' : '英語',
+        'ニュース・Wiki・要約の出力言語です。'],
+      ['動作の強度', INTENSITY_LABEL[INTENSITY_MODE] || INTENSITY_MODE,
+        'レビューの厳しさと、承認をどれだけ求めるかが変わります。'],
+      ['モデル', FORCE_FLASH ? '全エージェントで Flash（節約モード）' : 'エージェントごとの既定モデル',
+        FORCE_FLASH ? '安く速くなりますが、生成物の質は下がります。' : ''],
+      ['AI プロバイダー', ACTIVE_PROVIDER || 'gemini', ''],
+    ];
+    el.innerHTML = lines.map(([label, value, note]) => `<div class="set-line">
+      <div class="set-label">${esc(label)}</div>
+      <div class="set-value">${esc(value)}</div>
+      ${note ? `<div class="set-note">${esc(note)}</div>` : ''}
+    </div>`).join('');
+  }
+  _loadConnections();
+}
+
+/* Connection health. These are the failures that present as something unrelated: mail stops
+   being read, or every article fails, and the cause is an expired token three layers away. */
+async function _loadConnections() {
+  const box = document.getElementById('settings-connections');
+  if (!box) return;
+
+  const row = (name, state, detail, hint) => `<div class="conn-row ${state}">
+    <span class="conn-pip"></span>
+    <div class="conn-body">
+      <div class="conn-name">${esc(name)}</div>
+      <div class="conn-detail">${esc(detail)}</div>
+      ${hint ? `<div class="conn-hint">${esc(hint)}</div>` : ''}
+    </div>
+  </div>`;
+
+  const rows = [];
+
+  // AI providers — a missing key on the active provider stops every agent.
+  try {
+    const res = await fetch(apiUrl('/api/project/providers'), { headers: _authHeaders() });
+    const data = await res.json();
+    const active = data.activeProvider || 'gemini';
+    for (const p of (data.providers || [])) {
+      const isActive = p.id === active;
+      rows.push(row(
+        `${p.name || p.id}${isActive ? '（使用中）' : ''}`,
+        p.keyConfigured ? 'ok' : (isActive ? 'bad' : 'idle'),
+        p.keyConfigured ? 'キー設定済み' : 'キー未設定',
+        !p.keyConfigured && isActive ? '使用中のプロバイダーにキーがありません。全エージェントが停止します。' : '',
+      ));
+    }
+  } catch {
+    rows.push(row('AI プロバイダー', 'bad', '状態を取得できませんでした', ''));
+  }
+
+  // Mail — OAuth refresh tokens have expired on a recurring cycle here, and the symptom is
+  // simply that mail silently stops being scanned. Stale scans are called out as such.
+  try {
+    const res = await fetch(apiUrl('/api/mail/accounts'), { headers: _authHeaders() });
+    const { accounts = [] } = await res.json();
+    if (!accounts.length) {
+      rows.push(row('Gmail', 'idle', 'アカウント未登録', ''));
+    } else {
+      for (const a of accounts) {
+        const raw = a.lastScanAt?._seconds ? a.lastScanAt._seconds * 1000 : a.lastScanAt;
+        const ts = raw ? new Date(raw).getTime() : 0;
+        const hours = ts ? (Date.now() - ts) / 3600000 : Infinity;
+        // Twice the configured interval is the point at which "it just has not run yet" stops
+        // being the likely explanation.
+        const limit = Math.max(2, Number(a.intervalHours) || 6) * 2;
+        const stale = hours > limit;
+        rows.push(row(
+          a.email,
+          stale ? 'bad' : 'ok',
+          ts ? `最終スキャン ${relTime(new Date(ts).toISOString())}` : 'スキャン履歴なし',
+          stale ? '想定より長く動いていません。認証の期限切れが疑われます。' : '',
+        ));
+      }
+    }
+  } catch {
+    rows.push(row('Gmail', 'bad', '状態を取得できませんでした', ''));
+  }
+
+  // The dashboard is talking to the API right now, so this one is known by construction.
+  rows.push(row('hachi-core API', 'ok', API_BASE || '接続済み', ''));
+
+  box.innerHTML = rows.join('');
 }
 
 /* ── Mail accounts ─────────────────────────────────────────── */

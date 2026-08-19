@@ -35,12 +35,14 @@ const sandbox = {
   CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], REGISTRY:[],
   COSTS:{ 'article-writer':{ tokensUsed:120000, calls:14, estimatedCost:0.42 } },
   _setText:(id,v)=>{ store[id] = v; },
+  INTENSITY_MODE:'balanced', FORCE_FLASH:false, ACTIVE_PROVIDER:'gemini',
+  _loadConnections:async()=>{},
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview'];
 
 let code = '';
 let missing = 0;
@@ -96,6 +98,9 @@ run('_renderUsageKpis measured',   () => {
 });
 run('_renderUsageKpis failed',     () => { sandbox.window._storageUsage = { ok:false, reason:'no bucket' }; api._renderUsageKpis(); return 'ok'; });
 run('_fmtBytes scales',            () => [0, 512, 4096, 5.2e6, 3.8e9].map(api._fmtBytes).join(' '));
+// _renderSettingsOverview reads module globals and writes through the DOM; it also kicks off
+// _loadConnections, which is stubbed here since the assertion is about the synchronous summary.
+run('_renderSettingsOverview',     () => { api._renderSettingsOverview(); return String(store['settings-summary'] ?? store.last ?? 'ok'); });
 
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);

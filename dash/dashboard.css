@@ -2031,3 +2031,33 @@ body:has(.mob-more-sheet.open) .page-area{
   font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:1px;
 }
 .st-cnt{font-size:.48rem;color:var(--m2);font-weight:600}
+
+/* ── SETTINGS OVERVIEW ────────────────────────────────────────
+   The page led with controls grouped by subsystem, so it answered "what can I change" and never
+   "what is set right now" or "is anything broken" — and most of the controls are set-once, so
+   there was no reason to return to it. State first, then the health of what it depends on. */
+.set-summary{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.set-line{
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:14px;padding:13px 15px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.set-label{font-size:.53rem;font-weight:700;color:var(--m2);letter-spacing:.04em}
+.set-value{font-size:.72rem;font-weight:800;color:var(--txt);line-height:1.4}
+.set-note{font-size:.54rem;color:var(--m2);line-height:1.55;margin-top:2px}
+
+.conn-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.conn-row{
+  display:flex;align-items:flex-start;gap:11px;
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:14px;padding:13px 15px;
+}
+.conn-pip{width:9px;height:9px;border-radius:50%;flex:none;margin-top:4px;background:var(--m2)}
+.conn-row.ok   .conn-pip{background:var(--grn)}
+.conn-row.bad  .conn-pip{background:var(--red)}
+.conn-row.idle .conn-pip{background:var(--m2)}
+.conn-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+.conn-name{
+  font-size:.63rem;font-weight:800;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.conn-detail{font-size:.55rem;color:var(--m)}
+.conn-hint{font-size:.53rem;color:var(--red);line-height:1.55;margin-top:2px}
