@@ -28,3 +28,12 @@ jobs:
       # A dashboard change that ships without a new ?v= is invisible to anyone with a warm cache.
       - name: Asset version bumped
         run: node scripts/check-asset-version.js origin/${{ github.base_ref || 'main' }}
+
+      # `CHANNELS is not defined` took down the whole channels page in production. node --check
+      # cannot see it — an undefined identifier is a scope question, not a syntax one, and it
+      # throws only when that line runs. hachi-core has had this rule since it caught four of the
+      # same class in a single pass; the dashboard not having it is the only reason this shipped.
+      - name: Install lint deps
+        run: npm ci || npm install --no-audit --no-fund
+      - name: ESLint (no-undef)
+        run: npm run lint

@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '7';
+const DASH_BUILD = '8';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4015,7 +4015,7 @@ function _initChannelsPage() {
   _renderRoutingTable(window._routingRows || [], window._discordChannels || []);
 }
 
-function _renderRoutingTable(rows, _channels) {
+function _renderRoutingTable(rows, channels) {
   // Routing is now shown inline in the channel tree — store rows for re-render on guild fetch
   window._routingRows = rows;
   const el = document.getElementById('routing-table');
@@ -4319,7 +4319,10 @@ function _renderLiveChannels(guild) {
     // channels inside it, and those change.
     const kinds = children.reduce((m, c) => (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text']
       = (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text'] || 0) + 1, m), {});
-    const regd = children.filter((c) => Object.values(CHANNELS || {}).some((r) => r?.id === c.id)).length;
+    // registeredChannelMap is the registry lookup this function already builds. An earlier version
+    // referenced a global CHANNELS that does not exist in this scope, which threw a ReferenceError
+    // and took the whole guild fetch down with it — the page reported "Error fetching guilds".
+    const regd = children.filter((c) => registeredChannelMap.has(String(c.id))).length;
     const catDesc = [
       kinds.text ? `テキスト${kinds.text}` : '', kinds.forum ? `フォーラム${kinds.forum}` : '',
       kinds.voice ? `ボイス${kinds.voice}` : '', regd ? `登録済${regd}` : '',

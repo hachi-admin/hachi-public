@@ -1,0 +1,10 @@
+{
+  "name": "hachi-public",
+  "private": true,
+  "scripts": {
+    "lint": "eslint dash/ shared/ scripts/"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5"
+  }
+}
