@@ -697,6 +697,17 @@ const ROUTINE_TYPES = new Set([
   'log_monitor', 'feed_health_check', 'cost_report', 'mail_check', 'db_audit', 'system_audit',
   'wiki_lint', 'note_stats', 'infer_location', 'repo_audit', 'materialize_dashboard_prefs',
 ]);
+/* Japanese labels for task types. The raw type is a code identifier — "materialize dashboard
+   prefs" tells you nothing about what ran or whether it mattered. */
+const TASK_TYPE_LABELS = {
+  log_monitor: 'ログ監視', feed_health_check: 'フィード健全性', cost_report: 'コスト集計',
+  mail_check: 'メール確認', db_audit: 'DB監査', system_audit: 'システム監査',
+  wiki_lint: 'Wiki校正', note_stats: 'note統計', infer_location: '位置推定',
+  repo_audit: 'リポジトリ監査', materialize_dashboard_prefs: 'ダッシュボード設定反映',
+  note_study: 'note研究', scout: '調査', ingest: '取り込み', develop: '開発',
+  review: 'レビュー', content: '記事作成', plan: '計画',
+};
+
 const isRoutine = (t) => ROUTINE_TYPES.has(t.type) || /^(log_monitor|cost_report|mail_check|note_stats|feed_health)_/.test(String(t.id || ''));
 
 /* ═══════════════════════════════════════════════════════════
@@ -982,9 +993,79 @@ function _renderTaskFeed() {
          ${rows.map(row).join('')}
        </div>` : '';
 
+  const needsAction = [...oneOff, ...brokenRoutine];
   el.innerHTML =
-    group('対応が必要かもしれない', [...oneOff, ...brokenRoutine], '依頼されたタスクと、失敗した定常タスク')
-    + group('定常タスク', quietRoutine, '決まった時間に自動で走るもの。正常なら読む必要はありません');
+    _taskSummary(needsAction, quietRoutine)
+    + group('対応が必要かもしれない', needsAction, '依頼されたタスクと、失敗した定常タスク')
+    + _routineGrid(quietRoutine);
+}
+
+/* The summary answers the one question the feed never did: is there anything for me to do?
+   Reading that off a list meant counting rows and checking each dot. It is stated instead. */
+function _taskSummary(needsAction, quietRoutine) {
+  const failed = needsAction.filter((t) => t.status === 'failed').length;
+  const running = needsAction.filter((t) => t.status === 'running').length;
+  const pending = needsAction.filter((t) => t.status === 'pending').length;
+  const done = needsAction.filter((t) => t.status === 'completed').length;
+
+  // Tone follows the worst thing present, not the total: one failure outranks twenty successes.
+  const tone = failed ? 'bad' : (running || pending) ? 'busy' : 'ok';
+  const headline = failed
+    ? `${failed}件が失敗しています`
+    : running ? `${running}件を実行中`
+    : pending ? `${pending}件が順番待ち`
+    : '対応が必要なものはありません';
+
+  const parts = [
+    failed && `<span class="ts-part bad">失敗 ${failed}</span>`,
+    running && `<span class="ts-part busy">実行中 ${running}</span>`,
+    pending && `<span class="ts-part">待機 ${pending}</span>`,
+    done && `<span class="ts-part ok">完了 ${done}</span>`,
+    quietRoutine.length && `<span class="ts-part quiet">定常 ${quietRoutine.length}（正常）</span>`,
+  ].filter(Boolean).join('');
+
+  const note = failed
+    ? '下の一覧から該当タスクを開くと、失敗した理由と再実行ボタンがあります。'
+    : tone === 'ok' ? '定常タスクは正常に動いています。読む必要はありません。' : '';
+
+  return `<div class="task-summary ${tone}">
+    <div class="ts-head"><span class="ts-pip"></span>${esc(headline)}</div>
+    <div class="ts-parts">${parts}</div>
+    ${note ? `<div class="ts-note">${note}</div>` : ''}
+  </div>`;
+}
+
+/* Routine work as a grid of one tile per job, not a list of every run.
+   A list of forty identical "cost report completed" rows carries one bit of information — that
+   nothing is wrong — and spends forty rows saying it. The tile says it once per job, and shows
+   the thing a list buried: when it last ran, and whether it has been failing. */
+function _routineGrid(rows) {
+  if (!rows.length) return '';
+  const byType = new Map();
+  for (const t of rows) {
+    const k = t.type || 'unknown';
+    if (!byType.has(k)) byType.set(k, []);
+    byType.get(k).push(t);
+  }
+
+  const tiles = [...byType.entries()].map(([type, runs]) => {
+    // Runs arrive newest-first from the feed; the head is the latest.
+    const latest = runs[0];
+    const label = TASK_TYPE_LABELS[type] || type.replace(/_/g, ' ');
+    const st = latest.status === 'completed' ? 'ok' : latest.status;
+    return `<button class="rt-tile ${st}" onclick="openTaskDetail('${esc(latest.id || '')}')"
+              aria-label="${esc(label)} — 最終実行 ${esc(relTime(latest.updatedAt))}">
+      <div class="rt-top"><span class="rt-dot ${latest.status}"></span><span class="rt-n">${runs.length}</span></div>
+      <div class="rt-name">${esc(label)}</div>
+      <div class="rt-when">${esc(relTime(latest.updatedAt))}</div>
+    </button>`;
+  }).join('');
+
+  return `<div class="feed-group">
+    <div class="feed-group-hd"><span>定常タスク</span><span class="feed-group-n">${byType.size}</span></div>
+    <div class="feed-group-hint">決まった時間に自動で走るもの。タップすると最新の実行結果を開きます。</div>
+    <div class="rt-grid">${tiles}</div>
+  </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1051,10 +1132,21 @@ function _renderTopics() {
   // inside each other's clearance — the crowding was the shadows overlapping, not the labels.
   const toolbar = `<div class="qs-card cat-toolbar">
     <div class="cat-toolbar-actions">
-      <button class="save-btn" onclick="scoutTopicsNow()">カテゴリを探す</button>
-      <button class="save-btn" onclick="showArticleFromUrl()">URLから書く</button>
+      <button class="act-card" onclick="scoutTopicsNow()">
+        <span class="ac-ico"><i class="ni ni-sources" aria-hidden="true"></i></span>
+        <span class="ac-txt">
+          <span class="ac-title">カテゴリを探す</span>
+          <span class="ac-desc">note のトレンドを調べ、続けて書けるテーマを提案します。承認するとそのテーマで定期的に記事が生成されます。</span>
+        </span>
+      </button>
+      <button class="act-card" onclick="showArticleFromUrl()">
+        <span class="ac-ico"><i class="ni ni-articles" aria-hidden="true"></i></span>
+        <span class="ac-txt">
+          <span class="ac-title">URLから書く</span>
+          <span class="ac-desc">記事や動画の URL を渡すと、その内容を踏まえた考察記事を1本だけ書きます。カテゴリには属しません。</span>
+        </span>
+      </button>
     </div>
-    <p class="cat-toolbar-note">note.com のトレンドから継続的なカテゴリを提案します</p>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
@@ -1427,6 +1519,16 @@ function _buildExperiment() {
   </div>`;
 }
 
+/* Sources and articles are the same kind of object to manage — a named thing with a handful of
+   attributes and one action — so they now render through the same chip vocabulary instead of each
+   inventing its own inline colours. The article list was the one that read better; this brings the
+   source list to it rather than the other way round. */
+const SRC_CHIP = { rss: 'blue', url: 'purple', news: 'amber', web: 'teal', wiki: 'purple' };
+const srcChip = (text, tone) => `<span class="s-chip${tone ? ' ' + tone : ''}">${esc(String(text))}</span>`;
+// A full URL in a metadata row is unreadable and pushes the useful attributes off the line.
+// The host is the part that identifies the source; the whole URL stays on the link itself.
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u || ''; } };
+
 function _buildArticleRows() {
   if (!CAT_ARTICLES.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">記事がまだありません。</div>`;
   const catName = (id) => CATEGORIES.find(c => c.id === id)?.name || (id ? '(削除済みカテゴリ)' : 'URL考察');
@@ -1436,12 +1538,12 @@ function _buildArticleRows() {
         ? `<a href="${esc(a.wikiUrl)}" target="_blank" rel="noopener" style="color:inherit">${esc(a.title || a.angle || '(無題)')}</a>`
         : esc(a.title || a.angle || '(無題)')}</div>
       <div class="src-meta">
-        <span style="color:#A78BFA">${esc(catName(a.categoryId))}</span>
-        ${a.articleKind ? `<span style="color:#60A5FA">${esc(a.articleKind)}</span>` : ''}
-        ${a.status !== 'published' ? `<span style="color:var(--error)">${esc(a.status)}</span>` : ''}
-        ${a.charCount ? `<span style="color:var(--m)">約${a.charCount.toLocaleString()}字</span>` : ''}
-        ${a.imageCount ? `<span style="color:var(--m)">画像${a.imageCount}（web${a.webImageCount ?? 0}）</span>` : ''}
-        <span style="color:var(--m)">${_catDate(a.publishedAt || a.createdAt)}</span>
+        ${srcChip(catName(a.categoryId), 'purple')}
+        ${a.articleKind ? srcChip(a.articleKind, 'blue') : ''}
+        ${a.status !== 'published' ? srcChip(a.status, 'bad') : ''}
+        ${a.charCount ? srcChip(`約${a.charCount.toLocaleString()}字`) : ''}
+        ${a.imageCount ? srcChip(`画像${a.imageCount}（web${a.webImageCount ?? 0}）`) : ''}
+        ${srcChip(_catDate(a.publishedAt || a.createdAt))}
       </div>
     </div>
     <div class="art-score">${[1, 2, 3, 4, 5].map(n =>
@@ -1667,23 +1769,27 @@ function _renderKnowledge() {
 function _buildSourceRows(sources) {
   if (!sources || !sources.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-sources']}</div>`; }
   return sources.map(s => {
-    const tc = s.type === 'rss' ? '#60A5FA' : s.type === 'url' ? '#A78BFA' : '#34D399';
-    const dc = s.domain === 'news' ? '#FBBF24' : '#2DD4BF';
-    return `<div class="src-row" data-domain="${s.domain}" data-id="${s.id}">
-      <button type="button" class="src-toggle ${s.enabled ? 'on':'off'}" role="switch"
-        aria-checked="${s.enabled ? 'true' : 'false'}"
-        aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
-        onclick="toggleSource('${s.id}',${!s.enabled})"></button>
+    return `<div class="src-row${s.enabled ? '' : ' off'}" data-domain="${s.domain}" data-id="${s.id}">
       <div class="src-body">
-        <div class="src-name">${esc(s.name)}</div>
+        <div class="src-name">
+          <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.name)}</a>
+        </div>
         <div class="src-meta">
-          <span style="color:${tc}">${(s.type||'').toUpperCase()}</span>
-          <span style="color:${dc}">${s.domain}</span>
-          ${s.genre ? `<span style="color:var(--m)">${esc(s.genre)}</span>` : ''}
-          <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--m);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${esc(s.url)}</a>
+          ${srcChip((s.type || '').toUpperCase(), SRC_CHIP[s.type] || '')}
+          ${srcChip(s.domain, SRC_CHIP[s.domain] || '')}
+          ${s.genre ? srcChip(s.genre) : ''}
+          ${srcChip(hostOf(s.url))}
+          ${s.enabled ? '' : srcChip('停止中', 'bad')}
         </div>
       </div>
-      <button class="act-btn cancel" onclick="blockSource('${s.id}')" style="font-size:8px;padding:2px 6px" aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
+      <div class="src-actions">
+        <button type="button" class="src-toggle ${s.enabled ? 'on' : 'off'}" role="switch"
+          aria-checked="${s.enabled ? 'true' : 'false'}"
+          aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
+          onclick="toggleSource('${s.id}',${!s.enabled})"></button>
+        <button class="act-btn cancel" onclick="blockSource('${s.id}')"
+          aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1818,25 +1924,36 @@ function _renderFactChecks() {
     return;
   }
 
-  /* The panel used to open with five symbols — ✓7 ~5 !0 ?0 58% — which required decoding before
-     it could be read, and then said nothing about whether the operator had to do anything. It
-     now leads with the answer to that question, because that is the only reason to look. */
-  el.innerHTML = fcs.map((fc) => {
+  /* Clean reports are not shown as rows.
+     The panel used to render one expandable row per day, most of them saying "everything checked
+     out" — which is the case nobody needs to open. Days with nothing wrong collapse into a single
+     line at the bottom; only days with an unsupported or under-supported block get a row, and that
+     row opens on the block itself rather than on a percentage. */
+  const scored = fcs.map((fc) => {
     const c = fc.counts || {};
     const verdicts = fc.verdicts || [];
-    const total = verdicts.length || 0;
-    const bad = (c.unsupported || 0);
-    const soft = (c.partial || 0);
-    const verPct = total > 0 ? Math.round(((c.verified || 0) / total) * 100) : 0;
+    const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
+    return { fc, bad: c.unsupported || 0, soft: c.partial || 0, total: verdicts.length, issues };
+  });
 
-    // Three states, and each says what it means for the reader.
+  const actionable = scored.filter((r) => r.bad > 0 || r.soft > 0);
+  const clean = scored.filter((r) => r.bad === 0 && r.soft === 0);
+
+  if (!actionable.length) {
+    el.innerHTML = `<div class="fc-allclear">
+      <span class="fc-ac-pip"></span>
+      <div>
+        <div class="fc-ac-head">対応が必要な指摘はありません</div>
+        <div class="fc-ac-sub">直近${clean.length}日分、全ブロックが出典と一致しました。</div>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const rows = actionable.map(({ fc, bad, soft, total, issues }) => {
     const state = bad > 0
       ? { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '記事を修正するか取り下げてください' }
-      : soft > 0
-        ? { cls: 'warn', head: `${soft}件が出典で裏づけ不足`, act: '見出しの言い過ぎを確認してください' }
-        : { cls: 'ok',   head: '全ブロックが裏づけ済み', act: '対応不要' };
-
-    const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
+      : { cls: 'warn', head: `${soft}件が裏づけ不足`, act: '見出しの言い過ぎを確認してください' };
 
     return `<details class="fc-row ${state.cls}"${bad > 0 ? ' open' : ''}>
       <summary class="fc-sum">
@@ -1845,20 +1962,25 @@ function _renderFactChecks() {
           <span class="fc-act">${esc(state.act)}</span>
         </span>
         <span class="fc-meta">
-          <span class="fc-pct">${verPct}%</span>
-          <span class="fc-date">${esc(fc.newsDate || fc.id)} · ${total}件</span>
+          <span class="fc-date">${esc(fc.newsDate || fc.id)} · ${total}件中</span>
         </span>
       </summary>
       <div class="fc-body">
-        ${issues.length ? issues.slice(0, 6).map((v) => `
+        ${issues.slice(0, 6).map((v) => `
           <div class="fc-issue ${v.verdict}">
             <div class="fc-issue-head">${esc((v.headline || '').substring(0, 90))}</div>
             <div class="fc-issue-why">${esc(v.reason || '')}</div>
-          </div>`).join('')
-        : '<div class="fc-clean">すべてのブロックが出典と一致しました。</div>'}
+          </div>`).join('')}
       </div>
     </details>`;
   }).join('');
+
+  // The clean days still get acknowledged, so an empty-looking panel is never ambiguous about
+  // whether the check ran at all.
+  const cleanNote = clean.length
+    ? `<div class="fc-clean-note">他${clean.length}日分は指摘なし</div>` : '';
+
+  el.innerHTML = rows + cleanNote;
 }
 
 /* ═══════════════════════════════════════════════════════════

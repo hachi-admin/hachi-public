@@ -37,3 +37,9 @@ jobs:
         run: npm ci || npm install --no-audit --no-fund
       - name: ESLint (no-undef)
         run: npm run lint
+
+      # no-undef proves the names resolve. It cannot prove the function survives the shapes the
+      # data actually takes — empty lists, failed tasks, a source whose url does not parse. This
+      # runs the render functions against those cases.
+      - name: Render smoke test
+        run: npm run smoke
