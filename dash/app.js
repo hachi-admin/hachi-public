@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '6';
+const DASH_BUILD = '7';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -611,17 +611,26 @@ function agentArt(family, agentId, level = 1, sharedFamily = true) {
   if (lv === 1) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { if (g[y][x] === 2 || g[y][x] === 3) g[y][x] = 1; }
   else if (lv === 2) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { if (g[y][x] === 3) g[y][x] = 2; }
 
-  // L4+: a rim on the empty cells that touch the figure's left edge.
+  // L4: a staff down the right side. An agent that can write to the world outside this system
+  // carries something; a rim alone read as a lighting change rather than as rank.
   if (lv >= 4) {
-    for (let y = 0; y < n; y++) for (let x = 1; x < n; x++) {
-      if (g[y][x] === 0 && g[y][x - 1] !== 0 && g[y][x - 1] !== 3) g[y][x] = 3;
+    const col = n - 2;
+    for (let y = 3; y < n - 1; y++) if (g[y][col] === 0) g[y][col] = 4;
+    for (const [y, x] of [[2, col - 1], [2, col], [2, col + 1], [3, col]]) {
+      if (g[y]?.[x] === 0) g[y][x] = 2;   // the head of the staff
     }
   }
-  // L5: a crest, drawn only where there is room so it never collides with the art.
+  // L5: the staff gains a blade, and a crown sits above the figure. Only the agents that can
+  // change code and infrastructure wear one, so the two levels are told apart at a glance rather
+  // than by reading the badge.
   if (lv >= 5) {
+    const col = n - 2;
+    for (const [y, x] of [[1, col - 1], [1, col], [1, col + 1], [2, col - 2], [2, col + 2], [3, col - 1], [3, col + 1]]) {
+      if (g[y]?.[x] === 0) g[y][x] = 2;
+    }
     const mid = Math.floor(n / 2);
-    for (const [dy, dx] of [[0, mid - 1], [0, mid], [1, mid - 2], [1, mid + 1]]) {
-      if (g[dy]?.[dx] === 0) g[dy][dx] = 2;
+    for (const [y, x] of [[0, mid - 2], [0, mid], [0, mid + 1], [1, mid - 2], [1, mid - 1], [1, mid], [1, mid + 1]]) {
+      if (g[y]?.[x] === 0) g[y][x] = 3;   // crown
     }
   }
 
@@ -669,11 +678,26 @@ function nextRun(freq) {
   return freq;
 }
 
+/* Which agent owns a task. It was only shown for the handful of types that had an explicit
+   mapping, so most rows said nothing — and "whose work is this" is the first question a feed
+   raises. The chip takes the agent's own type colour, so the feed and the roster agree. */
 function agentChip(taskType) {
-  const agentId = TASK_TO_AGENT_ID[taskType]; if (!agentId) return '';
-  const reg = REGISTRY.find(r => r.id === agentId); if (!reg) return '';
-  return `<span class="agent-chip" style="border-color:${reg.colors[0]}66;color:${reg.colors[0]}">⬡ ${esc(reg.name)}</span>`;
+  const agentId = TASK_TO_AGENT_ID[taskType];
+  const reg = agentId ? REGISTRY.find((r) => r.id === agentId) : null;
+  if (!reg) return '';
+  const colour = agentPalette(reg.category, reg.level || 1)[0];
+  return `<span class="agent-chip" style="color:${colour}" title="${esc(reg.name)} が実行">⬡ ${esc(reg.name)}</span>`;
 }
+
+/* Routine work versus everything else.
+   A feed mixing "the 09:00 cost report ran" with "someone asked for an article" makes the second
+   invisible: the recurring jobs are the overwhelming majority and they are, by design, the ones
+   nobody needs to read. Split, not filtered — a routine job that failed still matters. */
+const ROUTINE_TYPES = new Set([
+  'log_monitor', 'feed_health_check', 'cost_report', 'mail_check', 'db_audit', 'system_audit',
+  'wiki_lint', 'note_stats', 'infer_location', 'repo_audit', 'materialize_dashboard_prefs',
+]);
+const isRoutine = (t) => ROUTINE_TYPES.has(t.type) || /^(log_monitor|cost_report|mail_check|note_stats|feed_health)_/.test(String(t.id || ''));
 
 /* ═══════════════════════════════════════════════════════════
    OVERVIEW — AGENT STATS BOX
@@ -690,8 +714,10 @@ function _renderAgentStatsBox() {
   const bs = ALL_BY_STATUS || {};
   const n = (k) => (bs[k] || []).length;
   document.getElementById('agent-stats-box').innerHTML = `
-    <div class="asb-stat"><div class="asb-val" data-count="${REGISTRY.length}">0</div><div class="asb-label">${t['stat-agents']}</div></div>
-    <div class="asb-stat"><div class="asb-val" data-count="${enabled}">0</div><div class="asb-label">${t['stat-enabled']}</div></div>
+    <div class="asb-stat" title="${enabled} / ${REGISTRY.length} 有効"><div class="asb-val" data-count="${REGISTRY.length}">0</div><div class="asb-label">${
+      // Two figures that are the same number whenever nothing is disabled, taking two slots.
+      // One figure, and the disabled count only appears when there is one to report.
+      enabled < REGISTRY.length ? `${t['stat-agents']}（${REGISTRY.length - enabled}停止）` : t['stat-agents']}</div></div>
     <div class="asb-sep"></div>
     <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('pending')"><div class="asb-val" data-count="${n('pending')}">0</div><div class="asb-label">${t['kpi-pending']}</div></div>
     <div class="asb-stat act" role="button" tabindex="0" onclick="openTaskModal('running')"><div class="asb-val${n('running') ? ' run' : ''}" data-count="${n('running')}">0</div><div class="asb-label">${t['kpi-running']}</div></div>
@@ -923,7 +949,8 @@ function _renderTaskFeed() {
     tasks = ALL_BY_STATUS[_taskStatusFilter] || [];
   }
   if (!tasks.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:12px 0">${t['empty-tasks']}</div>`; return; }
-  el.innerHTML = tasks.slice(0, 60).map(t => {
+
+  const row = (t) => {
     const isUpcoming = t.status === 'pending' || t.status === 'running';
     const btn = isUpcoming
       ? (t.id && t.status === 'pending' ? `<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)"><i class="ni ni-close" aria-hidden="true"></i></button>`
@@ -938,7 +965,26 @@ function _renderTaskFeed() {
         <div class="feed-type"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span>${agentChip(t.type)} ${timeStr}</div>
       </div>${btn}
     </div>`;
-  }).join('');
+  };
+
+  const shown = tasks.slice(0, 60);
+  const oneOff = shown.filter((t) => !isRoutine(t));
+  const routine = shown.filter(isRoutine);
+  // Routine failures are promoted out of the routine group: a broken scheduled job is exactly the
+  // thing that hides in a list nobody reads.
+  const brokenRoutine = routine.filter((t) => t.status === 'failed');
+  const quietRoutine = routine.filter((t) => t.status !== 'failed');
+
+  const group = (label, rows, hint) => rows.length
+    ? `<div class="feed-group">
+         <div class="feed-group-hd"><span>${label}</span><span class="feed-group-n">${rows.length}</span></div>
+         ${hint ? `<div class="feed-group-hint">${hint}</div>` : ''}
+         ${rows.map(row).join('')}
+       </div>` : '';
+
+  el.innerHTML =
+    group('対応が必要かもしれない', [...oneOff, ...brokenRoutine], '依頼されたタスクと、失敗した定常タスク')
+    + group('定常タスク', quietRoutine, '決まった時間に自動で走るもの。正常なら読む必要はありません');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1766,29 +1812,50 @@ function _renderInboxList(status) {
 function _renderFactChecks() {
   const el = document.getElementById('factcheck-list'); if (!el) return;
   const fcs = (window._factChecks || []);
-  if (!fcs.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-factchecks']}</div>`; return; }
-  el.innerHTML = fcs.map(fc => {
+  const t = _I18N[PROJECT_LANG] || _I18N.JP;
+  if (!fcs.length) {
+    el.innerHTML = `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-factchecks']}</div>`;
+    return;
+  }
+
+  /* The panel used to open with five symbols — ✓7 ~5 !0 ?0 58% — which required decoding before
+     it could be read, and then said nothing about whether the operator had to do anything. It
+     now leads with the answer to that question, because that is the only reason to look. */
+  el.innerHTML = fcs.map((fc) => {
     const c = fc.counts || {};
-    const total = (fc.verdicts || []).length || 0;
-    const verPct = total > 0 ? Math.round(((c.verified||0)/total)*100) : 0;
-    const hasIssues = (c.unsupported||0) + (c.partial||0) > 0;
-    const dotColor = hasIssues ? '#EF4444' : verPct >= 80 ? '#34D399' : '#FBBF24';
-    return `<details class="fc-row" style="border-left:3px solid ${dotColor}">
-      <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span class="fc-date">${esc(fc.newsDate || fc.id)} — ${total} blocks</span>
-        <span class="fc-verdict">
-          <span style="color:#34D399">✓${c.verified||0}</span>
-          <span style="color:#FBBF24">~${c.partial||0}</span>
-          <span style="color:#EF4444">!${c.unsupported||0}</span>
-          <span style="color:var(--m)">?${c.unverifiable||0}</span>
-          <span style="color:${verPct>=80?'#34D399':verPct>=60?'#FBBF24':'#EF4444'}">${verPct}%</span>
+    const verdicts = fc.verdicts || [];
+    const total = verdicts.length || 0;
+    const bad = (c.unsupported || 0);
+    const soft = (c.partial || 0);
+    const verPct = total > 0 ? Math.round(((c.verified || 0) / total) * 100) : 0;
+
+    // Three states, and each says what it means for the reader.
+    const state = bad > 0
+      ? { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '記事を修正するか取り下げてください' }
+      : soft > 0
+        ? { cls: 'warn', head: `${soft}件が出典で裏づけ不足`, act: '見出しの言い過ぎを確認してください' }
+        : { cls: 'ok',   head: '全ブロックが裏づけ済み', act: '対応不要' };
+
+    const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
+
+    return `<details class="fc-row ${state.cls}"${bad > 0 ? ' open' : ''}>
+      <summary class="fc-sum">
+        <span class="fc-state">
+          <span class="fc-head">${esc(state.head)}</span>
+          <span class="fc-act">${esc(state.act)}</span>
+        </span>
+        <span class="fc-meta">
+          <span class="fc-pct">${verPct}%</span>
+          <span class="fc-date">${esc(fc.newsDate || fc.id)} · ${total}件</span>
         </span>
       </summary>
-      <div style="font-size:10px;margin-top:6px">
-        ${(fc.verdicts||[]).filter(v=>v.verdict==='unsupported'||v.verdict==='partial').slice(0,5).map(v=>`
-          <div style="margin-top:4px;color:var(--txt)">${v.verdict==='unsupported'?'🚨':'⚠️'} ${esc((v.headline||'').substring(0,80))}</div>
-          <div style="color:var(--m);font-style:italic;margin-left:14px">${esc(v.reason)}</div>
-        `).join('') || '<div style="color:var(--m)">All blocks verified.</div>'}
+      <div class="fc-body">
+        ${issues.length ? issues.slice(0, 6).map((v) => `
+          <div class="fc-issue ${v.verdict}">
+            <div class="fc-issue-head">${esc((v.headline || '').substring(0, 90))}</div>
+            <div class="fc-issue-why">${esc(v.reason || '')}</div>
+          </div>`).join('')
+        : '<div class="fc-clean">すべてのブロックが出典と一致しました。</div>'}
       </div>
     </details>`;
   }).join('');

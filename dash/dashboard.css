@@ -1776,3 +1776,59 @@ body:has(.mob-more-sheet.open) .page-area{
 .ch-agents .ni::before{width:13px;height:13px}
 .ch-agents:hover{color:var(--acc)}
 .ch-agents:active{box-shadow:var(--sh-press)}
+
+/* ══════════════════════════════════════════════════════════════
+   FACT CHECK
+══════════════════════════════════════════════════════════════
+   The panel opened with five symbols — ✓7 ~5 !0 ?0 58% — that had to be decoded before they could
+   be read, and once decoded still did not say whether anything needed doing. It now leads with
+   that: what was found, and what the operator should do about it. A row with a contradiction
+   opens itself, because that is the only case where reading further is the point. */
+.fc-row{
+  background:var(--bg);box-shadow:var(--sh-sm);border-radius:14px;
+  padding:13px 15px;margin-bottom:10px;
+}
+.fc-sum{cursor:pointer;list-style:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.fc-sum::-webkit-details-marker{display:none}
+.fc-state{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fc-head{font-size:.76rem;font-weight:700;color:var(--txt);line-height:1.4}
+.fc-act{font-size:.62rem;color:var(--m);line-height:1.5}
+.fc-meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.fc-pct{font-size:.9rem;font-weight:800;font-variant-numeric:tabular-nums;color:var(--m2)}
+.fc-date{font-size:.55rem;color:var(--m2);white-space:nowrap}
+
+/* State lives in the number and the heading, not in a painted edge. */
+.fc-row.bad  .fc-head{color:var(--red)}
+.fc-row.bad  .fc-pct{color:var(--red)}
+.fc-row.warn .fc-pct{color:var(--yel)}
+.fc-row.ok   .fc-pct{color:var(--grn)}
+
+.fc-body{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.fc-issue{background:var(--bg);box-shadow:var(--sh-press);border-radius:12px;padding:10px 12px}
+.fc-issue-head{font-size:.68rem;font-weight:700;color:var(--txt);line-height:1.5}
+.fc-issue-why{font-size:.62rem;color:var(--m);line-height:1.65;margin-top:4px}
+.fc-issue.unsupported .fc-issue-head{color:var(--red)}
+.fc-clean{font-size:.65rem;color:var(--m)}
+
+/* The active tab's pressed pill was being clipped by the bar's top edge. */
+.mob-tab-bar{padding-top:9px}
+
+/* Tasks group the way agents do: a labelled set with a count, so the eye can skip the half it
+   does not need. Routine work is the majority and is, by design, the part nobody has to read —
+   keeping it in the same undifferentiated list made the requested work invisible. */
+.feed-group{margin-bottom:20px}
+.feed-group-hd{
+  display:flex;align-items:baseline;gap:8px;margin-bottom:3px;
+  font-size:.66rem;font-weight:800;color:var(--txt);letter-spacing:.02em;
+}
+.feed-group-n{
+  font-size:.55rem;font-weight:800;color:var(--m2);font-variant-numeric:tabular-nums;
+  background:var(--bg);box-shadow:var(--sh-press);padding:2px 8px;border-radius:99px;
+}
+.feed-group-hint{font-size:.58rem;color:var(--m2);line-height:1.5;margin-bottom:10px}
+
+/* The agent chip carries the agent's own colour, so the feed and the roster agree at a glance. */
+.agent-chip{
+  font-size:.55rem;font-weight:700;padding:2px 8px;border-radius:99px;
+  background:var(--bg);box-shadow:var(--sh-press);white-space:nowrap;
+}
