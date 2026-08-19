@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '13';
+const DASH_BUILD = '14';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1670,7 +1670,7 @@ function _visualSection(c, section) {
       <span class="cat-hint">${hint}</span>
     </label>`;
 
-  const summary = v.template || v.accent ? '指定あり' : '自動';
+  const summary = v.eyebrow || v.template || v.accent || v.align ? (v.eyebrow || '指定あり') : '自動';
   return section('見た目', summary, `
     <div class="cat-grid neu-well">
       <label class="cat-field">
@@ -1679,6 +1679,20 @@ function _visualSection(c, section) {
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
       </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
+      <label class="cat-field">
+        <span class="cat-label">文字の位置</span>
+        <select id="cat-align-${c.id}" class="cat-in">
+          ${[['', '型にまかせる'], ['center', '中央（ポスター的）'], ['left', '左揃え（雑誌的）']]
+            .map(([val, l]) => `<option value="${val}"${val === (v.align || '') ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <span class="cat-hint">左揃えにすると、下のマガジン名を見出しの上に置けます</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">マガジン名</span>
+        <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
+          value="${esc(v.eyebrow || '')}" placeholder="未設定">
+        <span class="cat-hint">見出しの上に小さく入ります。毎回同じ位置に出るので、一覧で見分けがつくようになります</span>
+      </label>
     </div>
     <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
       A/Bテストが動いている間は、そちらの割り当てが優先されます。
@@ -1719,6 +1733,8 @@ async function saveCategory(id) {
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
       accent: _catVal(`cat-accenthex-${id}`).trim(),
+      align: _catVal(`cat-align-${id}`),
+      eyebrow: _catVal(`cat-eyebrow-${id}`).trim(),
     },
     targeting: {
       ageMin: Number(_catVal(`cat-agemin-${id}`)),
