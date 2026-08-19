@@ -1293,8 +1293,6 @@ body:has(.mob-more-sheet.open) .page-area{
   display:flex;flex-direction:column;align-items:stretch;
   gap:14px;margin-bottom:18px;
 }
-.cat-toolbar-actions{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
-.cat-toolbar-actions .save-btn{font-size:.72rem}
 .cat-toolbar-note{font-size:.68rem;color:var(--m);line-height:1.5;margin:-4px 0 0}
 /* The view switch is a choice between two lists, so it gets the same well-and-press treatment as
    every other selection in the shell instead of two loose buttons. */
@@ -1832,3 +1830,234 @@ body:has(.mob-more-sheet.open) .page-area{
   font-size:.55rem;font-weight:700;padding:2px 8px;border-radius:99px;
   background:var(--bg);box-shadow:var(--sh-press);white-space:nowrap;
 }
+
+/* ── TASK SUMMARY ─────────────────────────────────────────────
+   The feed could tell you everything except the one thing you opened it for: whether anything
+   needs you. That required counting rows and reading each status dot. Stated once, at the top. */
+.task-summary{
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:16px;
+  padding:14px 16px;margin-bottom:18px;
+}
+/* Status reads from the pip beside the headline, not from an edge — the design system has no
+   borders, and a coloured rule against a soft shadow looks like a rendering artefact. */
+.ts-head{
+  display:flex;align-items:center;gap:9px;
+  font-size:.78rem;font-weight:800;color:var(--txt);letter-spacing:.01em;
+}
+.ts-pip{width:9px;height:9px;border-radius:50%;flex:none;background:var(--m2)}
+.task-summary.ok .ts-pip{background:var(--grn)}
+.task-summary.busy .ts-pip{background:var(--blue)}
+.task-summary.bad .ts-pip{background:var(--red)}
+.task-summary.bad .ts-head{color:var(--red)}
+.ts-parts{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.ts-part{
+  font-size:.54rem;font-weight:700;color:var(--m);
+  background:var(--bg);box-shadow:var(--sh-press);
+  padding:3px 9px;border-radius:99px;font-variant-numeric:tabular-nums;
+}
+.ts-part.ok{color:var(--grn)} .ts-part.busy{color:var(--blue)}
+.ts-part.bad{color:var(--red)} .ts-part.quiet{color:var(--m2)}
+.ts-note{font-size:.58rem;color:var(--m2);line-height:1.55;margin-top:9px}
+
+/* ── ROUTINE GRID ─────────────────────────────────────────────
+   One tile per scheduled job rather than one row per run. Forty rows saying "nothing is wrong"
+   is one bit of information spread over forty rows; the tile says it once and adds what the
+   list hid — when it last ran, and whether it has started failing. */
+.rt-grid{
+  display:grid;gap:16px;
+  grid-template-columns:repeat(auto-fill,minmax(122px,1fr));
+}
+.rt-tile{
+  background:var(--bg);box-shadow:var(--sh-out);border:0;border-radius:14px;
+  padding:11px 12px;text-align:left;cursor:pointer;font:inherit;color:inherit;
+  display:flex;flex-direction:column;gap:5px;
+  transition:box-shadow .18s ease,transform .18s ease;
+}
+.rt-tile:hover{transform:translateY(-1px)}
+.rt-tile:active{box-shadow:var(--sh-press);transform:none}
+.rt-tile:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rt-top{display:flex;align-items:center;justify-content:space-between}
+.rt-dot{width:7px;height:7px;border-radius:50%;background:var(--m2);flex:none}
+.rt-dot.completed{background:var(--grn)}
+.rt-dot.running{background:var(--blue)}
+.rt-dot.pending{background:var(--yel)}
+.rt-dot.failed{background:var(--red)}
+.rt-n{
+  font-size:.5rem;font-weight:800;color:var(--m2);
+  font-variant-numeric:tabular-nums;letter-spacing:.02em;
+}
+.rt-name{
+  font-size:.63rem;font-weight:700;color:var(--txt);line-height:1.35;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+.rt-when{font-size:.53rem;color:var(--m2);font-variant-numeric:tabular-nums}
+
+@media(prefers-reduced-motion:reduce){
+  .rt-tile{transition:none} .rt-tile:hover{transform:none}
+}
+
+/* ── FACT CHECK: ALL CLEAR ────────────────────────────────────
+   Days with nothing wrong are not worth a row each. When every day is clean the panel says so
+   once; the operator asked not to be shown the half that needs nothing. */
+.fc-allclear{
+  display:flex;align-items:center;gap:12px;
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:14px;padding:14px 16px;
+}
+.fc-ac-pip{width:9px;height:9px;border-radius:50%;background:var(--grn);flex:none}
+.fc-ac-head{font-size:.7rem;font-weight:800;color:var(--txt)}
+.fc-ac-sub{font-size:.56rem;color:var(--m2);margin-top:3px;line-height:1.5}
+.fc-clean-note{
+  font-size:.55rem;color:var(--m2);text-align:center;
+  padding:9px 0 2px;letter-spacing:.02em;
+}
+
+/* ── ACTION CARDS ─────────────────────────────────────────────
+   "カテゴリを探す" and "URLから書く" were two identical pill buttons side by side, and the one
+   explanatory line under them described only the first. They do unrelated things — one starts a
+   background scout that proposes recurring themes, the other writes a single article from a URL
+   you supply — so each now carries its own icon and its own sentence. */
+.cat-toolbar-actions{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.act-card{
+  display:flex;align-items:flex-start;gap:12px;text-align:left;
+  background:var(--bg);box-shadow:var(--sh-out);border:0;border-radius:16px;
+  padding:14px 16px;cursor:pointer;font:inherit;color:inherit;
+  transition:box-shadow .18s ease,transform .18s ease;
+}
+.act-card:hover{transform:translateY(-1px)}
+.act-card:active{box-shadow:var(--sh-press);transform:none}
+.act-card:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.ac-ico{
+  display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:12px;
+  background:var(--bg);box-shadow:var(--sh-press);color:var(--acc);
+}
+.ac-txt{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ac-title{font-size:.7rem;font-weight:800;color:var(--txt);letter-spacing:.01em}
+.ac-desc{font-size:.56rem;color:var(--m2);line-height:1.6}
+
+@media(prefers-reduced-motion:reduce){
+  .act-card{transition:none} .act-card:hover{transform:none}
+}
+
+/* ── SHARED CHIPS FOR SOURCES + ARTICLES ──────────────────────
+   Both lists manage the same shape of thing: a named item, a few attributes, one action. They had
+   drifted into two vocabularies — the article list used coloured spans, the source list used
+   different coloured spans plus a raw URL that ran off the line. One chip, tone by modifier. */
+.s-chip{
+  font-size:.52rem;font-weight:700;color:var(--m);
+  background:var(--bg);box-shadow:var(--sh-press);
+  padding:2px 8px;border-radius:99px;white-space:nowrap;
+  max-width:190px;overflow:hidden;text-overflow:ellipsis;
+}
+.s-chip.blue{color:var(--blue)}
+.s-chip.purple{color:#A78BFA}
+.s-chip.amber{color:var(--yel)}
+.s-chip.teal{color:#2DD4BF}
+.s-chip.bad{color:var(--red)}
+
+.src-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* The action cluster sits on the right in both lists, so the eye finds controls in one place. */
+.src-actions{display:flex;align-items:center;gap:8px;flex:none}
+/* A disabled source stays legible but recedes — it is still there, just not collecting. */
+.src-row.off .src-name{opacity:.55}
+
+/* ── WIKI CARDS ───────────────────────────────────────────────
+   The wiki listed titles and nothing else, so finding a page meant opening pages. These show the
+   excerpt and the concepts, the way note's homepage shows enough of a piece to decide on it.
+   Recent work goes in a horizontal rail; categories below run in two columns on a wide screen. */
+.wiki-rail{
+  display:flex;gap:16px;overflow-x:auto;padding:4px 4px 14px;
+  scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;
+}
+.wiki-rail > .wiki-card{flex:0 0 232px;scroll-snap-align:start}
+.wiki-col{display:grid;gap:16px;grid-template-columns:1fr;padding:4px}
+@media(min-width:900px){ .wiki-col{grid-template-columns:1fr 1fr} }
+
+.wiki-card{
+  display:flex;flex-direction:column;gap:8px;text-align:left;
+  background:var(--bg);box-shadow:var(--sh-out);border:0;border-radius:16px;
+  padding:14px 15px;cursor:pointer;font:inherit;color:inherit;min-width:0;
+  transition:box-shadow .18s ease,transform .18s ease;
+}
+.wiki-card:hover{transform:translateY(-2px)}
+.wiki-card:active{box-shadow:var(--sh-press);transform:none}
+.wiki-card:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.wiki-card.wiki-sel-active{box-shadow:var(--sh-press)}
+
+.wc-head{display:flex;align-items:baseline;gap:8px;justify-content:space-between}
+.wc-title{
+  font-size:.71rem;font-weight:800;color:var(--txt);line-height:1.4;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+.wc-cat{
+  font-size:.5rem;font-weight:700;color:var(--acc);flex:none;
+  background:var(--bg);box-shadow:var(--sh-press);padding:2px 8px;border-radius:99px;
+  max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.wc-sum{
+  font-size:.58rem;color:var(--m);line-height:1.65;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+}
+.wc-sum.wc-empty{color:var(--m2);font-style:italic}
+.wc-foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:auto}
+.wc-tag{
+  font-size:.48rem;font-weight:700;color:var(--m2);
+  background:var(--bg);box-shadow:var(--sh-press);padding:2px 7px;border-radius:99px;
+  max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.wc-date{font-size:.5rem;color:var(--m2);margin-left:auto;flex:none}
+
+@media(prefers-reduced-motion:reduce){
+  .wiki-card{transition:none} .wiki-card:hover{transform:none}
+  .wiki-rail{scroll-snap-type:none}
+}
+
+/* ── STORAGE BREAKDOWN ────────────────────────────────────────
+   A total says storage is growing; the breakdown says which folder to look in. Generated images
+   are never deleted, so this is the one cost line that worsens without anyone doing anything. */
+.st-row{display:flex;align-items:center;gap:12px}
+.st-name{
+  font-size:.58rem;font-weight:700;color:var(--txt);
+  flex:0 0 110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.st-bar{
+  flex:1;height:8px;border-radius:99px;min-width:0;
+  background:var(--bg);box-shadow:var(--sh-press);overflow:hidden;
+}
+.st-fill{height:100%;border-radius:99px;background:var(--acc);opacity:.75}
+.st-val{
+  font-size:.56rem;font-weight:700;color:var(--m);flex:none;text-align:right;
+  font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:1px;
+}
+.st-cnt{font-size:.48rem;color:var(--m2);font-weight:600}
+
+/* ── SETTINGS OVERVIEW ────────────────────────────────────────
+   The page led with controls grouped by subsystem, so it answered "what can I change" and never
+   "what is set right now" or "is anything broken" — and most of the controls are set-once, so
+   there was no reason to return to it. State first, then the health of what it depends on. */
+.set-summary{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.set-line{
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:14px;padding:13px 15px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.set-label{font-size:.53rem;font-weight:700;color:var(--m2);letter-spacing:.04em}
+.set-value{font-size:.72rem;font-weight:800;color:var(--txt);line-height:1.4}
+.set-note{font-size:.54rem;color:var(--m2);line-height:1.55;margin-top:2px}
+
+.conn-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.conn-row{
+  display:flex;align-items:flex-start;gap:11px;
+  background:var(--bg);box-shadow:var(--sh-out);border-radius:14px;padding:13px 15px;
+}
+.conn-pip{width:9px;height:9px;border-radius:50%;flex:none;margin-top:4px;background:var(--m2)}
+.conn-row.ok   .conn-pip{background:var(--grn)}
+.conn-row.bad  .conn-pip{background:var(--red)}
+.conn-row.idle .conn-pip{background:var(--m2)}
+.conn-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+.conn-name{
+  font-size:.63rem;font-weight:800;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.conn-detail{font-size:.55rem;color:var(--m)}
+.conn-hint{font-size:.53rem;color:var(--red);line-height:1.55;margin-top:2px}

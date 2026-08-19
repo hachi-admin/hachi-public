@@ -253,7 +253,22 @@
         <div id="kpi-news" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
         <div style="font-size:10px;color:var(--m)">今週の記事数</div>
       </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">API 呼び出し</div>
+        <div id="kpi-calls" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div style="font-size:10px;color:var(--m)">本日・全エージェント</div>
+      </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">画像ストレージ</div>
+        <div id="kpi-storage" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div id="kpi-storage-sub" style="font-size:10px;color:var(--m)">—</div>
+      </div>
     </div>
+
+    <!-- What is actually taking up storage. Images are never deleted, so this only grows; the
+         breakdown is what makes it actionable rather than just alarming. -->
+    <div class="section-hd" id="storage-hd" style="display:none">画像ストレージの内訳</div>
+    <div id="storage-breakdown" style="display:flex;flex-direction:column;gap:8px"></div>
 
     <!-- Cost chart + task activity chart side by side -->
     <div class="analytics-chart-pair">
@@ -289,7 +304,7 @@
     <!-- Cost table -->
     <div class="section-hd">本日のコスト — エージェント別</div>
     <table class="ct-table">
-      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>Cost (est.)</th></tr></thead>
+      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>呼び出し</th><th>Cost (est.)</th></tr></thead>
       <tbody id="cost-table-body"></tbody>
     </table>
 
@@ -305,7 +320,8 @@
     <div class="settings-layout">
       <!-- Sidebar navigation -->
       <nav class="settings-nav" id="settings-nav">
-        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'general')">一般</button>
+        <button class="settings-nav-btn active" onclick="setSettingsSection(this,'overview')">概要</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'general')">一般</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI プロバイダー</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">メール</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">管理</button>
@@ -314,8 +330,25 @@
       <!-- Content panel -->
       <div class="settings-panel">
 
+        <!-- OVERVIEW — what the configuration currently *is*, and whether the things it depends
+             on are actually working. The page opened onto a wall of controls grouped by
+             subsystem, which answers "what can I change" and never answers "what is set right
+             now" or "is anything broken" — so there was no reason to open it. -->
+        <div class="settings-section active" id="ss-overview">
+          <div class="section-hd" style="margin-top:0">現在の設定</div>
+          <div id="settings-summary" class="set-summary"></div>
+
+          <div class="section-hd" style="margin-top:22px">接続状況</div>
+          <div style="font-size:10px;color:var(--m2);margin-bottom:10px;line-height:1.5">
+            外部サービスとの接続。ここが切れると、原因が分かりにくい形で機能が止まります。
+          </div>
+          <div id="settings-connections" class="conn-grid">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
+          </div>
+        </div>
+
         <!-- GENERAL -->
-        <div class="settings-section active" id="ss-general">
+        <div class="settings-section" id="ss-general">
           <div class="section-hd" style="margin-top:0">一般設定</div>
           <div class="qs-card" style="flex-direction:column">
             <div class="qs-field">
@@ -760,6 +793,6 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '7';
+const DASH_BUILD = '9';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -298,6 +298,8 @@ function _applyData(d) {
   // Side-load data referenced by render helpers
   window._inboxData      = d.inbox         || { pending:[], done:[], ignored:[] };
   window._factChecks     = d.factChecks    || [];
+  // Measured daily by the cost report; null until it has run at least once.
+  window._storageUsage   = d.storageUsage  || null;
   window._knowledgeData  = d.knowledgeData || {};
   window._routingRows    = d.routing?.rows || [];
   // Presence: counters animate to their value and genuinely new feed rows announce themselves.
@@ -438,7 +440,9 @@ function _initPage(pageId) {
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
-  if (pageId === 'settings') { _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
+  // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
+  // only fires when a nav button is clicked.
+  if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
   if (pageId === 'channels') { _initChannelsPage(); _loadContextSettings(); _renderChannelCtxList(); }
   if (pageId === 'repos') _initReposPage();
 }
@@ -697,6 +701,17 @@ const ROUTINE_TYPES = new Set([
   'log_monitor', 'feed_health_check', 'cost_report', 'mail_check', 'db_audit', 'system_audit',
   'wiki_lint', 'note_stats', 'infer_location', 'repo_audit', 'materialize_dashboard_prefs',
 ]);
+/* Japanese labels for task types. The raw type is a code identifier — "materialize dashboard
+   prefs" tells you nothing about what ran or whether it mattered. */
+const TASK_TYPE_LABELS = {
+  log_monitor: 'ログ監視', feed_health_check: 'フィード健全性', cost_report: 'コスト集計',
+  mail_check: 'メール確認', db_audit: 'DB監査', system_audit: 'システム監査',
+  wiki_lint: 'Wiki校正', note_stats: 'note統計', infer_location: '位置推定',
+  repo_audit: 'リポジトリ監査', materialize_dashboard_prefs: 'ダッシュボード設定反映',
+  note_study: 'note研究', scout: '調査', ingest: '取り込み', develop: '開発',
+  review: 'レビュー', content: '記事作成', plan: '計画',
+};
+
 const isRoutine = (t) => ROUTINE_TYPES.has(t.type) || /^(log_monitor|cost_report|mail_check|note_stats|feed_health)_/.test(String(t.id || ''));
 
 /* ═══════════════════════════════════════════════════════════
@@ -982,9 +997,79 @@ function _renderTaskFeed() {
          ${rows.map(row).join('')}
        </div>` : '';
 
+  const needsAction = [...oneOff, ...brokenRoutine];
   el.innerHTML =
-    group('対応が必要かもしれない', [...oneOff, ...brokenRoutine], '依頼されたタスクと、失敗した定常タスク')
-    + group('定常タスク', quietRoutine, '決まった時間に自動で走るもの。正常なら読む必要はありません');
+    _taskSummary(needsAction, quietRoutine)
+    + group('対応が必要かもしれない', needsAction, '依頼されたタスクと、失敗した定常タスク')
+    + _routineGrid(quietRoutine);
+}
+
+/* The summary answers the one question the feed never did: is there anything for me to do?
+   Reading that off a list meant counting rows and checking each dot. It is stated instead. */
+function _taskSummary(needsAction, quietRoutine) {
+  const failed = needsAction.filter((t) => t.status === 'failed').length;
+  const running = needsAction.filter((t) => t.status === 'running').length;
+  const pending = needsAction.filter((t) => t.status === 'pending').length;
+  const done = needsAction.filter((t) => t.status === 'completed').length;
+
+  // Tone follows the worst thing present, not the total: one failure outranks twenty successes.
+  const tone = failed ? 'bad' : (running || pending) ? 'busy' : 'ok';
+  const headline = failed
+    ? `${failed}件が失敗しています`
+    : running ? `${running}件を実行中`
+    : pending ? `${pending}件が順番待ち`
+    : '対応が必要なものはありません';
+
+  const parts = [
+    failed && `<span class="ts-part bad">失敗 ${failed}</span>`,
+    running && `<span class="ts-part busy">実行中 ${running}</span>`,
+    pending && `<span class="ts-part">待機 ${pending}</span>`,
+    done && `<span class="ts-part ok">完了 ${done}</span>`,
+    quietRoutine.length && `<span class="ts-part quiet">定常 ${quietRoutine.length}（正常）</span>`,
+  ].filter(Boolean).join('');
+
+  const note = failed
+    ? '下の一覧から該当タスクを開くと、失敗した理由と再実行ボタンがあります。'
+    : tone === 'ok' ? '定常タスクは正常に動いています。読む必要はありません。' : '';
+
+  return `<div class="task-summary ${tone}">
+    <div class="ts-head"><span class="ts-pip"></span>${esc(headline)}</div>
+    <div class="ts-parts">${parts}</div>
+    ${note ? `<div class="ts-note">${note}</div>` : ''}
+  </div>`;
+}
+
+/* Routine work as a grid of one tile per job, not a list of every run.
+   A list of forty identical "cost report completed" rows carries one bit of information — that
+   nothing is wrong — and spends forty rows saying it. The tile says it once per job, and shows
+   the thing a list buried: when it last ran, and whether it has been failing. */
+function _routineGrid(rows) {
+  if (!rows.length) return '';
+  const byType = new Map();
+  for (const t of rows) {
+    const k = t.type || 'unknown';
+    if (!byType.has(k)) byType.set(k, []);
+    byType.get(k).push(t);
+  }
+
+  const tiles = [...byType.entries()].map(([type, runs]) => {
+    // Runs arrive newest-first from the feed; the head is the latest.
+    const latest = runs[0];
+    const label = TASK_TYPE_LABELS[type] || type.replace(/_/g, ' ');
+    const st = latest.status === 'completed' ? 'ok' : latest.status;
+    return `<button class="rt-tile ${st}" onclick="openTaskDetail('${esc(latest.id || '')}')"
+              aria-label="${esc(label)} — 最終実行 ${esc(relTime(latest.updatedAt))}">
+      <div class="rt-top"><span class="rt-dot ${latest.status}"></span><span class="rt-n">${runs.length}</span></div>
+      <div class="rt-name">${esc(label)}</div>
+      <div class="rt-when">${esc(relTime(latest.updatedAt))}</div>
+    </button>`;
+  }).join('');
+
+  return `<div class="feed-group">
+    <div class="feed-group-hd"><span>定常タスク</span><span class="feed-group-n">${byType.size}</span></div>
+    <div class="feed-group-hint">決まった時間に自動で走るもの。タップすると最新の実行結果を開きます。</div>
+    <div class="rt-grid">${tiles}</div>
+  </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1051,10 +1136,21 @@ function _renderTopics() {
   // inside each other's clearance — the crowding was the shadows overlapping, not the labels.
   const toolbar = `<div class="qs-card cat-toolbar">
     <div class="cat-toolbar-actions">
-      <button class="save-btn" onclick="scoutTopicsNow()">カテゴリを探す</button>
-      <button class="save-btn" onclick="showArticleFromUrl()">URLから書く</button>
+      <button class="act-card" onclick="scoutTopicsNow()">
+        <span class="ac-ico"><i class="ni ni-sources" aria-hidden="true"></i></span>
+        <span class="ac-txt">
+          <span class="ac-title">カテゴリを探す</span>
+          <span class="ac-desc">note のトレンドを調べ、続けて書けるテーマを提案します。承認するとそのテーマで定期的に記事が生成されます。</span>
+        </span>
+      </button>
+      <button class="act-card" onclick="showArticleFromUrl()">
+        <span class="ac-ico"><i class="ni ni-articles" aria-hidden="true"></i></span>
+        <span class="ac-txt">
+          <span class="ac-title">URLから書く</span>
+          <span class="ac-desc">記事や動画の URL を渡すと、その内容を踏まえた考察記事を1本だけ書きます。カテゴリには属しません。</span>
+        </span>
+      </button>
     </div>
-    <p class="cat-toolbar-note">note.com のトレンドから継続的なカテゴリを提案します</p>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
@@ -1427,6 +1523,16 @@ function _buildExperiment() {
   </div>`;
 }
 
+/* Sources and articles are the same kind of object to manage — a named thing with a handful of
+   attributes and one action — so they now render through the same chip vocabulary instead of each
+   inventing its own inline colours. The article list was the one that read better; this brings the
+   source list to it rather than the other way round. */
+const SRC_CHIP = { rss: 'blue', url: 'purple', news: 'amber', web: 'teal', wiki: 'purple' };
+const srcChip = (text, tone) => `<span class="s-chip${tone ? ' ' + tone : ''}">${esc(String(text))}</span>`;
+// A full URL in a metadata row is unreadable and pushes the useful attributes off the line.
+// The host is the part that identifies the source; the whole URL stays on the link itself.
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u || ''; } };
+
 function _buildArticleRows() {
   if (!CAT_ARTICLES.length) return `<div style="color:var(--m);font-size:11px;padding:8px 0">記事がまだありません。</div>`;
   const catName = (id) => CATEGORIES.find(c => c.id === id)?.name || (id ? '(削除済みカテゴリ)' : 'URL考察');
@@ -1436,12 +1542,12 @@ function _buildArticleRows() {
         ? `<a href="${esc(a.wikiUrl)}" target="_blank" rel="noopener" style="color:inherit">${esc(a.title || a.angle || '(無題)')}</a>`
         : esc(a.title || a.angle || '(無題)')}</div>
       <div class="src-meta">
-        <span style="color:#A78BFA">${esc(catName(a.categoryId))}</span>
-        ${a.articleKind ? `<span style="color:#60A5FA">${esc(a.articleKind)}</span>` : ''}
-        ${a.status !== 'published' ? `<span style="color:var(--error)">${esc(a.status)}</span>` : ''}
-        ${a.charCount ? `<span style="color:var(--m)">約${a.charCount.toLocaleString()}字</span>` : ''}
-        ${a.imageCount ? `<span style="color:var(--m)">画像${a.imageCount}（web${a.webImageCount ?? 0}）</span>` : ''}
-        <span style="color:var(--m)">${_catDate(a.publishedAt || a.createdAt)}</span>
+        ${srcChip(catName(a.categoryId), 'purple')}
+        ${a.articleKind ? srcChip(a.articleKind, 'blue') : ''}
+        ${a.status !== 'published' ? srcChip(a.status, 'bad') : ''}
+        ${a.charCount ? srcChip(`約${a.charCount.toLocaleString()}字`) : ''}
+        ${a.imageCount ? srcChip(`画像${a.imageCount}（web${a.webImageCount ?? 0}）`) : ''}
+        ${srcChip(_catDate(a.publishedAt || a.createdAt))}
       </div>
     </div>
     <div class="art-score">${[1, 2, 3, 4, 5].map(n =>
@@ -1667,23 +1773,27 @@ function _renderKnowledge() {
 function _buildSourceRows(sources) {
   if (!sources || !sources.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-sources']}</div>`; }
   return sources.map(s => {
-    const tc = s.type === 'rss' ? '#60A5FA' : s.type === 'url' ? '#A78BFA' : '#34D399';
-    const dc = s.domain === 'news' ? '#FBBF24' : '#2DD4BF';
-    return `<div class="src-row" data-domain="${s.domain}" data-id="${s.id}">
-      <button type="button" class="src-toggle ${s.enabled ? 'on':'off'}" role="switch"
-        aria-checked="${s.enabled ? 'true' : 'false'}"
-        aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
-        onclick="toggleSource('${s.id}',${!s.enabled})"></button>
+    return `<div class="src-row${s.enabled ? '' : ' off'}" data-domain="${s.domain}" data-id="${s.id}">
       <div class="src-body">
-        <div class="src-name">${esc(s.name)}</div>
+        <div class="src-name">
+          <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.name)}</a>
+        </div>
         <div class="src-meta">
-          <span style="color:${tc}">${(s.type||'').toUpperCase()}</span>
-          <span style="color:${dc}">${s.domain}</span>
-          ${s.genre ? `<span style="color:var(--m)">${esc(s.genre)}</span>` : ''}
-          <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--m);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${esc(s.url)}</a>
+          ${srcChip((s.type || '').toUpperCase(), SRC_CHIP[s.type] || '')}
+          ${srcChip(s.domain, SRC_CHIP[s.domain] || '')}
+          ${s.genre ? srcChip(s.genre) : ''}
+          ${srcChip(hostOf(s.url))}
+          ${s.enabled ? '' : srcChip('停止中', 'bad')}
         </div>
       </div>
-      <button class="act-btn cancel" onclick="blockSource('${s.id}')" style="font-size:8px;padding:2px 6px" aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
+      <div class="src-actions">
+        <button type="button" class="src-toggle ${s.enabled ? 'on' : 'off'}" role="switch"
+          aria-checked="${s.enabled ? 'true' : 'false'}"
+          aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
+          onclick="toggleSource('${s.id}',${!s.enabled})"></button>
+        <button class="act-btn cancel" onclick="blockSource('${s.id}')"
+          aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1818,25 +1928,36 @@ function _renderFactChecks() {
     return;
   }
 
-  /* The panel used to open with five symbols — ✓7 ~5 !0 ?0 58% — which required decoding before
-     it could be read, and then said nothing about whether the operator had to do anything. It
-     now leads with the answer to that question, because that is the only reason to look. */
-  el.innerHTML = fcs.map((fc) => {
+  /* Clean reports are not shown as rows.
+     The panel used to render one expandable row per day, most of them saying "everything checked
+     out" — which is the case nobody needs to open. Days with nothing wrong collapse into a single
+     line at the bottom; only days with an unsupported or under-supported block get a row, and that
+     row opens on the block itself rather than on a percentage. */
+  const scored = fcs.map((fc) => {
     const c = fc.counts || {};
     const verdicts = fc.verdicts || [];
-    const total = verdicts.length || 0;
-    const bad = (c.unsupported || 0);
-    const soft = (c.partial || 0);
-    const verPct = total > 0 ? Math.round(((c.verified || 0) / total) * 100) : 0;
+    const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
+    return { fc, bad: c.unsupported || 0, soft: c.partial || 0, total: verdicts.length, issues };
+  });
 
-    // Three states, and each says what it means for the reader.
+  const actionable = scored.filter((r) => r.bad > 0 || r.soft > 0);
+  const clean = scored.filter((r) => r.bad === 0 && r.soft === 0);
+
+  if (!actionable.length) {
+    el.innerHTML = `<div class="fc-allclear">
+      <span class="fc-ac-pip"></span>
+      <div>
+        <div class="fc-ac-head">対応が必要な指摘はありません</div>
+        <div class="fc-ac-sub">直近${clean.length}日分、全ブロックが出典と一致しました。</div>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const rows = actionable.map(({ fc, bad, soft, total, issues }) => {
     const state = bad > 0
       ? { cls: 'bad',  head: `${bad}件が出典と矛盾`, act: '記事を修正するか取り下げてください' }
-      : soft > 0
-        ? { cls: 'warn', head: `${soft}件が出典で裏づけ不足`, act: '見出しの言い過ぎを確認してください' }
-        : { cls: 'ok',   head: '全ブロックが裏づけ済み', act: '対応不要' };
-
-    const issues = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'partial');
+      : { cls: 'warn', head: `${soft}件が裏づけ不足`, act: '見出しの言い過ぎを確認してください' };
 
     return `<details class="fc-row ${state.cls}"${bad > 0 ? ' open' : ''}>
       <summary class="fc-sum">
@@ -1845,20 +1966,25 @@ function _renderFactChecks() {
           <span class="fc-act">${esc(state.act)}</span>
         </span>
         <span class="fc-meta">
-          <span class="fc-pct">${verPct}%</span>
-          <span class="fc-date">${esc(fc.newsDate || fc.id)} · ${total}件</span>
+          <span class="fc-date">${esc(fc.newsDate || fc.id)} · ${total}件中</span>
         </span>
       </summary>
       <div class="fc-body">
-        ${issues.length ? issues.slice(0, 6).map((v) => `
+        ${issues.slice(0, 6).map((v) => `
           <div class="fc-issue ${v.verdict}">
             <div class="fc-issue-head">${esc((v.headline || '').substring(0, 90))}</div>
             <div class="fc-issue-why">${esc(v.reason || '')}</div>
-          </div>`).join('')
-        : '<div class="fc-clean">すべてのブロックが出典と一致しました。</div>'}
+          </div>`).join('')}
       </div>
     </details>`;
   }).join('');
+
+  // The clean days still get acknowledged, so an empty-looking panel is never ambiguous about
+  // whether the check ran at all.
+  const cleanNote = clean.length
+    ? `<div class="fc-clean-note">他${clean.length}日分は指摘なし</div>` : '';
+
+  el.innerHTML = rows + cleanNote;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1867,6 +1993,51 @@ function _renderFactChecks() {
 function _renderAnalytics() {
   _renderCostTable();
   _renderPrivMatrix();
+}
+
+/* Bytes are unreadable at scale — "3831709184" tells you nothing you can act on. */
+function _fmtBytes(n) {
+  const b = Number(n) || 0;
+  if (b >= 1e9) return `${(b / 1e9).toFixed(2)} GB`;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(1)} MB`;
+  if (b >= 1e3) return `${Math.round(b / 1e3)} KB`;
+  return `${b} B`;
+}
+
+/* API calls and image storage — the two things the cost picture was missing.
+   Calls give the spend a shape: the same token total from forty requests instead of one points
+   at a retry loop rather than a long prompt. Storage only ever grows, because generated images
+   are never deleted, so it is the line that gets worse while nobody is looking. */
+function _renderUsageKpis() {
+  const calls = Object.values(COSTS || {}).reduce((s, c) => s + (c.calls || 0), 0);
+  _setText('kpi-calls', calls ? calls.toLocaleString() : '—');
+
+  const su = window._storageUsage;
+  const hd = document.getElementById('storage-hd');
+  const box = document.getElementById('storage-breakdown');
+
+  // The measurement runs once a day inside the cost report. Before it has ever run there is no
+  // figure, and saying so is better than showing a zero that looks like an answer.
+  if (!su || !su.ok) {
+    _setText('kpi-storage', '—');
+    _setText('kpi-storage-sub', '未計測（日次で更新）');
+    if (hd) hd.style.display = 'none';
+    if (box) box.innerHTML = '';
+    return;
+  }
+
+  _setText('kpi-storage', _fmtBytes(su.bytes));
+  _setText('kpi-storage-sub', `${(su.count || 0).toLocaleString()} 件 · ${su.measuredAt ? relTime(su.measuredAt) : ''}`);
+
+  const rows = su.byPrefix || [];
+  if (hd) hd.style.display = rows.length ? '' : 'none';
+  if (!box) return;
+  const max = Math.max(1, ...rows.map((r) => r.bytes || 0));
+  box.innerHTML = rows.map((r) => `<div class="st-row">
+    <div class="st-name">${esc(r.name)}</div>
+    <div class="st-bar"><div class="st-fill" style="width:${Math.round(((r.bytes || 0) / max) * 100)}%"></div></div>
+    <div class="st-val">${_fmtBytes(r.bytes)}<span class="st-cnt">${(r.count || 0).toLocaleString()}件</span></div>
+  </div>`).join('');
 }
 
 function _renderCostTable() {
@@ -1881,6 +2052,7 @@ function _renderCostTable() {
       <td class="ct-name">${esc(reg?.name || agentId)}</td>
       <td class="ct-model">${esc(model)}</td>
       <td class="ct-tok">${tok}</td>
+      <td class="ct-tok">${c.calls ? c.calls.toLocaleString() : '—'}</td>
       <td class="ct-cost">${c.estimatedCost > 0 ? '$'+c.estimatedCost.toFixed(4) : '—'}</td>
     </tr>`;
   }).join('');
@@ -1914,9 +2086,107 @@ function _renderSettings(channels) {
 function setSettingsSection(btn, id) {
   document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('active', s.id === 'ss-' + id));
+  if (id === 'overview') _renderSettingsOverview();
   if (id === 'general') _renderSettingsLocation();
   if (id === 'mail') _loadMailAccounts();
   if (id === 'providers') _loadProviders();
+}
+
+/* ── Settings overview ───────────────────────────────────────
+   The settings page was a wall of controls grouped by subsystem, which answers "what can I
+   change" and never answers "what is set right now" or "is anything broken". Most of the
+   controls are also set-once — IMAP hosts, provider keys, dashboard users — so the page had no
+   reason to be opened twice. This gives it one: the current configuration as sentences you can
+   read, and the state of the connections everything else depends on. */
+function _renderSettingsOverview() {
+  const el = document.getElementById('settings-summary');
+  if (el) {
+    const INTENSITY_LABEL = { thorough: '慎重', balanced: '標準', fast: '高速' };
+    const lines = [
+      ['記事の言語', PROJECT_LANG === 'JP' ? '日本語' : '英語',
+        'ニュース・Wiki・要約の出力言語です。'],
+      ['動作の強度', INTENSITY_LABEL[INTENSITY_MODE] || INTENSITY_MODE,
+        'レビューの厳しさと、承認をどれだけ求めるかが変わります。'],
+      ['モデル', FORCE_FLASH ? '全エージェントで Flash（節約モード）' : 'エージェントごとの既定モデル',
+        FORCE_FLASH ? '安く速くなりますが、生成物の質は下がります。' : ''],
+      ['AI プロバイダー', ACTIVE_PROVIDER || 'gemini', ''],
+    ];
+    el.innerHTML = lines.map(([label, value, note]) => `<div class="set-line">
+      <div class="set-label">${esc(label)}</div>
+      <div class="set-value">${esc(value)}</div>
+      ${note ? `<div class="set-note">${esc(note)}</div>` : ''}
+    </div>`).join('');
+  }
+  _loadConnections();
+}
+
+/* Connection health. These are the failures that present as something unrelated: mail stops
+   being read, or every article fails, and the cause is an expired token three layers away. */
+async function _loadConnections() {
+  const box = document.getElementById('settings-connections');
+  if (!box) return;
+
+  const row = (name, state, detail, hint) => `<div class="conn-row ${state}">
+    <span class="conn-pip"></span>
+    <div class="conn-body">
+      <div class="conn-name">${esc(name)}</div>
+      <div class="conn-detail">${esc(detail)}</div>
+      ${hint ? `<div class="conn-hint">${esc(hint)}</div>` : ''}
+    </div>
+  </div>`;
+
+  const rows = [];
+
+  // AI providers — a missing key on the active provider stops every agent.
+  try {
+    const res = await fetch(apiUrl('/api/project/providers'), { headers: _authHeaders() });
+    const data = await res.json();
+    const active = data.activeProvider || 'gemini';
+    for (const p of (data.providers || [])) {
+      const isActive = p.id === active;
+      rows.push(row(
+        `${p.name || p.id}${isActive ? '（使用中）' : ''}`,
+        p.keyConfigured ? 'ok' : (isActive ? 'bad' : 'idle'),
+        p.keyConfigured ? 'キー設定済み' : 'キー未設定',
+        !p.keyConfigured && isActive ? '使用中のプロバイダーにキーがありません。全エージェントが停止します。' : '',
+      ));
+    }
+  } catch {
+    rows.push(row('AI プロバイダー', 'bad', '状態を取得できませんでした', ''));
+  }
+
+  // Mail — OAuth refresh tokens have expired on a recurring cycle here, and the symptom is
+  // simply that mail silently stops being scanned. Stale scans are called out as such.
+  try {
+    const res = await fetch(apiUrl('/api/mail/accounts'), { headers: _authHeaders() });
+    const { accounts = [] } = await res.json();
+    if (!accounts.length) {
+      rows.push(row('Gmail', 'idle', 'アカウント未登録', ''));
+    } else {
+      for (const a of accounts) {
+        const raw = a.lastScanAt?._seconds ? a.lastScanAt._seconds * 1000 : a.lastScanAt;
+        const ts = raw ? new Date(raw).getTime() : 0;
+        const hours = ts ? (Date.now() - ts) / 3600000 : Infinity;
+        // Twice the configured interval is the point at which "it just has not run yet" stops
+        // being the likely explanation.
+        const limit = Math.max(2, Number(a.intervalHours) || 6) * 2;
+        const stale = hours > limit;
+        rows.push(row(
+          a.email,
+          stale ? 'bad' : 'ok',
+          ts ? `最終スキャン ${relTime(new Date(ts).toISOString())}` : 'スキャン履歴なし',
+          stale ? '想定より長く動いていません。認証の期限切れが疑われます。' : '',
+        ));
+      }
+    }
+  } catch {
+    rows.push(row('Gmail', 'bad', '状態を取得できませんでした', ''));
+  }
+
+  // The dashboard is talking to the API right now, so this one is known by construction.
+  rows.push(row('hachi-core API', 'ok', API_BASE || '接続済み', ''));
+
+  box.innerHTML = rows.join('');
 }
 
 /* ── Mail accounts ─────────────────────────────────────────── */
@@ -3158,6 +3428,7 @@ async function _loadAnalytics() {
     _setText('kpi-queue', TASK_STATS?.byStatus ? ((TASK_STATS.byStatus.pending||0) + (TASK_STATS.byStatus.running||0)) : '—');
     _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(4)}`);
     _setText('kpi-news', newsTotal);
+    _renderUsageKpis();
 
     // Task activity chart
     _drawTaskChart(d.byDay || {});
@@ -3455,6 +3726,38 @@ function _wikiSearchInput(q) {
 // keep old name working for any existing callers
 function filterWikiPages(q) { _wikiSearchInput(q); }
 
+/* A wiki page card, note.com's homepage shape: title, an excerpt of the actual writing, and the
+   concepts it covers. The tree only ever showed titles, which made the wiki a filing cabinet —
+   you had to open a page to find out whether it was the one you wanted. */
+function _wikiCard(p) {
+  const selAttr = _wikiSelectMode ? `data-wiki-sel="${esc(p.slug)}"` : '';
+  const selBox = _wikiSelectMode
+    ? `<input type="checkbox" class="wiki-sel-cb" ${_wikiSelected.has(p.slug) ? 'checked' : ''}
+         onclick="event.stopPropagation();_wikiToggleSel('${esc(p.slug)}')">`
+    : '';
+  const concepts = (p.concepts || []).slice(0, 3)
+    .map((c) => `<span class="wc-tag">${esc(c)}</span>`).join('');
+  // No summary is the honest case for older pages — say so rather than leaving a blank block,
+  // which reads as a loading failure.
+  const body = p.summary
+    ? `<div class="wc-sum">${esc(p.summary)}</div>`
+    : `<div class="wc-sum wc-empty">要約なし</div>`;
+
+  return `<button class="wiki-card${_wikiSelected.has(p.slug) ? ' wiki-sel-active' : ''}" ${selAttr}
+      onclick="loadWikiPage(this,'${esc(p.slug)}','${esc(p.title)}')">
+    ${selBox}
+    <div class="wc-head">
+      <span class="wc-title">${esc(p.title)}</span>
+      ${p.category ? `<span class="wc-cat">${esc(p.category)}</span>` : ''}
+    </div>
+    ${body}
+    <div class="wc-foot">
+      ${concepts}
+      ${p.updatedAt ? `<span class="wc-date">${esc(relTime(p.updatedAt))}</span>` : ''}
+    </div>
+  </button>`;
+}
+
 function _wikiItemBtn(id, label, badge, isFile) {
   const selAttr = _wikiSelectMode ? `data-wiki-sel="${esc(id)}"` : '';
   const checked = _wikiSelected.has(id) ? 'checked' : '';
@@ -3505,20 +3808,27 @@ function _renderWikiTree(pages) {
   }
 
   if (_wikiQuery) {
-    treeEl.innerHTML = `<div class="wiki-count">${pages.length}${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-results-label']}</div>` +
-      pages.map(p => _wikiItemBtn(p.slug, p.title, p.category, false)).join('');
+    treeEl.innerHTML = `<div class="wiki-count">${pages.length}${(_I18N[PROJECT_LANG]||_I18N.JP)['wiki-results-label']}</div>`
+      + `<div class="wiki-col">${pages.map(_wikiCard).join('')}</div>`;
   } else {
-    const recent = pages.slice(0, 10);
+    const recent = pages.slice(0, 12);
     const groups = {};
     for (const p of pages) { const c = p.category||'General'; (groups[c]||(groups[c]=[])).push(p); }
     const catCount = Object.keys(groups).length;
     const _wt=_I18N[PROJECT_LANG]||_I18N.JP;
+    /* Recent pages scroll sideways, the way note's homepage puts its newest work in a rail: the
+       most recent handful is what you actually came for, and a rail shows more of them in the
+       height a stacked list spends on three. Categories below stay vertical, in two columns on a
+       wide screen, because those are browsed rather than skimmed. */
     treeEl.innerHTML =
       `<div class="wiki-count">${pages.length} ${_wt['wiki-pages-label']} · ${catCount} ${_wt['wiki-cats-label']}</div>` +
-      `<div class="docs-section"><div class="docs-section-label">${_wt['wiki-recent-label']}</div>${recent.map(p=>_wikiItemBtn(p.slug,p.title,p.category,false)).join('')}</div>` +
+      `<div class="docs-section">
+         <div class="docs-section-label">${_wt['wiki-recent-label']}</div>
+         <div class="wiki-rail">${recent.map(_wikiCard).join('')}</div>
+       </div>` +
       Object.entries(groups).map(([cat,ps])=>`<details class="wiki-cat-group">
         <summary class="docs-section-label wiki-cat-summary">${esc(cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
-        ${ps.map(p=>_wikiItemBtn(p.slug,p.title,'',false)).join('')}
+        <div class="wiki-col">${ps.map(_wikiCard).join('')}</div>
       </details>`).join('');
   }
   if (fab) treeEl.appendChild(fab);
@@ -4015,7 +4325,7 @@ function _initChannelsPage() {
   _renderRoutingTable(window._routingRows || [], window._discordChannels || []);
 }
 
-function _renderRoutingTable(rows, _channels) {
+function _renderRoutingTable(rows, channels) {
   // Routing is now shown inline in the channel tree — store rows for re-render on guild fetch
   window._routingRows = rows;
   const el = document.getElementById('routing-table');
@@ -4319,7 +4629,10 @@ function _renderLiveChannels(guild) {
     // channels inside it, and those change.
     const kinds = children.reduce((m, c) => (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text']
       = (m[c.type === 15 ? 'forum' : c.type === 2 ? 'voice' : 'text'] || 0) + 1, m), {});
-    const regd = children.filter((c) => Object.values(CHANNELS || {}).some((r) => r?.id === c.id)).length;
+    // registeredChannelMap is the registry lookup this function already builds. An earlier version
+    // referenced a global CHANNELS that does not exist in this scope, which threw a ReferenceError
+    // and took the whole guild fetch down with it — the page reported "Error fetching guilds".
+    const regd = children.filter((c) => registeredChannelMap.has(String(c.id))).length;
     const catDesc = [
       kinds.text ? `テキスト${kinds.text}` : '', kinds.forum ? `フォーラム${kinds.forum}` : '',
       kinds.voice ? `ボイス${kinds.voice}` : '', regd ? `登録済${regd}` : '',
