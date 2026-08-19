@@ -31,6 +31,7 @@ const sandbox = {
   esc, document:{ getElementById: () => el(), querySelectorAll: () => [], querySelector: () => null },
   window:{}, console, relTime:(d)=>'3分前', fmtDate:(d)=>'08-19', _catDate:(d)=>'08-19',
   _wikiSelectMode:false, _wikiSelected:new Set(),
+  CAT_META:{ heroTemplates:[{id:'dark_flat',label:'黒地・白抜き'},{id:'colour_block',label:'色地・白文字'}] },
   _guildsData:[], _selectedGuildId:null,
   PROJECT_LANG:'JP', _I18N:{ JP:{ 'empty-factchecks':'なし','empty-sources':'なし','empty-blocked':'なし' } },
   CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], REGISTRY:[],
@@ -43,7 +44,7 @@ const sandbox = {
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection'];
 
 let code = '';
 let missing = 0;
@@ -143,6 +144,26 @@ run('_inline image',           () => {
   if (!/<img src="https:\/\/x\/y.png" alt="hero"/.test(out)) throw new Error('image not rendered');
   if (/<a /.test(out)) throw new Error('image was turned into a link');
   return 'ok';
+});
+// The look section is new and reads CAT_META, which is empty until the meta endpoint answers —
+// the state every dashboard shows for a moment on load.
+const _section = (t, sum, body) => `<details><summary>${t}${sum}</summary>${body}</details>`;
+run('_visualSection unset',    () => {
+  const out = api._visualSection({ id: 'c1', visual: {} }, _section);
+  if (!/自動/.test(out)) throw new Error('an unstyled magazine should read as 自動');
+  return out.slice(0, 60);
+});
+run('_visualSection chosen',   () => {
+  const out = api._visualSection({ id: 'c1', visual: { template: 'dark_flat', accent: '#8A2846' } }, _section);
+  if (!/#8A2846/.test(out)) throw new Error('the chosen colour is missing');
+  if (!/指定あり/.test(out)) throw new Error('a styled magazine should say so in the summary');
+  return 'ok';
+});
+run('_visualSection no meta',  () => {
+  // CAT_META arrives asynchronously; rendering before it must not throw.
+  const saved = sandbox.CAT_META; sandbox.CAT_META = null;
+  try { return api._visualSection({ id: 'c1', visual: {} }, _section).slice(0, 40); }
+  finally { sandbox.CAT_META = saved; }
 });
 run('_inline link still works', () => {
   const out = api._inline('[t](https://x)');
