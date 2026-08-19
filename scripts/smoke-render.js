@@ -159,6 +159,14 @@ run('_visualSection chosen',   () => {
   if (!/指定あり/.test(out)) throw new Error('a styled magazine should say so in the summary');
   return 'ok';
 });
+run('_visualSection full',     () => {
+  // A magazine that has named itself should show that name in the collapsed summary — it is the
+  // most identifying thing about it, and more useful there than the word 指定あり.
+  const out = api._visualSection({ id: 'c1', visual: { template: 'dark_flat', accent: '#8A2846', align: 'left', eyebrow: 'AI夜間ラボ' } }, _section);
+  if (!/AI夜間ラボ/.test(out)) throw new Error('the magazine name is missing');
+  if (!/selected>左揃え/.test(out.replace(/"/g, ''))) throw new Error('the chosen alignment is not selected');
+  return 'ok';
+});
 run('_visualSection no meta',  () => {
   // CAT_META arrives asynchronously; rendering before it must not throw.
   const saved = sandbox.CAT_META; sandbox.CAT_META = null;
