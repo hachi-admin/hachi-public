@@ -2101,3 +2101,21 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* Images in documents — a screenshot is worth the width it takes. */
 .docs-content img{max-width:100%;height:auto;border-radius:12px;margin:10px 0;box-shadow:var(--sh-out)}
+
+/* ── MAGAZINE COLOUR PICKER ───────────────────────────────────
+   A swatch alongside a hex box rather than either alone. The picker is how you choose a colour;
+   the text box is the only one of the two that can be emptied, and empty is a real answer here —
+   it means "decide from the article", which is what every magazine does until it doesn't. */
+.cat-colour{display:flex;align-items:center;gap:8px}
+.cat-swatch{
+  width:38px;height:34px;flex:none;padding:0;cursor:pointer;
+  background:var(--bg);box-shadow:var(--sh-press);border:0;border-radius:12px;
+}
+.cat-swatch::-webkit-color-swatch-wrapper{padding:4px}
+.cat-swatch::-webkit-color-swatch{border:0;border-radius:8px}
+.cat-swatch::-moz-color-swatch{border:0;border-radius:8px}
+.cat-hex{
+  flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.62rem;text-transform:uppercase;
+}
+.cat-hint{font-size:.5rem;color:var(--m2);line-height:1.5;margin-top:4px}

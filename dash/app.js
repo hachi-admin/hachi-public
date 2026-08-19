@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '12';
+const DASH_BUILD = '13';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1297,6 +1297,8 @@ function _categoryEditor(c) {
         ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
       </div>`)}
 
+    ${_visualSection(c, section)}
+
     ${section('動かし方',
       `${(c.approvalMode ?? 'auto') === 'propose' ? '案を選ぶ' : '自動'} · ${style.enrichQA ? '読者Q&A有' : '読者Q&A無'} · ${style.heroTitle === false ? '画像文字なし' : '画像に文字'}`, `
       <div class="cat-run neu-well">
@@ -1641,6 +1643,58 @@ function _moneyChanged(id) {
 
 const _catVal = (id) => document.getElementById(id)?.value ?? '';
 
+/* A magazine's look.
+ *
+ * This lived in the code as a map of category id → hex — not editable here, invisible when a
+ * category was added, and unable to express anything but a colour. note supports マガジン, and a
+ * magazine that differs only by hue is not a different magazine.
+ *
+ * Blank means "decide from the article", which is what every category does today, so an untouched
+ * magazine keeps behaving exactly as it does now. */
+function _visualSection(c, section) {
+  const v = c.visual || {};
+  const tplOpts = [{ id: '', label: '自動（記事に合わせる）' }, ...(CAT_META?.heroTemplates || [])]
+    .map((t) => `<option value="${esc(t.id)}"${t.id === (v.template || '') ? ' selected' : ''}>${esc(t.label)}</option>`)
+    .join('');
+
+  const swatch = (id, value, label, hint) => `
+    <label class="cat-field">
+      <span class="cat-label">${label}</span>
+      <span class="cat-colour">
+        <input type="color" id="cat-${id}-${c.id}" value="${esc(value || '#888888')}"
+          class="cat-swatch" aria-label="${label}">
+        <input type="text" id="cat-${id}hex-${c.id}" value="${esc(value || '')}" placeholder="未設定"
+          class="cat-in cat-hex" maxlength="7" spellcheck="false"
+          oninput="_syncSwatch('${c.id}','${id}')">
+      </span>
+      <span class="cat-hint">${hint}</span>
+    </label>`;
+
+  const summary = v.template || v.accent ? '指定あり' : '自動';
+  return section('見た目', summary, `
+    <div class="cat-grid neu-well">
+      <label class="cat-field">
+        <span class="cat-label">ヒーローの型</span>
+        <select id="cat-tpl-${c.id}" class="cat-in">${tplOpts}</select>
+        <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
+      </label>
+      ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
+    </div>
+    <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
+      A/Bテストが動いている間は、そちらの割り当てが優先されます。
+    </div>`);
+}
+
+/* Keep the picker and the hex box in step. The text box is the one that can be cleared — a colour
+   input has no empty state, so without it there is no way to say "no colour chosen". */
+function _syncSwatch(catId, field) {
+  const hex = document.getElementById(`cat-${field}hex-${catId}`);
+  const pick = document.getElementById(`cat-${field}-${catId}`);
+  if (!hex || !pick) return;
+  const v = hex.value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) pick.value = v;
+}
+
 async function saveCategory(id) {
   const chk = (k) => !!document.getElementById(`cat-${k}-${id}`)?.checked;
   const body = {
@@ -1659,6 +1713,12 @@ async function saveCategory(id) {
       mode: _catVal(`cat-money-${id}`),
       priceYen: Number(_catVal(`cat-price-${id}`)) || 0,
       notes: _catVal(`cat-moneynote-${id}`),
+    },
+    visual: {
+      template: _catVal(`cat-tpl-${id}`),
+      // The hex box wins over the picker: it is the only one of the two that can be empty, and
+      // empty is a real choice meaning "decide from the article".
+      accent: _catVal(`cat-accenthex-${id}`).trim(),
     },
     targeting: {
       ageMin: Number(_catVal(`cat-agemin-${id}`)),
