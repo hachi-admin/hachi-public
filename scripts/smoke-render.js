@@ -32,13 +32,15 @@ const sandbox = {
   window:{}, console, relTime:(d)=>'3分前', fmtDate:(d)=>'08-19', _catDate:(d)=>'08-19',
   _wikiSelectMode:false, _wikiSelected:new Set(),
   PROJECT_LANG:'JP', _I18N:{ JP:{ 'empty-factchecks':'なし','empty-sources':'なし','empty-blocked':'なし' } },
-  CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], COSTS:{}, REGISTRY:[],
+  CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], REGISTRY:[],
+  COSTS:{ 'article-writer':{ tokensUsed:120000, calls:14, estimatedCost:0.42 } },
+  _setText:(id,v)=>{ store[id] = v; },
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes'];
 
 let code = '';
 let missing = 0;
@@ -82,6 +84,18 @@ run('_buildArticleRows empty', () => api._buildArticleRows());
 run('_wikiCard full',          () => api._wikiCard({ slug:'ai-agents', title:'AIエージェントの設計', category:'技術', summary:'エージェントの責務分割について。', concepts:['責務分割','権限'], updatedAt:new Date().toISOString() }));
 // Older pages predate the summary field; the card must degrade rather than render a blank block.
 run('_wikiCard no summary',    () => api._wikiCard({ slug:'old', title:'古いページ' }));
+
+// _renderUsageKpis writes through _setText/DOM rather than returning markup, so the assertion is
+// that it does not throw. The never-measured path is the one that ships broken: storageUsage is
+// null until the daily cost report has run even once.
+run('_renderUsageKpis unmeasured', () => { sandbox.window._storageUsage = null; api._renderUsageKpis(); return 'ok'; });
+run('_renderUsageKpis measured',   () => {
+  sandbox.window._storageUsage = { ok:true, bytes:3.8e9, count:1240, measuredAt:new Date().toISOString(),
+    byPrefix:[{name:'heroes',bytes:3e9,count:900},{name:'diagrams',bytes:8e8,count:340}] };
+  api._renderUsageKpis(); return 'ok';
+});
+run('_renderUsageKpis failed',     () => { sandbox.window._storageUsage = { ok:false, reason:'no bucket' }; api._renderUsageKpis(); return 'ok'; });
+run('_fmtBytes scales',            () => [0, 512, 4096, 5.2e6, 3.8e9].map(api._fmtBytes).join(' '));
 
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);

@@ -253,7 +253,22 @@
         <div id="kpi-news" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
         <div style="font-size:10px;color:var(--m)">今週の記事数</div>
       </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">API 呼び出し</div>
+        <div id="kpi-calls" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div style="font-size:10px;color:var(--m)">本日・全エージェント</div>
+      </div>
+      <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
+        <div style="font-size:10px;color:var(--m)">画像ストレージ</div>
+        <div id="kpi-storage" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
+        <div id="kpi-storage-sub" style="font-size:10px;color:var(--m)">—</div>
+      </div>
     </div>
+
+    <!-- What is actually taking up storage. Images are never deleted, so this only grows; the
+         breakdown is what makes it actionable rather than just alarming. -->
+    <div class="section-hd" id="storage-hd" style="display:none">画像ストレージの内訳</div>
+    <div id="storage-breakdown" style="display:flex;flex-direction:column;gap:8px"></div>
 
     <!-- Cost chart + task activity chart side by side -->
     <div class="analytics-chart-pair">
@@ -289,7 +304,7 @@
     <!-- Cost table -->
     <div class="section-hd">本日のコスト — エージェント別</div>
     <table class="ct-table">
-      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>Cost (est.)</th></tr></thead>
+      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>呼び出し</th><th>Cost (est.)</th></tr></thead>
       <tbody id="cost-table-body"></tbody>
     </table>
 
@@ -760,6 +775,6 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

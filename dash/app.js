@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '8';
+const DASH_BUILD = '9';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -298,6 +298,8 @@ function _applyData(d) {
   // Side-load data referenced by render helpers
   window._inboxData      = d.inbox         || { pending:[], done:[], ignored:[] };
   window._factChecks     = d.factChecks    || [];
+  // Measured daily by the cost report; null until it has run at least once.
+  window._storageUsage   = d.storageUsage  || null;
   window._knowledgeData  = d.knowledgeData || {};
   window._routingRows    = d.routing?.rows || [];
   // Presence: counters animate to their value and genuinely new feed rows announce themselves.
@@ -1991,6 +1993,51 @@ function _renderAnalytics() {
   _renderPrivMatrix();
 }
 
+/* Bytes are unreadable at scale — "3831709184" tells you nothing you can act on. */
+function _fmtBytes(n) {
+  const b = Number(n) || 0;
+  if (b >= 1e9) return `${(b / 1e9).toFixed(2)} GB`;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(1)} MB`;
+  if (b >= 1e3) return `${Math.round(b / 1e3)} KB`;
+  return `${b} B`;
+}
+
+/* API calls and image storage — the two things the cost picture was missing.
+   Calls give the spend a shape: the same token total from forty requests instead of one points
+   at a retry loop rather than a long prompt. Storage only ever grows, because generated images
+   are never deleted, so it is the line that gets worse while nobody is looking. */
+function _renderUsageKpis() {
+  const calls = Object.values(COSTS || {}).reduce((s, c) => s + (c.calls || 0), 0);
+  _setText('kpi-calls', calls ? calls.toLocaleString() : '—');
+
+  const su = window._storageUsage;
+  const hd = document.getElementById('storage-hd');
+  const box = document.getElementById('storage-breakdown');
+
+  // The measurement runs once a day inside the cost report. Before it has ever run there is no
+  // figure, and saying so is better than showing a zero that looks like an answer.
+  if (!su || !su.ok) {
+    _setText('kpi-storage', '—');
+    _setText('kpi-storage-sub', '未計測（日次で更新）');
+    if (hd) hd.style.display = 'none';
+    if (box) box.innerHTML = '';
+    return;
+  }
+
+  _setText('kpi-storage', _fmtBytes(su.bytes));
+  _setText('kpi-storage-sub', `${(su.count || 0).toLocaleString()} 件 · ${su.measuredAt ? relTime(su.measuredAt) : ''}`);
+
+  const rows = su.byPrefix || [];
+  if (hd) hd.style.display = rows.length ? '' : 'none';
+  if (!box) return;
+  const max = Math.max(1, ...rows.map((r) => r.bytes || 0));
+  box.innerHTML = rows.map((r) => `<div class="st-row">
+    <div class="st-name">${esc(r.name)}</div>
+    <div class="st-bar"><div class="st-fill" style="width:${Math.round(((r.bytes || 0) / max) * 100)}%"></div></div>
+    <div class="st-val">${_fmtBytes(r.bytes)}<span class="st-cnt">${(r.count || 0).toLocaleString()}件</span></div>
+  </div>`).join('');
+}
+
 function _renderCostTable() {
   const tbody = document.getElementById('cost-table-body'); if (!tbody) return;
   const entries = Object.entries(COSTS).sort((a,b) => b[1].estimatedCost - a[1].estimatedCost);
@@ -2003,6 +2050,7 @@ function _renderCostTable() {
       <td class="ct-name">${esc(reg?.name || agentId)}</td>
       <td class="ct-model">${esc(model)}</td>
       <td class="ct-tok">${tok}</td>
+      <td class="ct-tok">${c.calls ? c.calls.toLocaleString() : '—'}</td>
       <td class="ct-cost">${c.estimatedCost > 0 ? '$'+c.estimatedCost.toFixed(4) : '—'}</td>
     </tr>`;
   }).join('');
@@ -3280,6 +3328,7 @@ async function _loadAnalytics() {
     _setText('kpi-queue', TASK_STATS?.byStatus ? ((TASK_STATS.byStatus.pending||0) + (TASK_STATS.byStatus.running||0)) : '—');
     _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(4)}`);
     _setText('kpi-news', newsTotal);
+    _renderUsageKpis();
 
     // Task activity chart
     _drawTaskChart(d.byDay || {});

@@ -2012,3 +2012,22 @@ body:has(.mob-more-sheet.open) .page-area{
   .wiki-card{transition:none} .wiki-card:hover{transform:none}
   .wiki-rail{scroll-snap-type:none}
 }
+
+/* ── STORAGE BREAKDOWN ────────────────────────────────────────
+   A total says storage is growing; the breakdown says which folder to look in. Generated images
+   are never deleted, so this is the one cost line that worsens without anyone doing anything. */
+.st-row{display:flex;align-items:center;gap:12px}
+.st-name{
+  font-size:.58rem;font-weight:700;color:var(--txt);
+  flex:0 0 110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.st-bar{
+  flex:1;height:8px;border-radius:99px;min-width:0;
+  background:var(--bg);box-shadow:var(--sh-press);overflow:hidden;
+}
+.st-fill{height:100%;border-radius:99px;background:var(--acc);opacity:.75}
+.st-val{
+  font-size:.56rem;font-weight:700;color:var(--m);flex:none;text-align:right;
+  font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:1px;
+}
+.st-cnt{font-size:.48rem;color:var(--m2);font-weight:600}
