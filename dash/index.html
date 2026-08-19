@@ -804,8 +804,16 @@
      SCRIPTS
 ════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
+<script>
+// Mermaid was pinned to the dark theme, so every diagram rendered dark-on-light for anyone using
+// the default light mode — which is most of the time. Follow the page instead.
+(function () {
+  const dark = document.documentElement.dataset.theme === 'dark'
+    || (!document.documentElement.dataset.theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+})();
+</script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

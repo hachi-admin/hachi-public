@@ -2076,3 +2076,28 @@ body:has(.mob-more-sheet.open) .page-area{
 .agent-menu-what{
   display:block;font-size:.5rem;color:var(--m2);line-height:1.45;margin-top:2px;font-weight:600;
 }
+
+/* ── DOC TABLES ───────────────────────────────────────────────
+   The markdown renderer had no table support, so every table in every document rendered as
+   literal `| A | B |` lines. These are plain and quiet on purpose: a table in a reference
+   document is read, not admired. */
+.md-table-wrap{overflow-x:auto;margin:14px 0;border-radius:12px}
+.md-table{
+  border-collapse:collapse;width:100%;min-width:min(100%,420px);
+  font-size:.62rem;line-height:1.6;
+}
+.md-table th,.md-table td{
+  padding:8px 12px;text-align:left;vertical-align:top;
+}
+.md-table th{
+  font-weight:800;color:var(--txt);white-space:nowrap;
+  background:var(--bg);box-shadow:var(--sh-press);
+}
+.md-table td{color:var(--m)}
+/* Zebra striping instead of rules: the design system has no borders, and a grid of hairlines
+   against soft shadows reads as a rendering artefact. */
+.md-table tbody tr:nth-child(odd) td{background:color-mix(in srgb,var(--m2) 7%,transparent)}
+.md-table td code,.md-table th code{font-size:.92em;white-space:nowrap}
+
+/* Images in documents — a screenshot is worth the width it takes. */
+.docs-content img{max-width:100%;height:auto;border-radius:12px;margin:10px 0;box-shadow:var(--sh-out)}
