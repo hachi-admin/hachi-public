@@ -621,8 +621,21 @@
         <span data-i18n="ch-server">Server channels</span>
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()" data-i18n="ch-new-folder">+ フォルダ</button>
         <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()" data-i18n="ch-new-channel">+ チャンネル</button>
+        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showAssignAgentForm()">エージェント割り当て</button>
       </div>
-      <div style="font-size:10px;color:var(--m);margin-bottom:8px">緑色のチャンネルは登録済みです。<strong>+</strong> をクリックしてエージェントを割り当てます。各エージェントは1チャンネルにのみ投稿します。</div>
+      <div style="font-size:10px;color:var(--m);margin-bottom:8px">緑色のチャンネルは登録済みです。各チャンネルの下に、そこへ何が投稿されるかが書かれています。担当を変えるには「エージェント割り当て」を使ってください。各エージェントは1チャンネルにのみ投稿します。</div>
+
+      <!-- Assign agents. Lives above the tree rather than on every row: assignment is something
+           you do occasionally, and a control on all 40 rows made the tree unreadable. -->
+      <div id="assign-agent-form" style="display:none;margin-top:10px;padding:12px;background:var(--bg);box-shadow:var(--sh-press);border-radius:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px">エージェントの割り当て</div>
+        <label class="form-label" for="assign-agent-channel">チャンネル</label>
+        <select class="form-select" id="assign-agent-channel" onchange="_renderAssignAgentList()"></select>
+        <div id="assign-agent-list" style="margin-top:10px;max-height:280px;overflow-y:auto"></div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button class="save-btn" onclick="_hideAssignAgentForm()">閉じる</button>
+        </div>
+      </div>
       <div id="live-channel-tree" class="ch-tree"></div>
 
       <!-- New category (folder) form -->
@@ -793,6 +806,6 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

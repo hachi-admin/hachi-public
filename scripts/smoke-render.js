@@ -31,6 +31,7 @@ const sandbox = {
   esc, document:{ getElementById: () => el(), querySelectorAll: () => [], querySelector: () => null },
   window:{}, console, relTime:(d)=>'3分前', fmtDate:(d)=>'08-19', _catDate:(d)=>'08-19',
   _wikiSelectMode:false, _wikiSelected:new Set(),
+  _guildsData:[], _selectedGuildId:null,
   PROJECT_LANG:'JP', _I18N:{ JP:{ 'empty-factchecks':'なし','empty-sources':'なし','empty-blocked':'なし' } },
   CATEGORIES:[{id:'c1',name:'AI活用'}], CAT_ARTICLES:[], SOURCES:[], REGISTRY:[],
   COSTS:{ 'article-writer':{ tokensUsed:120000, calls:14, estimatedCost:0.42 } },
@@ -41,8 +42,8 @@ const sandbox = {
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
-const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview'];
+const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor'];
 
 let code = '';
 let missing = 0;
@@ -106,6 +107,25 @@ run('_fmtBytes scales',            () => [0, 512, 4096, 5.2e6, 3.8e9].map(api._f
 // _renderSettingsOverview reads module globals and writes through the DOM; it also kicks off
 // _loadConnections, which is stubbed here since the assertion is about the synchronous summary.
 run('_renderSettingsOverview',     () => { api._renderSettingsOverview(); return String(store['settings-summary'] ?? store.last ?? 'ok'); });
+
+// Tag suggestions must produce something for a channel with no tags anywhere on the server —
+// the case the old copy-from-elsewhere version could not handle at all.
+run('_tagSuggestions bare forum',  () => {
+  const out = api._tagSuggestions({ id:'c1', name:'bug-reports', availableTags:[] }, ['log-monitor-agent'], ['log_monitor']);
+  if (!out.length) throw new Error('no suggestions for an untagged forum');
+  if (!out.some(t => t.name === '緊急')) throw new Error('triage vocabulary not matched for a bug channel');
+  return out.map(t => t.name).join(' ');
+});
+run('_tagSuggestions excludes existing', () => {
+  const out = api._tagSuggestions({ id:'c1', name:'bug-reports', availableTags:[{name:'緊急'}] }, [], ['log_monitor']);
+  if (out.some(t => t.name === '緊急')) throw new Error('suggested a tag the channel already has');
+  return out.map(t => t.name).join(' ');
+});
+run('_tagVocabFor unknown channel', () => {
+  const out = api._tagVocabFor({ name:'random-channel' }, [], []);
+  if (!out.length) throw new Error('no fallback vocabulary');
+  return out.map(t => t.name).join(' ');
+});
 
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);

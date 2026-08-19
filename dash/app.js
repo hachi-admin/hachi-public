@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '10';
+const DASH_BUILD = '11';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4450,20 +4450,86 @@ async function _createChannelTag(channelId, nameArg, emojiArg) {
 }
 
 /** Tags used elsewhere in this server that this channel does not have yet. */
-function _tagSuggestions(ch) {
+/* Tag suggestions.
+   The old version could only offer tags that already existed on another channel, so a server
+   whose channels were untagged got nothing, and the first channel to be tagged got nothing by
+   definition. It could only ever copy — never propose.
+
+   Suggestions now come from what the channel *is*. A forum where bugs are reported wants
+   severity and resolution states; one where articles are approved wants stages; one carrying
+   news wants subject areas. Those are inferred from the channel name and from the agents and
+   task types actually routed there, which is the same evidence the description line uses.
+   Tags already reused elsewhere on the server still rank first — a taxonomy the operator has
+   chosen beats one we guessed — with the inferred sets filling in behind. */
+
+// Vocabularies keyed by what a channel is for. Each is a small complete set rather than a pile
+// of loose words: tags are only useful as a taxonomy you can sort by.
+const TAG_VOCAB = {
+  triage:   [{ name: '緊急', emoji: '🔴' }, { name: '注意', emoji: '🟡' }, { name: '調査中', emoji: '🔍' },
+             { name: '対応済み', emoji: '✅' }, { name: '再発', emoji: '🔁' }, { name: '様子見', emoji: '⏸' }],
+  review:   [{ name: '承認待ち', emoji: '⏳' }, { name: '承認済み', emoji: '✅' }, { name: '差し戻し', emoji: '↩️' },
+             { name: '要相談', emoji: '💬' }],
+  content:  [{ name: '下書き', emoji: '📝' }, { name: '公開済み', emoji: '🚀' }, { name: '要リライト', emoji: '✂️' },
+             { name: '反応良好', emoji: '📈' }, { name: '実験中', emoji: '🧪' }],
+  news:     [{ name: 'AI', emoji: '🤖' }, { name: '経済', emoji: '💹' }, { name: '国内', emoji: '🗾' },
+             { name: '海外', emoji: '🌏' }, { name: '技術', emoji: '⚙️' }],
+  cost:     [{ name: '想定内', emoji: '🟢' }, { name: '超過', emoji: '🔺' }, { name: '要確認', emoji: '👀' }],
+  knowledge:[{ name: '新規', emoji: '🌱' }, { name: '更新', emoji: '♻️' }, { name: '要出典', emoji: '📚' },
+             { name: '古い', emoji: '🕸' }],
+  ops:      [{ name: '定常', emoji: '🔄' }, { name: '手動対応', emoji: '🙋' }, { name: '自動化候補', emoji: '🤖' }],
+};
+
+// Which vocabulary fits, judged from the channel name and what is routed to it. Name first: the
+// operator named it, and that is the clearest statement of intent available.
+function _tagVocabFor(ch, agents = [], routedTasks = []) {
+  const hay = [ch.name, ...agents, ...routedTasks].join(' ').toLowerCase();
+  const picks = [];
+  const match = (re, key) => { if (re.test(hay) && !picks.includes(key)) picks.push(key); };
+
+  match(/bug|error|log|monitor|incident|障害|エラー/, 'triage');
+  match(/approv|review|proposal|承認|レビュー/, 'review');
+  match(/article|note|content|blog|writ|記事|投稿/, 'content');
+  match(/news|digest|feed|ニュース/, 'news');
+  match(/cost|billing|budget|expense|コスト|費用/, 'cost');
+  match(/wiki|knowledge|doc|研究|知識/, 'knowledge');
+  match(/task|ops|orchestr|system|運用|タスク/, 'ops');
+
+  // A forum with no signal still deserves a starting point; triage states suit almost any
+  // forum where threads get opened and closed.
+  if (!picks.length) picks.push('triage');
+  return picks.flatMap((k) => TAG_VOCAB[k] ?? []);
+}
+
+function _tagSuggestions(ch, agents = [], routedTasks = []) {
   const have = new Set((ch.availableTags || []).map((t) => t.name));
+
+  // 1. Tags this server already uses elsewhere, most-reused first. A taxonomy already in use
+  //    beats a proposed one, so these lead.
   const seen = new Map();
   const guild = _guildsData.find((g) => g.id === _selectedGuildId);
   for (const other of guild?.channels ?? []) {
     if (other.id === ch.id) continue;
     for (const t of other.availableTags ?? []) {
       if (have.has(t.name)) continue;
-      if (!seen.has(t.name)) seen.set(t.name, { name: t.name, emoji: t.emoji, n: 0 });
+      if (!seen.has(t.name)) seen.set(t.name, { name: t.name, emoji: t.emoji, n: 0, reused: true });
       seen.get(t.name).n += 1;
     }
   }
-  // Most reused first: a tag three channels already share is a better suggestion than a one-off.
-  return [...seen.values()].sort((a, b) => b.n - a.n);
+  const reused = [...seen.values()].sort((a, b) => b.n - a.n);
+
+  // 2. Then what this channel's own purpose suggests.
+  const inferred = _tagVocabFor(ch, agents, routedTasks)
+    .filter((t) => !have.has(t.name) && !seen.has(t.name));
+
+  // De-duplicate across the two lists by name, preserving order.
+  const out = [];
+  const taken = new Set();
+  for (const t of [...reused, ...inferred]) {
+    if (taken.has(t.name)) continue;
+    taken.add(t.name);
+    out.push(t);
+  }
+  return out;
 }
 
 async function _addSuggestedTag(channelId, name, emoji) {
@@ -4544,7 +4610,6 @@ function _renderLiveChannels(guild) {
   for (const ch of _discordChannels) {
     registeredChannelMap.set(String(ch.id || ch.channelId || ''), ch);
   }
-  const clickable = new Set([0, 5, 11, 15]);
 
   // Build task→channel map for routing indicators
   const routingByChKey = {};
@@ -4557,7 +4622,6 @@ function _renderLiveChannels(guild) {
     const icon = CH_TYPE_ICON[ch.type] || '#';
     const regCh = registeredChannelMap.get(String(ch.id));
     const isReg = !!regCh;
-    const canInteract = clickable.has(ch.type);
     const isForum = ch.type === 15;
     const cls = ['ch-tree-item', isReg ? 'registered' : ''].filter(Boolean).join(' ');
     const agents = regCh?.agents || [];
@@ -4566,20 +4630,30 @@ function _renderLiveChannels(guild) {
     const chKey = regCh?.key || '';
     const routedTasks = chKey ? (routingByChKey[chKey] || []) : [];
 
-    // What this channel is for, in a line. Derived from what actually posts here rather than
-    // written by hand: a channel's purpose is the agents assigned to it and the task results
-    // routed to it, and both were already on screen as unlabelled chips nobody could read.
-    const describe = () => {
-      const who = agents.map((a) => a.replace('-agent', ''));
-      const parts = [];
-      if (who.length === 1) parts.push(`${who[0]} が投稿`);
-      else if (who.length > 1) parts.push(`${who.slice(0, 2).join('・')}${who.length > 2 ? ` ほか${who.length - 2}` : ''} が投稿`);
-      if (routedTasks.length) parts.push(`${routedTasks.length}種類のタスク結果`);
-      if (isForum && (ch.availableTags || []).length) parts.push(`タグ${ch.availableTags.length}`);
-      return parts.join(' · ');
-    };
-    const desc = describe();
-    const descLine = desc ? `<div class="ch-desc">${esc(desc)}</div>` : '';
+    /* What gets posted here, said in words.
+       The line used to read "log-monitor ほか2 が投稿 · 5種類のタスク結果", which names the
+       machinery without answering the question — you still could not tell what would appear in
+       this channel. Each assigned agent now contributes a sentence describing what it posts,
+       taken from the registry description it already carries. */
+    const postLines = agents.map((id) => {
+      const reg = REGISTRY.find((r) => r.id === id) || REGISTRY.find((r) => r.id === `${id}-agent`);
+      const name = reg?.nameJp || reg?.name || id.replace('-agent', '');
+      const what = reg?.descJp || reg?.desc || '';
+      return what ? `${name} — ${what}` : name;
+    });
+    // Task results route here by channel key, independently of any agent being assigned, so a
+    // channel can receive output with nobody posting to it. That is worth saying separately.
+    const taskLine = routedTasks.length
+      ? `タスク結果: ${routedTasks.slice(0, 4).map((t) => TASK_TYPE_LABELS[t] || String(t).replace(/_/g, ' ')).join('、')}`
+        + (routedTasks.length > 4 ? ` ほか${routedTasks.length - 4}` : '')
+      : '';
+
+    const descLine = (postLines.length || taskLine)
+      ? `<div class="ch-desc">
+           ${postLines.map((l) => `<div class="ch-desc-line">${esc(l)}</div>`).join('')}
+           ${taskLine ? `<div class="ch-desc-line muted">${esc(taskLine)}</div>` : ''}
+         </div>`
+      : '';
 
     // Tags stay. The remove control does not: it only appears once a tag is selected, because a
     // permanent × on every tag reads as four things asking to be deleted.
@@ -4597,9 +4671,11 @@ function _renderLiveChannels(guild) {
 
     // Suggestions come from tags this server already uses elsewhere. A blank box asks the operator
     // to invent a taxonomy; a list of what they have already chosen asks them to reuse one.
-    const suggestions = isForum ? _tagSuggestions(ch) : [];
-    const suggestChips = suggestions.slice(0, 3).map((t) =>
-      `<button class="ch-chip suggest" title="このタグを追加"
+    const suggestions = isForum ? _tagSuggestions(ch, agents, routedTasks) : [];
+    // Four rather than three: the inferred sets come as small taxonomies, and showing one
+    // member of a set makes it look like a stray word instead of part of a scheme.
+    const suggestChips = suggestions.slice(0, 4).map((t) =>
+      `<button class="ch-chip suggest" title="${t.reused ? 'このサーバーの他のチャンネルで使われています' : 'このチャンネルの用途からの提案'}"
          onclick="event.stopPropagation();_addSuggestedTag('${esc(ch.id)}','${esc(t.name)}','${esc(t.emoji || '')}')">
          ${t.emoji ? `<span class="ch-chip-emoji">${t.emoji}</span>` : ''}${esc(t.name)}</button>`).join('');
 
@@ -4614,17 +4690,10 @@ function _renderLiveChannels(guild) {
 
     const meta = tagSection;
 
-    // One button that both names the agents posting here and opens the picker. Two separate
-    // controls — one to see, one to change — is one more than the question needs.
-    const who = agents.map((a) => a.replace('-agent', ''));
-    const agentBtn = canInteract
-      ? `<button class="ch-agents" onclick="event.stopPropagation();_openAgentMenu('${esc(ch.id)}','${esc(ch.name)}',event)"
-           title="${who.length ? esc(who.join('、')) + ' が投稿します' : 'まだ割り当てなし'}">
-           <i class="ni ni-agents" aria-hidden="true"></i>${
-             who.length ? esc(who.slice(0, 2).join('、')) + (who.length > 2 ? ` +${who.length - 2}` : '')
-                        : 'エージェントなし'}</button>`
-      : '';
-    const plusBtn = agentBtn;
+    /* No per-row agent control. Assignment happens from the button above the tree.
+       The row used to carry a button that read エージェントなし on every unassigned channel —
+       most of them — which filled the tree with a label stating an absence nobody was going to
+       act on there. A channel with no agents now simply says nothing. */
 
     return `<div class="${cls}" title="ID: ${esc(ch.id)}">
       <div class="ch-row">
@@ -4634,7 +4703,6 @@ function _renderLiveChannels(guild) {
       </div>
       ${descLine}
       ${meta}
-      <div class="ch-actions">${plusBtn}</div>
     </div>`;
   }
 
@@ -4683,6 +4751,68 @@ function _renderLiveChannels(guild) {
 }
 
 let _agentMenuChannelId = null;
+
+/* Assignment moved off the rows and above the tree.
+   A control on every row meant forty controls for something done a few times a year, and it was
+   the thing that made every unassigned channel announce エージェントなし. Here it is one form:
+   pick a channel, tick the agents. */
+function _showAssignAgentForm() {
+  const form = document.getElementById('assign-agent-form');
+  const sel = document.getElementById('assign-agent-channel');
+  if (!form || !sel) return;
+
+  const guild = _guildsData.find((g) => g.id === _selectedGuildId);
+  // Only channels that can actually be posted to. Voice channels and category folders in the
+  // list would be choices that cannot work.
+  const postable = (guild?.channels ?? []).filter((c) => c.type === 0 || c.type === 15);
+  if (!postable.length) { showToast('先にチャンネルを取得してください', 'error'); return; }
+
+  sel.innerHTML = postable
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map((c) => `<option value="${esc(c.id)}">${c.type === 15 ? '🗂' : '#'} ${esc(c.name)}</option>`).join('');
+  form.style.display = 'block';
+  _renderAssignAgentList();
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _hideAssignAgentForm() {
+  const form = document.getElementById('assign-agent-form');
+  if (form) form.style.display = 'none';
+}
+
+function _renderAssignAgentList() {
+  const sel = document.getElementById('assign-agent-channel');
+  const box = document.getElementById('assign-agent-list');
+  if (!sel || !box) return;
+
+  const channelId = sel.value;
+  const guild = _guildsData.find((g) => g.id === _selectedGuildId);
+  const channelName = (guild?.channels ?? []).find((c) => c.id === channelId)?.name || '';
+  const regCh = _discordChannels.find((ch) => String(ch.id || ch.channelId || '') === String(channelId));
+  const assignedHere = new Set(regCh?.agents || []);
+
+  // An agent posts to exactly one channel, so showing where each one currently sits turns a
+  // silent reassignment into a visible move.
+  const agentCurrentKey = {};
+  for (const ch of _discordChannels) {
+    for (const aid of (ch.agents || [])) agentCurrentKey[aid] = ch.key;
+  }
+
+  box.innerHTML = REGISTRY.map((reg) => {
+    const isHere = assignedHere.has(reg.id);
+    const elsewhere = !isHere && agentCurrentKey[reg.id] ? agentCurrentKey[reg.id] : null;
+    const what = reg.descJp || reg.desc || '';
+    return `<label class="agent-menu-item">
+      <input type="checkbox" ${isHere ? 'checked' : ''}
+        onchange="_toggleAgentOnChannel('${esc(reg.id)}','${esc(channelId)}','${esc(channelName)}',this)">
+      <span style="flex:1;min-width:0">
+        <span style="font-weight:700">${esc(reg.nameJp || reg.name || reg.id)}</span>
+        ${what ? `<span class="agent-menu-what">${esc(what)}</span>` : ''}
+      </span>
+      ${elsewhere ? `<span class="agent-menu-elsewhere">#${esc(elsewhere)}</span>` : ''}
+    </label>`;
+  }).join('');
+}
 
 function _openAgentMenu(channelId, channelName, event) {
   const existing = document.getElementById('agent-menu-popup');

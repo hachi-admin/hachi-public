@@ -2061,3 +2061,18 @@ body:has(.mob-more-sheet.open) .page-area{
 }
 .conn-detail{font-size:.55rem;color:var(--m)}
 .conn-hint{font-size:.53rem;color:var(--red);line-height:1.55;margin-top:2px}
+
+/* ── CHANNEL DESCRIPTION ──────────────────────────────────────
+   The line read "log-monitor ほか2 が投稿 · 5種類のタスク結果" — the machinery, not the answer.
+   One line per agent saying what it actually posts, so the channel explains itself. */
+.ch-desc{display:flex;flex-direction:column;gap:3px;margin:5px 0 2px}
+.ch-desc-line{
+  font-size:.55rem;color:var(--m);line-height:1.55;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ch-desc-line.muted{color:var(--m2)}
+
+/* Assignment lives above the tree now, so its rows can afford to say what each agent does. */
+.agent-menu-what{
+  display:block;font-size:.5rem;color:var(--m2);line-height:1.45;margin-top:2px;font-weight:600;
+}
