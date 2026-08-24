@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '14';
+const DASH_BUILD = '15';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -373,7 +373,7 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','カテゴリ'] ] },
+  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','ヒーロー画像'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
@@ -440,6 +440,7 @@ function _initPage(pageId) {
   if (pageId === 'docs') _initDocsIfNeeded();
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
+  if (pageId === 'hero-presets') _loadHeroPresets();
   // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
   // only fires when a nav button is clicked.
   if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
@@ -1835,6 +1836,237 @@ async function scoutTopicsNow() {
   await fetch(apiUrl('/api/article-categories/scout'), { method: 'POST', headers: _authHeaders() }).catch(() => {});
   setTimeout(_loadTopics, 8000);
 }
+
+// ─── Hero Image Presets ───────────────────────────────────────────────────────
+
+let _heroPresets = [];
+let _hpEditingId = null; // null = create mode, string = editing existing
+
+async function _loadHeroPresets() {
+  const listEl = document.getElementById('hero-presets-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets'), { headers: _authHeaders() });
+    if (res.status === 401) { _handleUnauthorized(); return; }
+    if (!res.ok) { listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error ${res.status}</div>`; return; }
+    const data = await res.json();
+    _heroPresets = data.presets || [];
+    _renderHeroPresets();
+  } catch (e) {
+    listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
+  }
+}
+
+function _renderHeroPresets() {
+  const listEl = document.getElementById('hero-presets-list');
+  if (!listEl) return;
+  if (!_heroPresets.length) {
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
+    return;
+  }
+  listEl.innerHTML = _heroPresets.map(_heroPresetRow).join('');
+}
+
+function _heroPresetRow(p) {
+  const tags = (p.mood || []).map(t => `<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(t)}</span>`).join(' ');
+  const sysLabel = p.isSystem
+    ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--div);color:var(--m)">system</span>'
+    : '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#34D39933;color:#34D399">custom</span>';
+  const faceVal = p.styleSpec?.face || '—';
+  const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
+  return `<div class="src-row" style="gap:10px;align-items:flex-start">
+    <div class="src-body" style="flex:1;min-width:0">
+      <div class="src-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-family:monospace;font-size:11px;color:var(--acc)">${esc(p.id)}</span>
+        ${sysLabel}
+        <span style="font-size:12px;font-weight:700;color:var(--txt)">${esc(p.name)}</span>
+      </div>
+      <div class="src-meta" style="margin-top:4px">${esc(p.description || '')}</div>
+      <div class="src-meta" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:10px;color:var(--m2)">${esc(p.templateId)}</span>
+        <span style="font-size:10px;color:var(--m2)">face: ${esc(faceVal)}</span>
+        ${tags}
+      </div>
+      <!-- Collapsed spec preview -->
+      <details style="margin-top:8px">
+        <summary style="font-size:10px;color:var(--m);cursor:pointer">styleSpec を表示</summary>
+        <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.styleSpec, null, 2))}</pre>
+      </details>
+      ${(p.exampleLines||[]).length ? `
+        <details style="margin-top:4px">
+          <summary style="font-size:10px;color:var(--m);cursor:pointer">exampleLines を表示</summary>
+          <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.exampleLines, null, 2))}</pre>
+        </details>` : ''}
+      <div style="font-size:10px;color:var(--m2);margin-top:6px">更新: ${updAt}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')" style="font-size:10px">編集</button>
+      ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="font-size:10px;color:var(--red)">削除</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function _showNewPresetForm() {
+  _hpEditingId = null;
+  document.getElementById('hp-editor-title').textContent = '新規テンプレートを作成';
+  document.getElementById('hp-id').value = '';
+  document.getElementById('hp-id').disabled = false;
+  document.getElementById('hp-name').value = '';
+  document.getElementById('hp-mood').value = '';
+  document.getElementById('hp-description').value = '';
+  document.getElementById('hp-template-id').value = 'photo_scrim';
+  document.getElementById('hp-style-spec').value = JSON.stringify({ face: 'sans', strokes: [], glow: { color: '#000000', em: 0.16, opacity: 0.40 } }, null, 2);
+  document.getElementById('hp-example-lines').value = JSON.stringify([{ text: 'メインコピー', scale: 1.2, indent: 0 }, { text: 'サブコピー', scale: 0.48, indent: 0.1 }], null, 2);
+  document.getElementById('hp-example-badge').value = '';
+  document.getElementById('hp-editor-error').style.display = 'none';
+  // Reset preview pane
+  const img = document.getElementById('hp-preview-img');
+  if (img) { img.src = ''; img.style.display = 'none'; }
+  document.getElementById('hp-preview-placeholder').style.display = 'flex';
+  document.getElementById('hp-preview-error').style.display = 'none';
+  document.getElementById('hero-preset-editor').style.display = '';
+  document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
+}
+
+function _editHeroPreset(id) {
+  const p = _heroPresets.find(x => x.id === id);
+  if (!p) return;
+  _hpEditingId = id;
+  document.getElementById('hp-editor-title').textContent = `「${p.name}」を編集`;
+  document.getElementById('hp-id').value = id;
+  document.getElementById('hp-id').disabled = true;
+  document.getElementById('hp-name').value = p.name || '';
+  document.getElementById('hp-mood').value = (p.mood || []).join(', ');
+  document.getElementById('hp-description').value = p.description || '';
+  document.getElementById('hp-template-id').value = p.templateId || 'photo_scrim';
+  document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
+  document.getElementById('hp-example-lines').value = JSON.stringify(p.exampleLines || [], null, 2);
+  document.getElementById('hp-example-badge').value = p.exampleBadge ? JSON.stringify(p.exampleBadge, null, 2) : '';
+  document.getElementById('hp-editor-error').style.display = 'none';
+  // Reset preview pane then trigger first render
+  const img2 = document.getElementById('hp-preview-img');
+  if (img2) { img2.src = ''; img2.style.display = 'none'; }
+  document.getElementById('hp-preview-placeholder').style.display = 'flex';
+  document.getElementById('hp-preview-error').style.display = 'none';
+  document.getElementById('hero-preset-editor').style.display = '';
+  document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
+  _refreshPreview();
+}
+
+function _closeHeroPresetEditor() {
+  document.getElementById('hero-preset-editor').style.display = 'none';
+  _hpEditingId = null;
+}
+
+let _previewTimer = null;
+function _debouncedPreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(_refreshPreview, 1000);
+}
+
+async function _refreshPreview() {
+  clearTimeout(_previewTimer);
+  const imgEl      = document.getElementById('hp-preview-img');
+  const spinEl     = document.getElementById('hp-preview-spinner');
+  const placEl     = document.getElementById('hp-preview-placeholder');
+  const errEl      = document.getElementById('hp-preview-error');
+  if (!imgEl) return;
+
+  const templateId = document.getElementById('hp-template-id')?.value || 'photo_scrim';
+  const rawSpec    = document.getElementById('hp-style-spec')?.value.trim() || '{}';
+  const rawLines   = document.getElementById('hp-example-lines')?.value.trim() || '[]';
+  const rawBadge   = document.getElementById('hp-example-badge')?.value.trim() || '';
+  const article    = document.getElementById('hp-preview-article')?.value.trim() || 'サンプル記事タイトル';
+
+  let styleSpec, lines, badge;
+  try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON'; errEl.style.display = ''; return; }
+  try { lines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON'; errEl.style.display = ''; return; }
+  try { badge = rawBadge ? JSON.parse(rawBadge) : null; } catch { errEl.textContent = 'exampleBadge が不正な JSON'; errEl.style.display = ''; return; }
+
+  errEl.style.display = 'none';
+  spinEl.style.display = 'flex';
+  placEl.style.display = 'none';
+
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({ templateId, styleSpec, lines, badge: badge || undefined, article }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errEl.textContent = data.error || `Error ${res.status}`;
+      errEl.style.display = '';
+      spinEl.style.display = 'none';
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const old = imgEl.src;
+    imgEl.src = url;
+    imgEl.style.display = '';
+    if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = '';
+  } finally {
+    spinEl.style.display = 'none';
+  }
+}
+
+async function _saveHeroPreset() {
+  const errEl = document.getElementById('hp-editor-error');
+  errEl.style.display = 'none';
+
+  const id          = document.getElementById('hp-id').value.trim();
+  const name        = document.getElementById('hp-name').value.trim();
+  const mood        = document.getElementById('hp-mood').value.split(',').map(s => s.trim()).filter(Boolean);
+  const description = document.getElementById('hp-description').value.trim();
+  const templateId  = document.getElementById('hp-template-id').value;
+  const rawSpec     = document.getElementById('hp-style-spec').value.trim();
+  const rawLines    = document.getElementById('hp-example-lines').value.trim();
+  const rawBadge    = document.getElementById('hp-example-badge').value.trim();
+
+  let styleSpec, exampleLines, exampleBadge;
+  try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON です'; errEl.style.display = ''; return; }
+  try { exampleLines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON です'; errEl.style.display = ''; return; }
+  try { exampleBadge = rawBadge ? JSON.parse(rawBadge) : null; } catch { errEl.textContent = 'exampleBadge が不正な JSON です'; errEl.style.display = ''; return; }
+
+  const isNew = _hpEditingId === null;
+  const url   = isNew ? apiUrl('/api/hero-presets') : apiUrl(`/api/hero-presets/${_hpEditingId}`);
+  const method = isNew ? 'POST' : 'PATCH';
+  const body  = isNew
+    ? { id, name, mood, description, templateId, styleSpec, exampleLines, exampleBadge }
+    : { name, mood, description, templateId, styleSpec, exampleLines, exampleBadge };
+
+  try {
+    const res = await fetch(url, { method, headers: { ...{ 'Content-Type': 'application/json' }, ..._authHeaders() }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { errEl.textContent = data.error || `Error ${res.status}`; errEl.style.display = ''; return; }
+    showToast('保存しました', 'success');
+    _closeHeroPresetEditor();
+    await _loadHeroPresets();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = '';
+  }
+}
+
+async function _deleteHeroPreset(id) {
+  if (!confirm(`テンプレート「${id}」を削除しますか？`)) return;
+  try {
+    const res = await fetch(apiUrl(`/api/hero-presets/${id}`), { method: 'DELETE', headers: _authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
+    showToast('削除しました', 'success');
+    await _loadHeroPresets();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ─── End Hero Image Presets ───────────────────────────────────────────────────
 
 function _renderKnowledge() {
   document.getElementById('k-sources').innerHTML   = _buildSourceRows(SOURCES.filter(s => !s.blocked));
