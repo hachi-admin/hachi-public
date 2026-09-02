@@ -2418,6 +2418,67 @@ function setSettingsSection(btn, id) {
   if (id === 'general') _renderSettingsLocation();
   if (id === 'mail') _loadMailAccounts();
   if (id === 'providers') _loadProviders();
+  if (id === 'models') _loadModelSettings();
+}
+
+/* ── Per-agent model selection ───────────────────────────────
+   Lists every agent with a dropdown of the available models (from the catalog + live pricing),
+   preselected to the model that will actually run. Choosing one pins it via
+   POST /api/agents/:id/settings { model }; "既定 (auto)" clears the pin. */
+async function _loadModelSettings() {
+  const el = document.getElementById('models-list');
+  if (!el) return;
+  el.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/agents/models'), { headers: _authHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const { availableModels = [], agents = [] } = await res.json();
+    window._MODEL_CATALOG = availableModels;
+
+    const priceLabel = (m) => `${m.label} · $${m.inputPer1M}/$${m.outputPer1M}`;
+    const catalogById = Object.fromEntries(availableModels.map(m => [m.id, m]));
+
+    const rows = agents.map(a => {
+      const pinned = !!a.overrideModel;
+      const opts = ['<option value="">既定 (auto) — ' + (catalogById[a.defaultModel]?.label || a.defaultModel || '?') + '</option>']
+        .concat(availableModels.map(m =>
+          `<option value="${m.id}"${a.overrideModel === m.id ? ' selected' : ''}>${priceLabel(m)}</option>`));
+      return `
+        <div class="qs-card" style="align-items:center;gap:12px;padding:8px 12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600">${a.id}</div>
+            <div style="font-size:10px;color:var(--m)">
+              実行モデル: ${catalogById[a.effectiveModel]?.label || a.effectiveModel || '?'}${pinned ? ' · 📌 個別設定' : ''}
+            </div>
+          </div>
+          <select class="form-select" style="width:auto;font-size:11px"
+                  onchange="_setAgentModel('${a.id}', this.value, this)">
+            ${opts.join('')}
+          </select>
+        </div>`;
+    });
+    el.innerHTML = rows.join('') || '<div style="font-size:11px;color:var(--m)">エージェントがありません</div>';
+  } catch (e) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--danger,#c0392b)">読み込みに失敗しました: ' + (e.message || e) + '</div>';
+  }
+}
+
+async function _setAgentModel(agentId, model, selectEl) {
+  const prev = selectEl ? selectEl.value : '';
+  if (selectEl) selectEl.disabled = true;
+  try {
+    const res = await fetch(apiUrl('/api/agents/' + encodeURIComponent(agentId) + '/settings'), {
+      method: 'POST',
+      headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || null }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Refresh so the "実行モデル" line and pin badge reflect the change.
+    await _loadModelSettings();
+  } catch (e) {
+    alert('モデルの変更に失敗しました: ' + (e.message || e));
+    if (selectEl) { selectEl.disabled = false; selectEl.value = prev; }
+  }
 }
 
 /* ── Settings overview ───────────────────────────────────────

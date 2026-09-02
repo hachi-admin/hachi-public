@@ -410,6 +410,7 @@
         <button class="settings-nav-btn active" onclick="setSettingsSection(this,'overview')">概要</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'general')">一般</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'providers')">AI プロバイダー</button>
+        <button class="settings-nav-btn" onclick="setSettingsSection(this,'models')">モデル</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'mail')">メール</button>
         <button class="settings-nav-btn" onclick="setSettingsSection(this,'admin')">管理</button>
       </nav>
@@ -524,6 +525,18 @@
               <div id="provider-key-status" style="font-size:10px;color:var(--m);margin-top:4px"></div>
               <div style="font-size:10px;color:var(--m);margin-top:4px">Firestore に保存されたキーは GCP Secret Manager より優先されます（テスト用のみ）。</div>
             </div>
+          </div>
+        </div>
+
+
+        <!-- PER-AGENT MODELS -->
+        <div class="settings-section" id="ss-models">
+          <div class="section-hd" style="margin-top:0">エージェント別モデル</div>
+          <div style="font-size:11px;color:var(--m);margin-bottom:12px">
+            各エージェントが使うモデルを個別に設定できます。「既定」は現在の自動割り当て（重い生成は Pro、分類・要約は Flash）。価格は 100 万トークンあたりの入力/出力（USD）。
+          </div>
+          <div id="models-list" style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:11px;color:var(--m)">読み込み中…</div>
           </div>
         </div>
 
