@@ -706,6 +706,11 @@ body:has(.mob-more-sheet.open) .page-area{
   font-family:inherit;outline:none;max-height:38vh;
 }
 .cat-prompt:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 22%,transparent)}
+.cat-preview-wrap{margin-bottom:16px;text-align:center}
+.cat-preview-img{
+  display:block;width:100%;max-width:420px;margin:0 auto;border-radius:12px;
+  aspect-ratio:1280/670;background:var(--bg);box-shadow:var(--sh-in);object-fit:cover;
+}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:18px;margin-bottom:0}
 .cat-field{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--m2)}
 .cat-field > span:first-child{font-weight:600;letter-spacing:.04em;color:var(--m)}
