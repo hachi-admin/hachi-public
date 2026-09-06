@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '15';
+const DASH_BUILD = '16';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1992,18 +1992,42 @@ function _renderHeroPresets() {
   listEl.innerHTML = _heroPresets.map(_heroPresetRow).join('');
 }
 
+/* What the agent may choose from, and on whose authority.
+ *
+ * `enabled: false` was documented as the way to withdraw a preset but was never in the API's PATCH
+ * allow-list, so the off-switch existed only in the readers. With that fixed this is where it gets
+ * thrown. The approval badge distinguishes a preset somebody actually agreed to from one that
+ * merely shipped as a default — a difference the catalogue previously could not express, which is
+ * how a travel/documentary treatment came to be described in the agent's prompt as a combination
+ * 「運用者が実際に見て採用した」. */
+function _presetApproval(p) {
+  const a = p.approval;
+  if (a?.status === 'rejected') return { label: '却下',     color: '#F87171', bg: '#F8717122' };
+  if (a?.status === 'pending')  return { label: '承認待ち', color: '#FBBF24', bg: '#FBBF2422' };
+  if (a?.status === 'approved') return { label: '承認済',   color: '#34D399', bg: '#34D39922' };
+  // No ledger entry — grandfathered. Named for what it is rather than shown as approved.
+  return p.isSystem
+    ? { label: '既定',     color: '#94A3B8', bg: '#94A3B822' }
+    : { label: '手動追加', color: '#94A3B8', bg: '#94A3B822' };
+}
+
 function _heroPresetRow(p) {
   const tags = (p.mood || []).map(t => `<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(t)}</span>`).join(' ');
   const sysLabel = p.isSystem
     ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--div);color:var(--m)">system</span>'
     : '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#34D39933;color:#34D399">custom</span>';
+  const ap = _presetApproval(p);
+  const apTitle = p.approval?.decidedBy ? `決定: ${p.approval.decidedBy}` : '承認台帳に記録なし（既存項目として扱われています）';
+  const apLabel = `<span title="${esc(apTitle)}" style="font-size:9px;padding:1px 5px;border-radius:3px;background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
+  const off = p.enabled === false;
+  const offLabel = off ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#F8717122;color:#F87171">無効</span>' : '';
   const faceVal = p.styleSpec?.face || '—';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
-  return `<div class="src-row" style="gap:10px;align-items:flex-start">
+  return `<div class="src-row" style="gap:10px;align-items:flex-start${off ? ';opacity:.55' : ''}">
     <div class="src-body" style="flex:1;min-width:0">
       <div class="src-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-family:monospace;font-size:11px;color:var(--acc)">${esc(p.id)}</span>
-        ${sysLabel}
+        ${sysLabel}${apLabel}${offLabel}
         <span style="font-size:12px;font-weight:700;color:var(--txt)">${esc(p.name)}</span>
       </div>
       <div class="src-meta" style="margin-top:4px">${esc(p.description || '')}</div>
@@ -2026,9 +2050,27 @@ function _heroPresetRow(p) {
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
       <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')" style="font-size:10px">編集</button>
+      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})" style="font-size:10px"
+        title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
       ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="font-size:10px;color:var(--red)">削除</button>` : ''}
     </div>
   </div>`;
+}
+
+/* Withdraw a preset without deleting it.
+ *
+ * Deleting a system preset is refused by the API and re-seeded on the next deploy anyway, so
+ * disabling is the only durable way to take one out of circulation — which is exactly what the
+ * server-side comment always said and what could not be done until `enabled` reached the PATCH
+ * allow-list. */
+async function _toggleHeroPreset(id, currentlyOff) {
+  const res = await fetch(apiUrl(`/api/hero-presets/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !!currentlyOff }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
+  showToast(currentlyOff ? '有効にしました。' : '無効にしました。エージェントの選択肢から外れます。', 'success');
+  _loadHeroPresets();
 }
 
 function _showNewPresetForm() {
