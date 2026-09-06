@@ -1092,22 +1092,25 @@ function setKTab(el, tab) {
 let CATEGORIES = [];
 let CAT_ARTICLES = [];
 let CAT_META = null;   // option lists from /api/article-categories/meta
+let PROPOSALS = [];    // pending #approvals cards, from /api/proposals?status=pending
 let _catView = 'categories';
 
 async function _loadTopics() {
   const box = document.getElementById('k-topics');
   if (box && !box.dataset.loaded) box.innerHTML = '<div style="color:var(--m);font-size:11px;padding:8px 0">読み込み中…</div>';
   try {
-    const [meta, cats, arts] = await Promise.all([
+    const [meta, cats, arts, props] = await Promise.all([
       CAT_META ? Promise.resolve(CAT_META)
         : fetch(apiUrl('/api/article-categories/meta'), { headers: _authHeaders() }).then(r => r.json()),
       fetch(apiUrl('/api/article-categories'), { headers: _authHeaders() }).then(r => r.json()),
       fetch(apiUrl('/api/articles?limit=100'), { headers: _authHeaders() }).then(r => r.json()),
+      fetch(apiUrl('/api/proposals?status=pending'), { headers: _authHeaders() }).then(r => r.json()),
     ]);
     CAT_META = meta;
     CATEGORIES = Array.isArray(cats.categories) ? cats.categories : [];
     CAT_ARTICLES = Array.isArray(arts.articles) ? arts.articles : [];
-  } catch { CATEGORIES = []; CAT_ARTICLES = []; }
+    PROPOSALS = Array.isArray(props.proposals) ? props.proposals : [];
+  } catch { CATEGORIES = []; CAT_ARTICLES = []; PROPOSALS = []; }
   if (box) box.dataset.loaded = '1';
   _renderTopics();
 }
@@ -1154,6 +1157,7 @@ function _renderTopics() {
     </div>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
+      <button class="cat-view-btn${_catView === 'approvals' ? ' active' : ''}${PROPOSALS.length ? ' has-badge' : ''}" role="tab" aria-selected="${_catView === 'approvals'}" onclick="setCatView('approvals')">承認待ち <b>${PROPOSALS.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
       <button class="cat-view-btn${_catView === 'reception' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'reception'}" onclick="setCatView('reception')">note の反応</button>
       <button class="cat-view-btn${_catView === 'experiment' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'experiment'}" onclick="setCatView('experiment')">実験</button>
@@ -1161,12 +1165,76 @@ function _renderTopics() {
   </div>`;
 
   box.innerHTML = toolbar + (
+    _catView === 'approvals'  ? _buildApprovals()   :
     _catView === 'articles'  ? _buildArticleRows()  :
     _catView === 'reception'  ? _buildReception()   :
     _catView === 'experiment' ? _buildExperiment()  :
                                 _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
   if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
+}
+
+// ─── #approvals, without leaving the dashboard ────────────────────────────────
+// Every agent-raised decision — article-idea slates, scout suggestions, craft findings — used to
+// be answerable only in Discord. This reads and resolves the same `proposals` Firestore docs
+// through /api/proposals, which runs the exact executor Discord's button handler calls, so a
+// decision made here queues the same task or sets the same status a click would.
+const _PROP_KIND_LABEL = {
+  article_idea: '記事案', category: 'カテゴリ提案', visionary: 'ビジョン', hero: '見た目',
+  experiment_result: '実験結果', channel_audit: 'チャンネル監査', craft_study: '文体調査',
+  note_study: 'note調査', efficiency_audit: '効率監査', advisor: '相談',
+};
+
+function _buildApprovals() {
+  if (!PROPOSALS.length) {
+    return `<div style="color:var(--m);font-size:11px;padding:8px 0">承認待ちの提案はありません。</div>`;
+  }
+  return `<div class="note-panel">${PROPOSALS.map(_approvalCard).join('')}</div>`;
+}
+
+function _approvalCard(p) {
+  const kindLabel = _PROP_KIND_LABEL[p.kind] || p.kind || '提案';
+  const real = (p.choices || []).filter((c) => c.value !== '__other__' && c.value !== '__cancel__');
+  const hasOther = (p.choices || []).some((c) => c.value === '__other__');
+  return `<div class="note-block" data-proposal-id="${esc(p.id)}">
+    <div class="src-meta" style="margin-bottom:4px">${srcChip(kindLabel, 'purple')}${srcChip(_catDate(p.createdAt))}</div>
+    <h4 class="note-h" style="margin-bottom:2px">${esc(p.title || '')}</h4>
+    ${p.description ? `<div style="font-size:11px;color:var(--m);line-height:1.6;margin-bottom:8px">${esc(p.description)}</div>` : ''}
+    ${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" style="max-width:220px;border-radius:8px;display:block;margin-bottom:8px">` : ''}
+    <div class="cat-toolbar-actions" style="gap:6px">
+      ${real.map((c) => `<button class="act-btn resume" title="${esc(c.description || '')}"
+        onclick="decideProposal('${esc(p.id)}','${esc(c.value)}',this)">${esc(c.label)}</button>`).join('')}
+      <button class="act-btn cancel" onclick="decideProposal('${esc(p.id)}','__cancel__',this)">見送る</button>
+      ${hasOther ? `<button class="act-btn" onclick="decideProposalFreeText('${esc(p.id)}',this)">その他（自由に書く）</button>` : ''}
+    </div>
+  </div>`;
+}
+
+async function decideProposal(id, value, btn) {
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl(`/api/proposals/${id}/decide`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (!res?.ok) { showToast(data?.error || '反映に失敗しました', 'error'); btn?.removeAttribute('disabled'); return; }
+  showToast(data.message || '反映しました', 'success');
+  _loadTopics();
+}
+
+function decideProposalFreeText(id) {
+  const text = window.prompt('この提案への指示を書いてください（例:「全て作成」「Bだけ承認」など）');
+  if (!text || !text.trim()) return;
+  (async () => {
+    const res = await fetch(apiUrl(`/api/proposals/${id}/decide`), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ freeText: text.trim() }),
+    }).catch(() => null);
+    const data = await res?.json().catch(() => null);
+    if (!res?.ok) { showToast(data?.error || '反映に失敗しました', 'error'); return; }
+    showToast(data.message || '記録しました', data.decided ? 'success' : 'info');
+    _loadTopics();
+  })();
 }
 
 function _buildCategoryCards() {
@@ -1233,6 +1301,7 @@ function openCategoryDetail(id) {
   // continuing to tab through the page behind.
   document.getElementById('detail-panel')?.focus();
   _moneyChanged(c.id);
+  refreshCatPreview(c.id);
 }
 
 function _categoryEditor(c) {
@@ -1663,26 +1732,30 @@ function _visualSection(c, section) {
       <span class="cat-label">${label}</span>
       <span class="cat-colour">
         <input type="color" id="cat-${id}-${c.id}" value="${esc(value || '#888888')}"
-          class="cat-swatch" aria-label="${label}">
+          class="cat-swatch" aria-label="${label}" oninput="_syncSwatch('${c.id}','${id}',true);queueCatPreview('${c.id}')">
         <input type="text" id="cat-${id}hex-${c.id}" value="${esc(value || '')}" placeholder="未設定"
           class="cat-in cat-hex" maxlength="7" spellcheck="false"
-          oninput="_syncSwatch('${c.id}','${id}')">
+          oninput="_syncSwatch('${c.id}','${id}');queueCatPreview('${c.id}')">
       </span>
       <span class="cat-hint">${hint}</span>
     </label>`;
 
   const summary = v.eyebrow || v.template || v.accent || v.align ? (v.eyebrow || '指定あり') : '自動';
   return section('見た目', summary, `
+    <div class="cat-preview-wrap neu-well">
+      <img id="cat-preview-${c.id}" class="cat-preview-img" alt="見出し画像プレビュー" loading="lazy">
+      <div id="cat-preview-status-${c.id}" class="cat-hint" style="margin-top:6px">読み込み中…</div>
+    </div>
     <div class="cat-grid neu-well">
       <label class="cat-field">
         <span class="cat-label">ヒーローの型</span>
-        <select id="cat-tpl-${c.id}" class="cat-in">${tplOpts}</select>
+        <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
       </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
       <label class="cat-field">
         <span class="cat-label">文字の位置</span>
-        <select id="cat-align-${c.id}" class="cat-in">
+        <select id="cat-align-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
           ${[['', '型にまかせる'], ['center', '中央（ポスター的）'], ['left', '左揃え（雑誌的）']]
             .map(([val, l]) => `<option value="${val}"${val === (v.align || '') ? ' selected' : ''}>${l}</option>`).join('')}
         </select>
@@ -1691,7 +1764,7 @@ function _visualSection(c, section) {
       <label class="cat-field">
         <span class="cat-label">マガジン名</span>
         <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
-          value="${esc(v.eyebrow || '')}" placeholder="未設定">
+          value="${esc(v.eyebrow || '')}" placeholder="未設定" oninput="queueCatPreview('${c.id}')">
         <span class="cat-hint">見出しの上に小さく入ります。毎回同じ位置に出るので、一覧で見分けがつくようになります</span>
       </label>
     </div>
@@ -1702,12 +1775,63 @@ function _visualSection(c, section) {
 
 /* Keep the picker and the hex box in step. The text box is the one that can be cleared — a colour
    input has no empty state, so without it there is no way to say "no colour chosen". */
-function _syncSwatch(catId, field) {
+function _syncSwatch(catId, field, fromPicker = false) {
   const hex = document.getElementById(`cat-${field}hex-${catId}`);
   const pick = document.getElementById(`cat-${field}-${catId}`);
   if (!hex || !pick) return;
+  if (fromPicker) { hex.value = pick.value; return; }
   const v = hex.value.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(v)) pick.value = v;
+}
+
+// ─── Live style preview ───────────────────────────────────────────────────────
+// The editor changes a template id, a colour, an alignment, an eyebrow — all things a person
+// cannot judge from a dropdown's current value. /api/hero-presets/preview renders the exact same
+// SVG the published hero would carry, with no Firestore write, so this shows the real thing rather
+// than a mocked-up approximation of it. Debounced: a colour picker fires continuously while
+// dragging, and re-rendering sharp output on every tick would queue faster than it can return.
+const _catPreviewTimers = {};
+const _catPreviewUrls = {};
+
+function queueCatPreview(id) {
+  clearTimeout(_catPreviewTimers[id]);
+  _catPreviewTimers[id] = setTimeout(() => refreshCatPreview(id), 350);
+}
+
+async function refreshCatPreview(id) {
+  const img = document.getElementById(`cat-preview-${id}`);
+  const status = document.getElementById(`cat-preview-status-${id}`);
+  if (!img) return;
+  const c = CATEGORIES.find((x) => x.id === id);
+  const body = {
+    templateId: _catVal(`cat-tpl-${id}`) || undefined,
+    categoryId: id,
+    visual: {
+      accent: _catVal(`cat-accenthex-${id}`).trim(),
+      align: _catVal(`cat-align-${id}`),
+      eyebrow: _catVal(`cat-eyebrow-${id}`).trim(),
+    },
+    article: (c?.name || 'サンプルタイトル'),
+    lines: [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }],
+  };
+  if (status) status.textContent = '生成中…';
+  const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res?.ok) {
+    if (status) status.textContent = 'プレビューを生成できませんでした';
+    return;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  // The previous object URL is only revoked once the new one is already assigned, so the <img>
+  // never has a moment with a dangling reference mid-swap.
+  const prev = _catPreviewUrls[id];
+  img.src = url;
+  _catPreviewUrls[id] = url;
+  if (prev) URL.revokeObjectURL(prev);
+  if (status) status.textContent = '';
 }
 
 async function saveCategory(id) {
