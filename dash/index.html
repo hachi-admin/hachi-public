@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/neu.css?v=7">
-<link rel="stylesheet" href="dashboard.css?v=11">
+<link rel="stylesheet" href="dashboard.css?v=12">
 </head>
 <body>
 
@@ -248,9 +248,16 @@
           <details class="neu-sec">
             <summary>見本<span class="sum-val" id="hp-sum-example">—</span><span class="chev">▶</span></summary>
             <div class="neu-sec-body">
-              <label class="hp-label hp-label-block">exampleLines（JSON配列）
-                <textarea id="hp-example-lines" class="form-input hp-code" rows="6" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
-              </label>
+              <!-- One row per line, showing its own text. Tapping a row opens the controls for
+                   that line alone — changing how 「月5万円」 is set should not mean finding it
+                   inside a JSON array and editing around it. -->
+              <div id="hp-line-form"></div>
+              <details class="hp-json">
+                <summary>JSON で編集<span class="chev">▶</span></summary>
+                <label class="hp-label hp-label-block">exampleLines（JSON配列）
+                  <textarea id="hp-example-lines" class="form-input hp-code" rows="6" oninput="_debouncedPreview();_syncHpSummaries();_renderLineForm()"></textarea>
+                </label>
+              </details>
               <label class="hp-label hp-label-block">exampleBadge（JSON、任意）
                 <textarea id="hp-example-badge" class="form-input hp-code" rows="3" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
               </label>
@@ -956,6 +963,6 @@
 })();
 </script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

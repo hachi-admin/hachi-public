@@ -2243,3 +2243,41 @@ body:has(.mob-more-sheet.open) .page-area{
   .hp-range{flex-wrap:wrap}
   .hp-num{inline-size:100%;text-align:left}
 }
+
+/* ── Per-line editor ─────────────────────────────────────────────────────────
+ * A row per authored line, showing that line's own text. The row is the tap target: to restyle
+ * 「月5万円」 you tap 「月5万円」, rather than locating it inside a JSON array. */
+.hp-line{margin-bottom:8px}
+.hp-line-row{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:10px 12px;
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;border-radius:12px;
+  font-family:inherit;cursor:pointer;text-align:left;
+}
+.hp-line-row.open{box-shadow:var(--sh-in)}
+.hp-line-row .chev{margin-left:auto;font-size:9px;color:var(--m2);transition:transform .15s;flex:0 0 auto}
+.hp-line-row.open .chev{transform:rotate(90deg)}
+/* The line's text at something close to its real weight — this is the thing being pointed at, and
+   at 11px in a row of grey chrome it stops reading as the content and starts reading as a label. */
+.hp-line-text{font-size:14px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hp-line-meta{font-size:10px;color:var(--m2);white-space:nowrap;flex:0 0 auto}
+.hp-line-body{padding:10px 0 2px}
+.hp-line-acts{display:flex;gap:8px;align-items:center;margin-top:4px}
+.hp-line-add{width:100%;justify-content:center;min-height:44px;margin-top:4px}
+
+/* ── Keeping the preview on screen ───────────────────────────────────────────
+ * Every control here changes the picture, and a preview that scrolls away turns each change into
+ * edit → scroll up → look → scroll back. Pinned under the header instead, so the form moves and
+ * the picture does not. Capped by height rather than left at its aspect ratio: on a short screen a
+ * full-width hero would take the whole viewport and leave nothing to edit with. */
+@media(max-width:767px){
+  .hp-preview-col{
+    position:sticky;top:80px;z-index:5;order:-1;
+    background:var(--surf);padding:8px 0 10px;margin:0 -2px;
+  }
+  .hp-preview-frame{max-width:none;max-height:34vh;margin-inline:auto;aspect-ratio:1280/670}
+}
+@media(max-width:767px) and (max-height:640px){
+  /* Less room to spare: the picture yields first, since a preview you cannot edit beside is not
+     worth the space it takes. */
+  .hp-preview-frame{max-height:26vh}
+}
