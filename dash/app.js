@@ -2238,9 +2238,20 @@ function _hpControl(key, desc, value) {
     body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
       desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   } else if (desc.type === 'colour') {
+    /* `null` is a value here, not an absence. A template says "no such treatment" with it — a
+       `ground: null` is what makes a photo template show the photograph rather than paint over it.
+       Displaying white for that was a lie the control told about the spec it was showing: the
+       swatch read #FFFFFF while the renderer saw null and did something else entirely.
+       So null is said out loud, and stays null until the swatch is actually used. */
+    const isNull = value === null;
     const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
-    body = `<div class="hp-colour"><input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
-      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetKey('${key}',this.value.toUpperCase())"></div>`;
+    body = `<div class="hp-colour${isNull ? ' is-null' : ''}">`
+      + `<input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(isNull ? 'null' : v)}"`
+      + ` onchange="_hpSetKey('${key}', this.value.trim().toLowerCase() === 'null' ? null : this.value.toUpperCase())">`
+      + (isNull ? '' : `<button class="act-btn" title="この扱いをしない（null）" onclick="_hpSetKey('${key}',null)">なし</button>`)
+      + '</div>'
+      + (isNull ? '<div class="hp-ctl-hint">null — この扱いをしない（色を選ぶと設定されます）</div>' : '');
   } else if (desc.type === 'range') {
     const v = _hpNum(value, desc);
     // The number is shown as well as the slider: a slider alone cannot be set to an exact value,

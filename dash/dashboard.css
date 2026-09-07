@@ -2281,3 +2281,9 @@ body:has(.mob-more-sheet.open) .page-area{
      worth the space it takes. */
   .hp-preview-frame{max-height:26vh}
 }
+
+/* A colour set to null is not a white colour. The swatch still shows something — a colour input
+   has no empty state — so it is dimmed and the field beside it reads `null`, which is what the
+   renderer will actually see. */
+.hp-colour.is-null input[type=color]{opacity:.35;filter:grayscale(1)}
+.hp-colour.is-null .hp-mono{color:var(--m2);font-style:italic}
