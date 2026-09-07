@@ -34,6 +34,8 @@ const el = () => ({ set innerHTML(v) { store.last = v; }, get innerHTML() { retu
  * section's summary — and those are exactly the ones whose output nobody sees until it is wrong on
  * a phone. Installing a field map lets them be exercised the same way as the rest. */
 let _dom = null;
+let _formHost = { innerHTML: '' };
+const domFor = (spec) => { _dom = { 'hp-style-spec': { value: spec }, 'hp-style-form': _formHost }; };
 const useDom = (fields) => { _dom = {}; for (const [k, v] of Object.entries(fields)) _dom[k] = { value: v }; };
 const domText = (id) => _dom?.[id]?.textContent;
 
@@ -56,12 +58,13 @@ const sandbox = {
   _setText:(id,v)=>{ store[id] = v; },
   INTENSITY_MODE:'balanced', FORCE_FLASH:false, ACTIVE_PROVIDER:'gemini',
   _loadConnections:async()=>{},
+  _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
-const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries'];
+const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB','_hpNum'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm'];
 
 let code = '';
 let missing = 0;
@@ -235,6 +238,74 @@ run('_syncHpSummaries on a brand new preset', () => {
   if (got.some(v => !v)) throw new Error(`an empty form must still say something: ${got.join(' | ')}`);
   return got.join(' | ');
 });
+
+/* The generated styleSpec controls.
+ *
+ * This form exists because the previous one was a JSON textarea, so the cases that matter are the
+ * ones a textarea handled by doing nothing: a spec mid-edit and unparseable (the form must not
+ * overwrite it), a key the renderer does not read (the `ink` bug, which should now be visible in
+ * the editor rather than only in a published image), and values of the wrong type or out of range.
+ * All of them are reachable in normal use and none of them are reachable by clicking around once.
+ */
+{
+  const vocabPath = new URL('../../hachi-core/src/integrations/style-vocabulary.js', import.meta.url);
+  let vocab = null;
+  try {
+    const m = await import(vocabPath.href);
+    vocab = { schema: m.STYLE_SCHEMA, groups: m.STYLE_GROUPS };
+  } catch { /* hachi-core not checked out beside this repo — skip rather than fail CI on layout */ }
+
+  /* A second instance with the vocabulary bound.
+     `_hpVocab` reaches the extracted functions as a sandbox parameter, so assigning it on the
+     returned object sets a property nothing reads — the functions close over the parameter. The
+     key order has to match how `make` was built. */
+  const api2 = vocab ? make(...Object.keys(sandbox).map((k) => (k === '_hpVocab' ? vocab : sandbox[k]))) : null;
+
+  const formHtml = (spec) => {
+    domFor(spec);
+    api2._renderStyleForm();
+    return _formHost.innerHTML || '';
+  };
+
+  if (!vocab) {
+    console.log('- styleSpec form checks skipped (hachi-core not adjacent)');
+  } else {
+    run('styleSpec form renders a real preset', () => {
+      const h = formHtml(JSON.stringify({ face:'kaku', scrimMax:0.44, textZone:'left', text:'#FFFFFF' }));
+      const n = (h.match(/class="hp-ctl"/g) || []).length;
+      if (n !== 4) throw new Error(`expected 4 controls, got ${n}`);
+      if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error('leaked a raw value into the markup');
+      return `${n} controls`;
+    });
+
+    run('styleSpec form leaves an unparseable spec alone', () => {
+      const h = formHtml('{face:');
+      if (/class="hp-ctl"/.test(h)) throw new Error('built controls from a spec it could not read');
+      if (!/JSON/.test(h)) throw new Error('said nothing about why the controls are missing');
+      return 'refused, with a reason';
+    });
+
+    run('styleSpec form names a key the renderer will drop', () => {
+      // The `ink` bug: a plausible name nothing reads, invisible until a published image was seen.
+      const h = formHtml(JSON.stringify({ face:'sans', ink:'#FFEC00' }));
+      /* Matched against the warning itself, not merely the letters "ink" anywhere in the markup.
+         The first version of this check looked for /ink/ and passed even with the warning deleted,
+         because the "add a key" picker lists `inkOverride`. */
+      const warn = h.match(/読まないキー:[\s\S]*?<\/div>/);
+      if (!warn) throw new Error('an unreadable key passed without comment');
+      if (!/<code>[^<]*\bink\b[^<]*<\/code>/.test(warn[0])) throw new Error(`warning did not name the key: ${warn[0]}`);
+      return 'flagged';
+    });
+
+    run('styleSpec form survives wrong types and out-of-range numbers', () => {
+      for (const spec of ['{"face":123,"text":"red"}', '{"scrimMax":99}', '{"ground":null}', '{}']) {
+        const h = formHtml(spec);
+        if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error(`leaked on ${spec}`);
+      }
+      return 'ok';
+    });
+  }
+}
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);
 console.log(fail || missing ? `\nFAILED (${fail} render, ${missing} missing)` : '\nall render checks passed');

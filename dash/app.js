@@ -2115,6 +2115,7 @@ function _showNewPresetForm() {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
+  _loadStyleVocab().then(_renderStyleForm);
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2140,6 +2141,7 @@ function _editHeroPreset(id) {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
+  _loadStyleVocab().then(_renderStyleForm);
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
   _refreshPreview();
@@ -2148,6 +2150,152 @@ function _editHeroPreset(id) {
 function _closeHeroPresetEditor() {
   document.getElementById('hero-preset-editor').style.display = 'none';
   _hpEditingId = null;
+}
+
+/* ── styleSpec: controls instead of hand-written JSON ─────────────────────────
+ *
+ * This form was a textarea holding raw JSON, which on a phone meant authoring
+ * `{"face":"sans","strokes":[{"color":"#050810","em":0.038}]}` with a thumb. The vocabulary that
+ * describes every key already exists in the renderer — it is what rejects a misspelt key before
+ * anything draws — so the controls are generated from it rather than written out again here.
+ * Duplicating it would drift, and the drift shows up as a control that sets a value the renderer
+ * then silently discards.
+ *
+ * The textarea stays, below, as the escape hatch: the vocabulary has 56 keys and some are shapes no
+ * small control expresses well (`metal`, `typography`). Both edit the same object, so neither can
+ * hold a value the other cannot see.
+ *
+ * Only keys the spec *has* get a control, plus a picker to add one. Rendering all 56 would replace
+ * a scrolling wall of JSON with a scrolling wall of sliders.
+ */
+let _hpVocab = null;
+
+async function _loadStyleVocab() {
+  if (_hpVocab) return _hpVocab;
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/vocabulary'), { headers: _authHeaders() });
+    if (!res.ok) return null;
+    _hpVocab = await res.json();
+  } catch { return null; }
+  return _hpVocab;
+}
+
+/** The spec as an object, taken from the textarea — the one place the value actually lives. */
+function _hpSpec() {
+  const raw = document.getElementById('hp-style-spec')?.value?.trim();
+  if (!raw) return {};
+  try { const v = JSON.parse(raw); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
+  catch { return null; }              // null means "unparseable", which the form must not overwrite
+}
+
+function _hpWriteSpec(spec) {
+  const el = document.getElementById('hp-style-spec');
+  if (!el) return;
+  el.value = JSON.stringify(spec, null, 2);
+  _renderStyleForm();
+  _syncHpSummaries();
+  _debouncedPreview();
+}
+
+function _hpSetKey(key, value) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  spec[key] = value;
+  _hpWriteSpec(spec);
+}
+
+function _hpRemoveKey(key) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  delete spec[key];
+  _hpWriteSpec(spec);
+}
+
+function _hpAddKey(key) {
+  if (!key) return;
+  const d = _hpVocab?.schema?.[key];
+  const spec = _hpSpec();
+  if (spec === null || !d) return;
+  // Start from something the renderer would accept, so adding a key never leaves the spec invalid.
+  spec[key] = d.type === 'enum' ? d.options[0]
+    : d.type === 'colour' ? '#FFFFFF'
+      : d.type === 'range' ? Number(((d.min + d.max) / 2).toFixed(2))
+        : d.type === 'bool' ? true
+          : d.type === 'array' ? []
+            : d.type === 'string' ? '' : {};
+  _hpWriteSpec(spec);
+}
+
+const _hpNum = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(d.max, Math.max(d.min, n)) : d.min; };
+
+function _hpControl(key, desc, value) {
+  const lbl = esc(desc.label || key);
+  const rm = `<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey('${key}')">×</button>`;
+  const head = `<div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code>${rm}</div>`;
+  let body;
+
+  if (desc.type === 'enum') {
+    body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
+      desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  } else if (desc.type === 'colour') {
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    body = `<div class="hp-colour"><input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetKey('${key}',this.value.toUpperCase())"></div>`;
+  } else if (desc.type === 'range') {
+    const v = _hpNum(value, desc);
+    // The number is shown as well as the slider: a slider alone cannot be set to an exact value,
+    // and these are design decisions people copy between presets.
+    body = `<div class="hp-range"><input type="range" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="_hpSetKey('${key}',Number(this.value))">`
+      + `<input class="form-input hp-num" type="number" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` onchange="_hpSetKey('${key}',Number(this.value))"></div>`;
+  } else if (desc.type === 'bool') {
+    body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="_hpSetKey('${key}',this.checked)"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (desc.type === 'string') {
+    body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="_hpSetKey('${key}',this.value)">`;
+  } else {
+    // object / array / union — a shape no single control expresses. Say so and point at the JSON,
+    // rather than offering a control that would quietly flatten it.
+    const n = Array.isArray(value) ? `${value.length}件` : (value && typeof value === 'object' ? `${Object.keys(value).length}項目` : '—');
+    body = `<div class="hp-ctl-json">${n}<span class="hp-ctl-hint">下の JSON で編集</span></div>`;
+  }
+  return `<div class="hp-ctl">${head}${body}</div>`;
+}
+
+function _renderStyleForm() {
+  const host = document.getElementById('hp-style-form');
+  if (!host) return;
+  if (!_hpVocab) { host.innerHTML = ''; return; }
+
+  const spec = _hpSpec();
+  if (spec === null) {
+    // Unparseable JSON: show nothing rather than a form built from a guess, and do not touch the
+    // textarea — the operator is mid-edit and overwriting it would lose their work.
+    host.innerHTML = `<div class="hp-ctl-json">⚠ JSON が不正なため項目を表示できません。下の JSON を直すと戻ります。</div>`;
+    return;
+  }
+
+  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k]);
+  const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
+  const groups = _hpVocab.groups
+    .map((g) => [g, set.filter((k) => _hpVocab.schema[k].group === g.id)])
+    .filter(([, keys]) => keys.length);
+
+  const addable = Object.entries(_hpVocab.schema)
+    .filter(([k]) => !(k in spec))
+    .map(([k, d]) => `<option value="${k}">${esc(d.label || k)}（${k}）</option>`).join('');
+
+  host.innerHTML = `
+    ${unknown.length ? `<div class="hp-ctl-json">⚠ レンダラーが読まないキー: <code>${unknown.map(esc).join(', ')}</code> — 描画時に無視されます</div>` : ''}
+    ${groups.map(([g, keys]) => `
+      <div class="hp-grp"><div class="hp-grp-hd">${esc(g.label)}</div>
+        ${keys.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k])).join('')}
+      </div>`).join('')}
+    ${set.length ? '' : '<div class="hp-ctl-json">項目がありません。下から追加できます。</div>'}
+    <div class="hp-add">
+      <select class="form-select" id="hp-add-key"><option value="">項目を追加…</option>${addable}</select>
+      <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>
+    </div>`;
 }
 
 let _previewTimer = null;
