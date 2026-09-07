@@ -2175,3 +2175,22 @@ body:has(.mob-more-sheet.open) .page-area{
   .hp-preview-col{position:static;order:-1}
   .hp-preview-frame{max-width:none}
 }
+
+/* Hero preset editor — field labels.
+ *
+ * These were repeated inline on every label (`font-size:11px;color:var(--m)` and a per-field
+ * `width:100%;box-sizing:border-box`). Inline meant the size could not be raised for a phone
+ * without editing nine attributes, which is how 11px labels survived on the screen they were
+ * hardest to read on. */
+.hp-label{display:block;font-size:11px;color:var(--m)}
+.hp-label > .form-input,.hp-label > .form-select,.hp-label > textarea{margin-top:4px;width:100%;box-sizing:border-box}
+.hp-label-block{margin-bottom:12px}
+.hp-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.hp-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;resize:vertical}
+
+@media(max-width:767px){
+  /* Small type is a desktop affordance borrowed onto a phone, where the label is doing more work:
+     there is no adjacent column to infer the field's meaning from. */
+  .hp-label{font-size:12px}
+  .hp-code{font-size:12px}
+}
