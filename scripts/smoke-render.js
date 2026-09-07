@@ -35,7 +35,9 @@ const el = () => ({ set innerHTML(v) { store.last = v; }, get innerHTML() { retu
  * a phone. Installing a field map lets them be exercised the same way as the rest. */
 let _dom = null;
 let _formHost = { innerHTML: '' };
+let _lineHost = { innerHTML: '' };
 const domFor = (spec) => { _dom = { 'hp-style-spec': { value: spec }, 'hp-style-form': _formHost }; };
+const domForLines = (lines) => { _dom = { 'hp-example-lines': { value: lines }, 'hp-line-form': _lineHost }; };
 const useDom = (fields) => { _dom = {}; for (const [k, v] of Object.entries(fields)) _dom[k] = { value: v }; };
 const domText = (id) => _dom?.[id]?.textContent;
 
@@ -59,12 +61,13 @@ const sandbox = {
   INTENSITY_MODE:'balanced', FORCE_FLASH:false, ACTIVE_PROVIDER:'gemini',
   _loadConnections:async()=>{},
   _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
+  _hpSetLine:()=>{}, _hpOpenLineRow:()=>{}, _hpAddLine:()=>{}, _hpRemoveLine:()=>{}, _hpMoveLine:()=>{}, _hpOpenLine:null,
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB','_hpNum'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm'];
 
 let code = '';
 let missing = 0;
@@ -252,7 +255,7 @@ run('_syncHpSummaries on a brand new preset', () => {
   let vocab = null;
   try {
     const m = await import(vocabPath.href);
-    vocab = { schema: m.STYLE_SCHEMA, groups: m.STYLE_GROUPS };
+    vocab = { schema: m.STYLE_SCHEMA, groups: m.STYLE_GROUPS, lineSchema: m.LINE_SCHEMA, metals: m.METAL_NAMES };
   } catch { /* hachi-core not checked out beside this repo — skip rather than fail CI on layout */ }
 
   /* A second instance with the vocabulary bound.
@@ -303,6 +306,54 @@ run('_syncHpSummaries on a brand new preset', () => {
         if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error(`leaked on ${spec}`);
       }
       return 'ok';
+    });
+
+    /* The per-line editor.
+     *
+     * The row is the tap target, so the row must carry the line's own text — a list of identical
+     * 「行1 行2 行3」 would be no better than the JSON it replaced. And an authored line is user
+     * data: it can be missing its text, hold a custom gradient object, or be mid-edit and
+     * unparseable, none of which may produce a broken row or overwrite what is being typed.
+     */
+    const lineHtml = (lines, open = null) => {
+      domForLines(lines);
+      const a = vocab ? make(...Object.keys(sandbox).map((k) => (k === '_hpVocab' ? vocab : (k === '_hpOpenLine' ? open : sandbox[k])))) : null;
+      a._renderLineForm();
+      return _lineHost.innerHTML || '';
+    };
+
+    run('line rows name the line they restyle', () => {
+      const h = lineHtml(JSON.stringify([{ text:'副業で', scale:0.5 }, { text:'月5万円', scale:1.6, metal:'gold' }]));
+      const rows = (h.match(/class="hp-line-row/g) || []).length;
+      if (rows !== 2) throw new Error(`expected 2 rows, got ${rows}`);
+      // The whole point: you tap the words, not an index.
+      if (!h.includes('月5万円')) throw new Error('a row did not carry its own text');
+      if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error('leaked a raw value');
+      return `${rows} rows`;
+    });
+
+    run('opening a line gives it controls, and only it', () => {
+      const h = lineHtml(JSON.stringify([{ text:'副業で' }, { text:'月5万円', metal:'gold' }]), 1);
+      const ctls = (h.match(/class="hp-ctl"/g) || []).length;
+      if (ctls < 5) throw new Error(`expected the line's controls, got ${ctls}`);
+      if ((h.match(/hp-line-body/g) || []).length !== 1) throw new Error('more than one line opened at once');
+      return `${ctls} controls`;
+    });
+
+    run('line editor survives lines a person actually produces', () => {
+      for (const [label, v] of [['no text','[{"scale":1}]'], ['empty','[]'], ['unparseable','[oops'],
+        ['not an array','{}'], ['custom gradient','[{"text":"x","metal":{"from":"#fff","to":"#000"}}]']]) {
+        const h = lineHtml(v, 0);
+        if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error(`leaked on ${label}`);
+      }
+      return 'ok';
+    });
+
+    run('an unparseable lines array is reported, not rebuilt from a guess', () => {
+      const h = lineHtml('[oops', 0);
+      if (/class="hp-line-row/.test(h)) throw new Error('built rows from something it could not read');
+      if (!/JSON/.test(h)) throw new Error('said nothing about why the rows are missing');
+      return 'refused, with a reason';
     });
   }
 }

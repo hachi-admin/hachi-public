@@ -2115,7 +2115,7 @@ function _showNewPresetForm() {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
-  _loadStyleVocab().then(_renderStyleForm);
+  _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2141,7 +2141,7 @@ function _editHeroPreset(id) {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
-  _loadStyleVocab().then(_renderStyleForm);
+  _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
   _refreshPreview();
@@ -2296,6 +2296,115 @@ function _renderStyleForm() {
       <select class="form-select" id="hp-add-key"><option value="">項目を追加…</option>${addable}</select>
       <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>
     </div>`;
+}
+
+/* ── The lines, editable one at a time ───────────────────────────────────────
+ *
+ * exampleLines was a JSON array in a textarea, so changing how 「月5万円」 is set meant finding it
+ * inside `[{"text":"月5万円","scale":1.6,...}]` and editing around it with a thumb. Each line now
+ * gets a row showing its own text; tapping one opens the controls for that line only.
+ *
+ * The vocabulary comes from the renderer (`lineSchema`), same as the styleSpec controls, and for
+ * the same reason. It is why there is no glow control here: the renderer takes glow from the
+ * template, not the line, so offering one would set a key nothing reads.
+ */
+let _hpOpenLine = null;
+
+function _hpLines() {
+  const raw = document.getElementById('hp-example-lines')?.value?.trim();
+  if (!raw) return [];
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : null; } catch { return null; }
+}
+
+function _hpWriteLines(lines) {
+  const el = document.getElementById('hp-example-lines');
+  if (!el) return;
+  el.value = JSON.stringify(lines, null, 2);
+  _renderLineForm();
+  _syncHpSummaries();
+  _debouncedPreview();
+}
+
+function _hpSetLine(i, key, value) {
+  const lines = _hpLines();
+  if (!lines?.[i]) return;
+  if (value === '' || value === null) delete lines[i][key]; else lines[i][key] = value;
+  _hpWriteLines(lines);
+}
+
+function _hpOpenLineRow(i) { _hpOpenLine = _hpOpenLine === i ? null : i; _renderLineForm(); }
+function _hpAddLine() { const l = _hpLines(); if (!l) return; l.push({ text: '新しい行', scale: 1 }); _hpOpenLine = l.length - 1; _hpWriteLines(l); }
+function _hpRemoveLine(i) { const l = _hpLines(); if (!l) return; l.splice(i, 1); _hpOpenLine = null; _hpWriteLines(l); }
+function _hpMoveLine(i, d) {
+  const l = _hpLines();
+  const j = i + d;
+  if (!l || j < 0 || j >= l.length) return;
+  [l[i], l[j]] = [l[j], l[i]];
+  _hpOpenLine = j;
+  _hpWriteLines(l);
+}
+
+function _hpLineControl(i, key, desc, value) {
+  const lbl = esc(desc.label || key);
+  const setter = (expr) => `_hpSetLine(${i},'${key}',${expr})`;
+  let body;
+  if (desc.type === 'range') {
+    const v = _hpNum(value ?? (key === 'scale' ? 1 : 0), desc);
+    body = `<div class="hp-range"><input type="range" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="${setter('Number(this.value)')}">`
+      + `<input class="form-input hp-num" type="number" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}" onchange="${setter('Number(this.value)')}"></div>`;
+  } else if (desc.type === 'colour') {
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    body = `<div class="hp-colour"><input type="color" value="${v}" oninput="${setter('this.value.toUpperCase()')}">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="${setter('this.value.toUpperCase()')}">`
+      + `<button class="act-btn" title="色を外す" onclick="${setter("''")}">既定</button></div>`;
+  } else if (desc.type === 'bool') {
+    body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="${setter('this.checked')}"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (desc.type === 'string') {
+    body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="${setter('this.value')}">`;
+  } else if (desc.type === 'union' && (_hpVocab?.metals || []).length) {
+    // The named patterns the renderer resolves. A custom object stays editable in the JSON below.
+    const named = typeof value === 'string' ? value : '';
+    const custom = value && typeof value !== 'string';
+    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">なし</option>`
+      + _hpVocab.metals.map((m) => `<option value="${esc(m)}"${m === named ? ' selected' : ''}>${esc(m)}</option>`).join('')
+      + `</select>${custom ? '<div class="hp-ctl-hint">独自の指定あり — 下の JSON で編集</div>' : ''}`;
+  } else {
+    body = `<div class="hp-ctl-json">下の JSON で編集</div>`;
+  }
+  return `<div class="hp-ctl"><div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code></div>${body}</div>`;
+}
+
+function _renderLineForm() {
+  const host = document.getElementById('hp-line-form');
+  if (!host) return;
+  const schema = _hpVocab?.lineSchema;
+  if (!schema) { host.innerHTML = ''; return; }
+
+  const lines = _hpLines();
+  if (lines === null) {
+    host.innerHTML = `<div class="hp-ctl-json">⚠ JSON が不正なため行を表示できません。下の JSON を直すと戻ります。</div>`;
+    return;
+  }
+
+  host.innerHTML = lines.map((l, i) => {
+    const text = String(l?.text ?? '').trim() || '（空の行）';
+    const bits = [l?.scale ? `×${l.scale}` : '', l?.color || '', typeof l?.metal === 'string' ? l.metal : ''].filter(Boolean).join(' · ');
+    const open = _hpOpenLine === i;
+    const head = `<button class="hp-line-row${open ? ' open' : ''}" onclick="_hpOpenLineRow(${i})">`
+      + `<span class="hp-line-text">${esc(text)}</span><span class="hp-line-meta">${esc(bits)}</span><span class="chev">▶</span></button>`;
+    if (!open) return `<div class="hp-line">${head}</div>`;
+    const ctls = Object.entries(schema)
+      .filter(([k]) => k !== 'runs')
+      .map(([k, d]) => _hpLineControl(i, k, d, l?.[k])).join('');
+    return `<div class="hp-line">${head}<div class="hp-line-body">${ctls}
+      <div class="hp-line-acts">
+        <button class="act-btn" onclick="_hpMoveLine(${i},-1)"${i === 0 ? ' disabled' : ''}>↑</button>
+        <button class="act-btn" onclick="_hpMoveLine(${i},1)"${i === lines.length - 1 ? ' disabled' : ''}>↓</button>
+        <button class="act-btn danger" onclick="_hpRemoveLine(${i})">この行を削除</button>
+      </div></div></div>`;
+  }).join('')
+    + `<button class="act-btn hp-line-add" onclick="_hpAddLine()">＋ 行を追加</button>`;
 }
 
 let _previewTimer = null;
