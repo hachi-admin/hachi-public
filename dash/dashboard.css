@@ -2194,3 +2194,52 @@ body:has(.mob-more-sheet.open) .page-area{
   .hp-label{font-size:12px}
   .hp-code{font-size:12px}
 }
+
+/* ── styleSpec controls ──────────────────────────────────────────────────────
+ * Generated from the renderer's vocabulary. Sized for a thumb: the whole reason this exists is
+ * that the previous control was a JSON textarea, and a form that needs a mouse would have moved
+ * the problem rather than solved it. */
+.hp-grp{margin-bottom:14px}
+.hp-grp-hd{font-size:11px;font-weight:700;color:var(--m2);margin:0 0 8px;letter-spacing:.04em}
+.hp-ctl{background:var(--bg);box-shadow:var(--sh-in);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.hp-ctl-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.hp-ctl-name{font-size:12px;font-weight:600;color:var(--txt)}
+.hp-ctl-key{font-size:10px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.hp-rm{margin-left:auto;min-height:28px;padding:2px 10px;font-size:12px;line-height:1}
+.hp-ctl-json{font-size:11px;color:var(--m);padding:6px 0}
+.hp-ctl-hint{margin-left:8px;color:var(--m2)}
+
+.hp-colour{display:flex;gap:8px;align-items:center}
+.hp-colour input[type=color]{
+  /* A 44px target: the default swatch is ~24px, which is under every touch guideline there is. */
+  inline-size:44px;block-size:44px;padding:0;border:none;border-radius:10px;background:none;cursor:pointer;flex:0 0 auto;
+}
+.hp-colour .form-input{flex:1;min-width:0}
+
+.hp-range{display:flex;gap:10px;align-items:center}
+/* The slider sets it roughly, the number sets it exactly — these values get copied between presets
+   and "about 0.44" is not a thing you can copy. */
+.hp-range input[type=range]{flex:1;min-width:0;block-size:32px;accent-color:var(--acc)}
+.hp-num{inline-size:78px;flex:0 0 auto;text-align:right}
+
+.hp-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt);min-height:32px}
+.hp-switch input{inline-size:20px;block-size:20px;accent-color:var(--acc)}
+
+.hp-add{display:flex;gap:8px;align-items:center;margin-top:4px}
+.hp-add .form-select{flex:1;min-width:0}
+
+.hp-json{margin-top:10px}
+.hp-json > summary{
+  font-size:11px;color:var(--m);cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:6px;padding:6px 0;
+}
+.hp-json > summary::-webkit-details-marker{display:none}
+.hp-json[open] > summary .chev{transform:rotate(90deg)}
+.hp-json > summary .chev{font-size:9px;transition:transform .15s}
+
+@media(max-width:767px){
+  /* Stacked, because a label and its control sharing a row leaves neither enough width to be
+     read or hit. */
+  .hp-range{flex-wrap:wrap}
+  .hp-num{inline-size:100%;text-align:left}
+}

@@ -3,12 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- The one file that cannot carry a ?v= query, because it is the URL being asked for.
+     GitHub Pages serves it with max-age=600, so a reader could hold this document for ten minutes
+     (much longer with a tab left open) while dashboard.css and app.js came back fresh from their
+     new versioned URLs — new styling applied to old markup. That is not hypothetical: the hero
+     preset editor's sections were invisible on a phone for exactly this reason while the same
+     deploy's CSS was plainly in effect. Revalidating the document costs one conditional request
+     and makes the ?v= scheme on the other two actually mean something. -->
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>hachi dash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/neu.css?v=7">
-<link rel="stylesheet" href="dashboard.css?v=10">
+<link rel="stylesheet" href="dashboard.css?v=11">
 </head>
 <body>
 
@@ -225,9 +233,15 @@
           <details class="neu-sec" open>
             <summary>スタイル<span class="sum-val" id="hp-sum-style">—</span><span class="chev">▶</span></summary>
             <div class="neu-sec-body">
-              <label class="hp-label hp-label-block">styleSpec（JSON）
-                <textarea id="hp-style-spec" class="form-input hp-code" rows="10" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
-              </label>
+              <!-- Generated from the renderer's own vocabulary. The JSON below stays as the escape
+                   hatch for shapes no control expresses; both edit the same object. -->
+              <div id="hp-style-form"></div>
+              <details class="hp-json">
+                <summary>JSON で編集<span class="chev">▶</span></summary>
+                <label class="hp-label hp-label-block">styleSpec（JSON）
+                  <textarea id="hp-style-spec" class="form-input hp-code" rows="10" oninput="_debouncedPreview();_syncHpSummaries();_renderStyleForm()"></textarea>
+                </label>
+              </details>
             </div>
           </details>
 
@@ -942,6 +956,6 @@
 })();
 </script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
