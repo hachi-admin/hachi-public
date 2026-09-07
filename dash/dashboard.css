@@ -2124,3 +2124,33 @@ body:has(.mob-more-sheet.open) .page-area{
   font-size:.62rem;text-transform:uppercase;
 }
 .cat-hint{font-size:.5rem;color:var(--m2);line-height:1.5;margin-top:4px}
+
+/* ── Hero preset editor ──────────────────────────────────────────────────────
+ *
+ * These three were inline `style=` attributes, which is why the editor was unusable on a phone:
+ * a media query cannot reach a style attribute, so the desktop `1fr 340px` applied at every width.
+ * On a 390px screen that left the form column 30px wide, and every label — 「ID（英小文字・
+ * ハイフン）」 and the rest — wrapped to one character per line while the preview ran off-screen.
+ *
+ * The lesson is the same one the renderer keeps teaching: a rule that cannot be reached is
+ * indistinguishable from a rule that was never written. `.form-grid` already had the mobile
+ * collapse this needed; the markup simply was not using it.
+ */
+.hp-editor-layout{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.hp-field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.hp-preview-col{position:sticky;top:80px}
+/* The hero's own proportions, so the frame scales with its column instead of being pinned to a
+   width wider than the phone it is being read on. */
+.hp-preview-frame{
+  width:100%;max-width:340px;aspect-ratio:1280/670;
+  background:var(--bg);border-radius:8px;overflow:hidden;position:relative;box-shadow:var(--sh);
+}
+
+@media(max-width:767px){
+  /* One column, preview first: it is the thing being judged, and on a phone a sticky panel below
+     a long form is a panel nobody scrolls back to. */
+  .hp-editor-layout{grid-template-columns:1fr;gap:14px}
+  .hp-field-row{grid-template-columns:1fr}
+  .hp-preview-col{position:static;order:-1}
+  .hp-preview-frame{max-width:none}
+}
