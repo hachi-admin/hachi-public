@@ -1322,13 +1322,33 @@ function _categoryEditor(c) {
   const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
     `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
 
-  const statusActions = c.status === 'suggested'
-    ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')">承認</button>
-       <button class="act-btn cancel" onclick="catAction('${c.id}','reject')">却下</button>`
-    : c.status === 'paused'
-      ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')">再開</button>`
-      : c.status === 'active'
-        ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">停止</button>` : '';
+  /* What this category can actually do from where it is.
+   *
+   * The bar used to show all five buttons at every status, which was wrong in two directions.
+   * 「却下」 was a dead end — there was no way back from it, even though the resume endpoint maps
+   * blocked → active perfectly well. And 「今すぐ1本」 was offered on categories that were never
+   * approved, or were explicitly rejected; the endpoint has no status guard, so pressing it really
+   * did write and publish an article for a topic the operator had turned down.
+   *
+   * So the rule is: an action appears only where it means something. A button that is present but
+   * wrong is worse than one that is absent, because the operator reasonably assumes the interface
+   * would not offer an action it intends to refuse. */
+  const _act = (action, label, kind = '') =>
+    `<button class="act-btn${kind ? ` ${kind}` : ''}" onclick="catAction('${c.id}','${action}')">${label}</button>`;
+
+  const statusActions = {
+    suggested: `${_act('approve', '承認', 'resume')}${_act('reject', '却下', 'cancel')}`,
+    paused:    _act('resume', '再開', 'resume'),
+    active:    _act('pause', '停止', 'stop'),
+    // Rejected is a decision, not a deletion — it has to be reversible without going through
+    // delete-and-recreate, which would lose the editorial prompt and every article written under it.
+    blocked:   _act('resume', '復帰', 'resume'),
+  }[c.status] ?? '';
+
+  /* Writing one now only makes sense once the topic has been approved. `paused` still qualifies:
+     it means "nothing on the schedule", not "nothing at all", and an off-cadence one-off is a
+     legitimate reason to be on this screen. */
+  const canGenerate = c.status === 'active' || c.status === 'paused';
 
   // Only the editorial prompt is open by default — it is the lever that matters and the one thing
   // you come here to change. Everything else states its current value on the closed row, so the
@@ -1405,8 +1425,11 @@ function _categoryEditor(c) {
     <div class="p-actions">
       <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
       ${statusActions}
-      <button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>
-      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">削除</button>
+      ${canGenerate ? `<button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>` : ''}
+      <!-- Deleting is the only action here that cannot be undone — 却下 is a status the category
+           comes back from. That difference is what the danger tier marks, and it has to be visible
+           without hovering, because the device this is mostly read on has no hover. -->
+      <button class="act-btn danger" onclick="deleteCategory('${c.id}')">削除</button>
     </div>`;
 }
 
