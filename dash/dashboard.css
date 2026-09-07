@@ -1304,7 +1304,16 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-toolbar-views{
   display:flex;gap:2px;align-self:flex-start;
   background:var(--bg);box-shadow:var(--sh-in);border-radius:99px;padding:4px;
+  /* Five tabs whose labels carry counts (「承認待ち 100」) do not fit a phone, and the children are
+     `white-space:nowrap`. Without this the strip simply clipped: 「実験」 was cut off at the screen
+     edge with nothing to say it existed, let alone that it could be reached. Scrolling makes the
+     overflow both reachable and visible — a half-shown tab is its own affordance, which a hard
+     clip is not. */
+  max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;scroll-snap-type:x proximity;
 }
+.cat-toolbar-views::-webkit-scrollbar{display:none}
+.cat-view-btn{flex:0 0 auto;scroll-snap-align:center}
 .cat-view-btn{
   background:transparent;box-shadow:none;border:none;font-family:inherit;cursor:pointer;
   color:var(--m);font-size:.7rem;font-weight:600;padding:0 14px;height:28px;border-radius:99px;
