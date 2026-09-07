@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/neu.css?v=7">
-<link rel="stylesheet" href="dashboard.css?v=9">
+<link rel="stylesheet" href="dashboard.css?v=10">
 </head>
 <body>
 
@@ -186,40 +186,64 @@
            one character per line. -->
       <div class="hp-editor-layout">
 
-        <!-- ── Form ── -->
+        <!-- ── Form ──
+             Grouped the way the category sheet is, and for the same reason: nine fields including
+             three JSON textareas is a long scroll on a phone, and the answer to "how is this preset
+             configured" should not require expanding anything. Each closed row states its own value.
+
+             styleSpec is the section left open, because it is the lever you come here to move —
+             identity and examples are things you set once. -->
         <div>
-          <div class="hp-field-row">
-            <label style="font-size:11px;color:var(--m)">ID（英小文字・ハイフン）
-              <input id="hp-id" class="form-input" type="text" placeholder="my-preset" style="margin-top:4px;font-family:monospace">
-            </label>
-            <label style="font-size:11px;color:var(--m)">テンプレート地（templateId）
-              <select id="hp-template-id" class="form-select" style="margin-top:4px" onchange="_debouncedPreview()">
-                <option value="photo_scrim">photo_scrim（写真+スクリム）</option>
-                <option value="light_flat">light_flat（明るいフラット）</option>
-                <option value="photo_full">photo_full（写真フル）</option>
-                <option value="dark_flat">dark_flat（黒地）</option>
-              </select>
-            </label>
-            <label style="font-size:11px;color:var(--m)">名前
-              <input id="hp-name" class="form-input" type="text" placeholder="プリセット名" style="margin-top:4px">
-            </label>
-            <label style="font-size:11px;color:var(--m)">タグ（カンマ区切り）
-              <input id="hp-mood" class="form-input" type="text" placeholder="tech, news, dark" style="margin-top:4px">
-            </label>
-          </div>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">説明
-            <input id="hp-description" class="form-input" type="text" placeholder="どんな記事に向くか" style="margin-top:4px;width:100%;box-sizing:border-box">
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">styleSpec（JSON）
-            <textarea id="hp-style-spec" class="form-input" rows="10" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">exampleLines（JSON配列）
-            <textarea id="hp-example-lines" class="form-input" rows="6" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:16px">exampleBadge（JSON、任意）
-            <textarea id="hp-example-badge" class="form-input" rows="3" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <div id="hp-editor-error" style="font-size:11px;color:var(--error);margin-bottom:10px;display:none"></div>
+          <details class="neu-sec">
+            <summary>基本<span class="sum-val" id="hp-sum-basic">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <div class="hp-field-row">
+                <label class="hp-label">ID（英小文字・ハイフン）
+                  <input id="hp-id" class="form-input hp-mono" type="text" placeholder="my-preset" oninput="_syncHpSummaries()">
+                </label>
+                <label class="hp-label">テンプレート地（templateId）
+                  <select id="hp-template-id" class="form-select" onchange="_debouncedPreview();_syncHpSummaries()">
+                    <option value="photo_scrim">photo_scrim（写真+スクリム）</option>
+                    <option value="light_flat">light_flat（明るいフラット）</option>
+                    <option value="photo_full">photo_full（写真フル）</option>
+                    <option value="dark_flat">dark_flat（黒地）</option>
+                  </select>
+                </label>
+                <label class="hp-label">名前
+                  <input id="hp-name" class="form-input" type="text" placeholder="プリセット名" oninput="_syncHpSummaries()">
+                </label>
+                <label class="hp-label">タグ（カンマ区切り）
+                  <input id="hp-mood" class="form-input" type="text" placeholder="tech, news, dark" oninput="_syncHpSummaries()">
+                </label>
+              </div>
+              <label class="hp-label hp-label-block">説明
+                <input id="hp-description" class="form-input" type="text" placeholder="どんな記事に向くか">
+              </label>
+            </div>
+          </details>
+
+          <details class="neu-sec" open>
+            <summary>スタイル<span class="sum-val" id="hp-sum-style">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <label class="hp-label hp-label-block">styleSpec（JSON）
+                <textarea id="hp-style-spec" class="form-input hp-code" rows="10" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <details class="neu-sec">
+            <summary>見本<span class="sum-val" id="hp-sum-example">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <label class="hp-label hp-label-block">exampleLines（JSON配列）
+                <textarea id="hp-example-lines" class="form-input hp-code" rows="6" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
+              </label>
+              <label class="hp-label hp-label-block">exampleBadge（JSON、任意）
+                <textarea id="hp-example-badge" class="form-input hp-code" rows="3" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <div id="hp-editor-error" style="font-size:11px;color:var(--error);margin:10px 0;display:none"></div>
           <div style="display:flex;gap:10px">
             <button class="save-btn" onclick="_saveHeroPreset()">保存</button>
             <button class="refresh-btn" onclick="_closeHeroPresetEditor()">キャンセル</button>
@@ -918,6 +942,6 @@
 })();
 </script>
 <script src="../shared/ui.js?v=7"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

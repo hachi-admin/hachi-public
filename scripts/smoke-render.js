@@ -27,8 +27,25 @@ const store = {};
 const el = () => ({ set innerHTML(v) { store.last = v; }, get innerHTML() { return store.last; },
   classList:{add(){},remove(){},toggle(){}}, querySelectorAll:()=>[], style:{} });
 
+/* A DOM a test can actually control.
+ *
+ * Most render functions here take their data as arguments and return a string. Some read and write
+ * the document instead — _syncHpSummaries reads the hero-preset form fields and writes each
+ * section's summary — and those are exactly the ones whose output nobody sees until it is wrong on
+ * a phone. Installing a field map lets them be exercised the same way as the rest. */
+let _dom = null;
+const useDom = (fields) => { _dom = {}; for (const [k, v] of Object.entries(fields)) _dom[k] = { value: v }; };
+const domText = (id) => _dom?.[id]?.textContent;
+
 const sandbox = {
-  esc, document:{ getElementById: () => el(), querySelectorAll: () => [], querySelector: () => null },
+  esc, document:{
+    getElementById: (id) => {
+      if (!_dom) return el();
+      if (!(id in _dom)) _dom[id] = { set textContent(v) { this._t = v; }, get textContent() { return this._t; } };
+      return _dom[id];
+    },
+    querySelectorAll: () => [], querySelector: () => null,
+  },
   window:{}, console, relTime:(d)=>'3分前', fmtDate:(d)=>'08-19', _catDate:(d)=>'08-19',
   _wikiSelectMode:false, _wikiSelected:new Set(),
   CAT_META:{ heroTemplates:[{id:'dark_flat',label:'黒地・白抜き'},{id:'colour_block',label:'色地・白文字'}] },
@@ -44,7 +61,7 @@ const sandbox = {
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries'];
 
 let code = '';
 let missing = 0;
@@ -184,6 +201,40 @@ run('_tagVocabFor unknown channel', () => {
   return out.map(t => t.name).join(' ');
 });
 
+/* The hero preset editor's collapsed sections.
+ *
+ * The point of collapsing them is that the panel still answers "how is this configured" without
+ * being expanded, so a summary that goes blank or says `undefined` defeats the whole change. The
+ * malformed-JSON cases matter most: that warning is the one thing worth knowing before pressing
+ * save, and it is produced by a catch block no amount of clicking around reliably reaches.
+ */
+run('_syncHpSummaries on a real preset', () => {
+  useDom({ 'hp-id':'vivid-badge', 'hp-template-id':'photo_scrim',
+    'hp-style-spec': JSON.stringify({ face:'kaku', strokes:[], glows:[], band:{} }),
+    'hp-example-lines':'[{"text":"a"},{"text":"b"}]', 'hp-example-badge':'' });
+  api._syncHpSummaries();
+  const got = ['hp-sum-basic','hp-sum-style','hp-sum-example'].map(domText);
+  if (got.some(v => !v || /undefined|NaN|\[object/.test(v))) throw new Error(`bad summary: ${got.join(' | ')}`);
+  if (!got[0].includes('vivid-badge')) throw new Error('basic summary lost the id');
+  return got.join(' | ');
+});
+
+run('_syncHpSummaries warns before save when the JSON will not parse', () => {
+  useDom({ 'hp-id':'x', 'hp-template-id':'light_flat', 'hp-style-spec':'{face:',
+    'hp-example-lines':'[oops', 'hp-example-badge':'' });
+  api._syncHpSummaries();
+  if (!/JSON/.test(domText('hp-sum-style'))) throw new Error('malformed styleSpec passed silently');
+  if (!/JSON/.test(domText('hp-sum-example'))) throw new Error('malformed exampleLines passed silently');
+  return `${domText('hp-sum-style')} / ${domText('hp-sum-example')}`;
+});
+
+run('_syncHpSummaries on a brand new preset', () => {
+  useDom({ 'hp-id':'', 'hp-template-id':'light_flat', 'hp-style-spec':'', 'hp-example-lines':'', 'hp-example-badge':'' });
+  api._syncHpSummaries();
+  const got = ['hp-sum-basic','hp-sum-style','hp-sum-example'].map(domText);
+  if (got.some(v => !v)) throw new Error(`an empty form must still say something: ${got.join(' | ')}`);
+  return got.join(' | ');
+});
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);
 console.log(fail || missing ? `\nFAILED (${fail} render, ${missing} missing)` : '\nall render checks passed');

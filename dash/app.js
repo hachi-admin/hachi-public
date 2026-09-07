@@ -2114,6 +2114,7 @@ function _showNewPresetForm() {
   if (img) { img.src = ''; img.style.display = 'none'; }
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
+  _syncHpSummaries();
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2138,6 +2139,7 @@ function _editHeroPreset(id) {
   if (img2) { img2.src = ''; img2.style.display = 'none'; }
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
+  _syncHpSummaries();
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
   _refreshPreview();
@@ -2152,6 +2154,43 @@ let _previewTimer = null;
 function _debouncedPreview() {
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(_refreshPreview, 1000);
+}
+
+/* What each collapsed section is holding.
+ *
+ * The point of the accordion is that the panel answers "how is this preset configured" without
+ * expanding anything — a section that collapses to nothing but its own title has hidden the
+ * information rather than organised it. So each summary carries the value a reader would open the
+ * section to check.
+ *
+ * Style is summarised by the keys the spec actually sets, not by the JSON: 「face, strokes, glows」
+ * is the shape of the design, whereas 240 characters of JSON truncated at the pill's width tells
+ * you nothing. Invalid JSON says so rather than showing a stale summary, since a spec that will not
+ * parse is the single most useful thing to know before pressing save.
+ */
+function _syncHpSummaries() {
+  const val = (id) => document.getElementById(id)?.value?.trim() ?? '';
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+  const id = val('hp-id');
+  const tpl = val('hp-template-id');
+  set('hp-sum-basic', [id || '（ID未設定）', tpl].filter(Boolean).join(' · '));
+
+  const spec = val('hp-style-spec');
+  if (!spec) set('hp-sum-style', '未設定');
+  else {
+    try {
+      const keys = Object.keys(JSON.parse(spec));
+      set('hp-sum-style', keys.length ? `${keys.length}項目: ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}` : '空');
+    } catch { set('hp-sum-style', '⚠ JSONが不正'); }
+  }
+
+  const count = (raw) => { try { const v = JSON.parse(raw); return Array.isArray(v) ? v.length : (v ? 1 : 0); } catch { return null; } };
+  const lines = val('hp-example-lines') ? count(val('hp-example-lines')) : 0;
+  const badge = val('hp-example-badge') ? count(val('hp-example-badge')) : 0;
+  set('hp-sum-example', lines === null || badge === null
+    ? '⚠ JSONが不正'
+    : (lines || badge ? `${lines}行${badge ? ' + バッジ' : ''}` : 'なし'));
 }
 
 async function _refreshPreview() {
