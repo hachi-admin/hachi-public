@@ -300,6 +300,18 @@ run('_syncHpSummaries on a brand new preset', () => {
       return 'flagged';
     });
 
+    run('a null colour says null, rather than showing white', () => {
+      /* `null` is a value, not an absence: `ground: null` is how a photo template says "show the
+         photograph, do not paint over it". Rendering a white swatch for that made the control
+         disagree with the spec it was displaying. */
+      const h = formHtml('{"ground":null}');
+      if (!/is-null/.test(h)) throw new Error('a null colour rendered as an ordinary one');
+      if (!/value="null"/.test(h)) throw new Error('the field did not read null');
+      const white = formHtml('{"ground":"#FFFFFF"}');
+      if (/is-null/.test(white)) throw new Error('an actual white was mistaken for null');
+      return 'ok';
+    });
+
     run('styleSpec form survives wrong types and out-of-range numbers', () => {
       for (const spec of ['{"face":123,"text":"red"}', '{"scrimMax":99}', '{"ground":null}', '{}']) {
         const h = formHtml(spec);
