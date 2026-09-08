@@ -2159,7 +2159,12 @@ body:has(.mob-more-sheet.open) .page-area{
  */
 .hp-editor-layout{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
 .hp-field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.hp-preview-col{position:sticky;top:80px}
+/* top:0, not an offset for the header.
+   `.page-area` is the scroll container (`overflow-y:auto`), and the header and the section tabs are
+   its siblings rather than its children — so this scrollport already begins directly below them.
+   The 80px copied from the desktop side panels was therefore pushing the panel 80px *into* the
+   scrollport, leaving a band of page above it that read as the pin having failed. */
+.hp-preview-col{position:sticky;top:0}
 /* The hero's own proportions, so the frame scales with its column instead of being pinned to a
    width wider than the phone it is being read on. */
 .hp-preview-frame{
@@ -2169,10 +2174,21 @@ body:has(.mob-more-sheet.open) .page-area{
 
 @media(max-width:767px){
   /* One column, preview first: it is the thing being judged, and on a phone a sticky panel below
-     a long form is a panel nobody scrolls back to. */
-  .hp-editor-layout{grid-template-columns:1fr;gap:14px}
+     a long form is a panel nobody scrolls back to.
+     Flex rather than a one-column grid, and that is the whole reason the pinning did not work: a
+     sticky *grid item* is positioned within its own grid area, not within the grid. In a single
+     column that area is exactly the item's own height, so there is nowhere for it to travel and it
+     scrolls away like static content. A flex item's containing block is the flex container, which
+     is as tall as the form — so the same `top` finally has room to hold. */
+  /* align-items:start comes from the base rule, where it keeps the two columns top-aligned. In a
+     flex *column* it governs the cross axis instead, so it would size both children to their
+     content width rather than the screen. */
+  .hp-editor-layout{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+  /* Flex children default to min-width:auto, which lets a long JSON line push the column wider
+     than the screen and take the horizontal scrollbar with it. */
+  .hp-editor-layout > *{min-width:0}
+  .hp-preview-col{flex:0 0 auto}
   .hp-field-row{grid-template-columns:1fr}
-  .hp-preview-col{position:static;order:-1}
   .hp-preview-frame{max-width:none}
 }
 
@@ -2271,8 +2287,12 @@ body:has(.mob-more-sheet.open) .page-area{
  * full-width hero would take the whole viewport and leave nothing to edit with. */
 @media(max-width:767px){
   .hp-preview-col{
-    position:sticky;top:80px;z-index:5;order:-1;
-    background:var(--surf);padding:8px 0 10px;margin:0 -2px;
+    position:sticky;z-index:5;order:-1;
+    top:0;
+    background:var(--surf);padding:4px 0 8px;margin:0 -2px;
+    /* The panel is the only thing between the header and the form while scrolling, so it has to
+       cover what passes under it rather than letting the type show through. */
+    box-shadow:0 6px 10px -8px rgba(0,0,0,.28);
   }
   .hp-preview-frame{max-width:none;max-height:34vh;margin-inline:auto;aspect-ratio:1280/670}
 }
