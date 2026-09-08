@@ -2290,9 +2290,6 @@ body:has(.mob-more-sheet.open) .page-area{
     position:sticky;z-index:5;order:-1;
     top:0;
     background:var(--surf);padding:4px 0 8px;margin:0 -2px;
-    /* The panel is the only thing between the header and the form while scrolling, so it has to
-       cover what passes under it rather than letting the type show through. */
-    box-shadow:0 6px 10px -8px rgba(0,0,0,.28);
   }
   .hp-preview-frame{max-width:none;max-height:34vh;margin-inline:auto;aspect-ratio:1280/670}
 }
