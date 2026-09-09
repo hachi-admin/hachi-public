@@ -2304,3 +2304,37 @@ body:has(.mob-more-sheet.open) .page-area{
    renderer will actually see. */
 .hp-colour.is-null input[type=color]{opacity:.35;filter:grayscale(1)}
 .hp-colour.is-null .hp-mono{color:var(--m2);font-style:italic}
+
+/* ── Tapping the preview ─────────────────────────────────────────────────────
+ * Targets sit over the components the renderer reported, in percentages of the hero's own
+ * 1280×670, so they stay on their component at any displayed size. */
+.hp-hits{position:absolute;inset:0;pointer-events:none}
+.hp-hit{
+  position:absolute;pointer-events:auto;cursor:pointer;padding:0;
+  background:none;border:1.5px dashed transparent;border-radius:6px;
+  transition:border-color .12s,background .12s;
+}
+/* Invisible until touched, and outlined once chosen.
+   A picture permanently covered in boxes is a picture you cannot judge, and judging it is the
+   entire reason the preview is here — so the affordance only appears on contact. */
+.hp-hit:hover,.hp-hit:focus-visible{border-color:rgba(255,255,255,.75);background:rgba(255,255,255,.10);outline:none}
+.hp-hit.on{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 16%,transparent);border-style:solid}
+.hp-hit > span{
+  position:absolute;top:-9px;left:-2px;font-size:9px;font-weight:700;line-height:1;
+  padding:2px 5px;border-radius:5px;background:var(--acc);color:#fff;opacity:0;transition:opacity .12s;
+  white-space:nowrap;pointer-events:none;
+}
+.hp-hit.on > span,.hp-hit:hover > span{opacity:1}
+
+/* ── Sample headlines ────────────────────────────────────────────────────────
+ * Three lengths rather than a field to type in: whether a style holds up is decided almost
+ * entirely by how much text arrives. */
+.hp-samples{display:flex;gap:6px;margin-top:10px}
+.hp-sample{
+  flex:1;min-width:0;min-height:38px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:1px;font-family:inherit;cursor:pointer;border:none;border-radius:10px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--m);font-size:11px;font-weight:600;
+}
+.hp-sample > span{font-size:9px;color:var(--m2);font-weight:500}
+.hp-sample.on{box-shadow:var(--sh-in);color:var(--acc)}
+.hp-sample.on > span{color:var(--acc)}

@@ -2115,6 +2115,7 @@ function _showNewPresetForm() {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
+  _renderSampleTabs();
   _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
@@ -2141,6 +2142,7 @@ function _editHeroPreset(id) {
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
   _syncHpSummaries();
+  _renderSampleTabs();
   _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
@@ -2343,7 +2345,7 @@ function _hpSetLine(i, key, value) {
   _hpWriteLines(lines);
 }
 
-function _hpOpenLineRow(i) { _hpOpenLine = _hpOpenLine === i ? null : i; _renderLineForm(); }
+function _hpOpenLineRow(i) { _hpOpenLine = _hpOpenLine === i ? null : i; _renderLineForm(); _renderPreviewHits(); }
 function _hpAddLine() { const l = _hpLines(); if (!l) return; l.push({ text: '新しい行', scale: 1 }); _hpOpenLine = l.length - 1; _hpWriteLines(l); }
 function _hpRemoveLine(i) { const l = _hpLines(); if (!l) return; l.splice(i, 1); _hpOpenLine = null; _hpWriteLines(l); }
 function _hpMoveLine(i, d) {
@@ -2418,6 +2420,78 @@ function _renderLineForm() {
     + `<button class="act-btn hp-line-add" onclick="_hpAddLine()">＋ 行を追加</button>`;
 }
 
+/* ── Tapping the picture ─────────────────────────────────────────────────────
+ *
+ * Restyling 「買ってよかったモノ。」 meant finding it in a list below the preview and working out
+ * which row was which. The renderer now reports where it drew each line and the badge, so the
+ * component itself is the control: tap the words, get that component's settings.
+ *
+ * Boxes arrive in the hero's own 1280×670 coordinates and are placed as percentages, so they stay
+ * on their component at whatever width the preview is being shown — which changes with the
+ * viewport and, on a phone, with the height cap.
+ */
+let _hpRegions = null;
+
+function _renderPreviewHits() {
+  const host = document.getElementById('hp-preview-hits');
+  if (!host) return;
+  const r = _hpRegions;
+  if (!r?.regions?.length) { host.innerHTML = ''; return; }
+  const pc = (v, total) => `${(v / total) * 100}%`;
+  host.innerHTML = r.regions.map((x) => {
+    const sel = x.kind === 'line' && _hpOpenLine === x.index;
+    const label = x.kind === 'badge' ? 'バッジ' : `${x.index + 1}行目`;
+    return `<button class="hp-hit${sel ? ' on' : ''}" title="${label}を編集"
+      style="left:${pc(x.left, r.width)};top:${pc(x.top, r.height)};width:${pc(x.right - x.left, r.width)};height:${pc(x.bottom - x.top, r.height)}"
+      onclick="_hpTapRegion('${x.kind}',${x.index})"><span>${label}</span></button>`;
+  }).join('');
+}
+
+function _hpTapRegion(kind, index) {
+  if (kind === 'line') {
+    /* Open the section too. Selecting a row inside a collapsed 見本 would highlight the picture and
+       show nothing, which reads as the tap having failed. */
+    const sec = document.getElementById('hp-sec-example');
+    if (sec) sec.open = true;
+    _hpOpenLineRow(index);
+    _renderPreviewHits();
+    document.getElementById('hp-line-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } else {
+    const sec = document.getElementById('hp-sec-example');
+    if (sec) sec.open = true;
+    document.getElementById('hp-example-badge')?.closest('details')?.setAttribute('open', '');
+    document.getElementById('hp-example-badge')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+/* Sample headlines, rather than one field to type into.
+ *
+ * The question this preview answers is "does the style hold up", and that depends almost entirely
+ * on how much text arrives — a preset that looks decisive at eight characters can wrap to four
+ * cramped lines at thirty. Typing a title each time to check that is work; these are the lengths
+ * real note headlines actually come in, so the range can be swept in three taps. */
+const HP_SAMPLE_TITLES = [
+  ['短い', 'AIの道徳'],
+  ['標準', 'なぜ赤字でも株価が上がるのか'],
+  ['長い', '映画『インサイド・ヘッド２』が教えてくれる、私たちの「不安」との付き合い方'],
+];
+let _hpSampleIdx = 1;
+
+function _hpSetSample(i) {
+  _hpSampleIdx = Number(i);
+  _renderSampleTabs();
+  _refreshPreview();
+}
+
+function _renderSampleTabs() {
+  const host = document.getElementById('hp-sample-tabs');
+  if (!host) return;
+  host.innerHTML = HP_SAMPLE_TITLES.map(([label, text], i) =>
+    `<button class="hp-sample${i === _hpSampleIdx ? ' on' : ''}" onclick="_hpSetSample(${i})" title="${esc(text)}">${esc(label)}<span>${text.length}字</span></button>`).join('');
+}
+
+const _hpSampleTitle = () => HP_SAMPLE_TITLES[_hpSampleIdx]?.[1] ?? HP_SAMPLE_TITLES[1][1];
+
 let _previewTimer = null;
 function _debouncedPreview() {
   clearTimeout(_previewTimer);
@@ -2473,7 +2547,7 @@ async function _refreshPreview() {
   const rawSpec    = document.getElementById('hp-style-spec')?.value.trim() || '{}';
   const rawLines   = document.getElementById('hp-example-lines')?.value.trim() || '[]';
   const rawBadge   = document.getElementById('hp-example-badge')?.value.trim() || '';
-  const article    = document.getElementById('hp-preview-article')?.value.trim() || 'サンプル記事タイトル';
+  const article    = _hpSampleTitle();
 
   let styleSpec, lines, badge;
   try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON'; errEl.style.display = ''; return; }
@@ -2503,6 +2577,12 @@ async function _refreshPreview() {
     imgEl.src = url;
     imgEl.style.display = '';
     if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+    /* Where each component landed, so the picture itself is the control surface.
+       The header is only readable because the API exposes it through CORS — without that the
+       browser receives it and refuses to hand it over, which looks exactly like the server not
+       having sent it. */
+    try { _hpRegions = JSON.parse(res.headers.get('X-Hero-Regions') || 'null'); } catch { _hpRegions = null; }
+    _renderPreviewHits();
   } catch (e) {
     errEl.textContent = e.message;
     errEl.style.display = '';

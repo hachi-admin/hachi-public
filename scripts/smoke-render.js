@@ -36,6 +36,8 @@ const el = () => ({ set innerHTML(v) { store.last = v; }, get innerHTML() { retu
 let _dom = null;
 let _formHost = { innerHTML: '' };
 let _lineHost = { innerHTML: '' };
+let _hitHost = { innerHTML: '' };
+const domForHits = () => { _dom = { 'hp-preview-hits': _hitHost, 'hp-sample-tabs': _hitHost }; };
 const domFor = (spec) => { _dom = { 'hp-style-spec': { value: spec }, 'hp-style-form': _formHost }; };
 const domForLines = (lines) => { _dom = { 'hp-example-lines': { value: lines }, 'hp-line-form': _lineHost }; };
 const useDom = (fields) => { _dom = {}; for (const [k, v] of Object.entries(fields)) _dom[k] = { value: v }; };
@@ -62,12 +64,14 @@ const sandbox = {
   _loadConnections:async()=>{},
   _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
   _hpSetLine:()=>{}, _hpOpenLineRow:()=>{}, _hpAddLine:()=>{}, _hpRemoveLine:()=>{}, _hpMoveLine:()=>{}, _hpOpenLine:null,
+  _hpTapRegion:()=>{}, _hpRegions:null, _hpSetSample:()=>{}, _hpSampleIdx:1,
+  HP_SAMPLE_TITLES:[['短い','AIの道徳'],['標準','なぜ赤字でも株価が上がるのか'],['長い','映画『インサイド・ヘッド２』が教えてくれる、私たちの「不安」との付き合い方']],
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB','_hpNum'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs'];
 
 let code = '';
 let missing = 0;
@@ -368,6 +372,77 @@ run('_syncHpSummaries on a brand new preset', () => {
       return 'refused, with a reason';
     });
   }
+}
+
+/* Tapping the picture.
+ *
+ * The renderer reports where it drew each component; these place a target over each one. The boxes
+ * arrive in the hero's own 1280×670 and are laid out in percentages, so an error in the conversion
+ * puts every target somewhere plausible-looking and slightly wrong — which is exactly the kind of
+ * fault that survives a glance and is caught by arithmetic.
+ */
+{
+  const REG = { width: 1280, height: 670, regions: [
+    { kind:'line', index:0, left:340, top:256, right:941, bottom:318 },
+    { kind:'line', index:1, left:80,  top:347, right:1200, bottom:459 },
+    { kind:'badge', index:0, left:1040, top:72, right:1208, bottom:171 },
+  ] };
+  const hitsHtml = (regions, open = null) => {
+    domForHits();
+    const a = make(...Object.keys(sandbox).map((k) => (k === '_hpRegions' ? regions : (k === '_hpOpenLine' ? open : sandbox[k]))));
+    a._renderPreviewHits();
+    return _hitHost.innerHTML || '';
+  };
+
+  run('a target per component, named for what it edits', () => {
+    const h = hitsHtml(REG);
+    const n = (h.match(/class="hp-hit/g) || []).length;
+    if (n !== 3) throw new Error(`expected 3 targets, got ${n}`);
+    for (const label of ['1行目', '2行目', 'バッジ']) {
+      if (!h.includes(`>${label}<`)) throw new Error(`no target labelled ${label}`);
+    }
+    return `${n} targets`;
+  });
+
+  run('boxes convert to the right place on the picture', () => {
+    const h = hitsHtml(REG);
+    const got = [...h.matchAll(/left:([\d.]+)%;top:([\d.]+)%;width:([\d.]+)%;height:([\d.]+)%/g)]
+      .map((m) => m.slice(1).map(Number));
+    // 340/1280, 256/670, 601/1280, 62/670 — computed rather than eyeballed.
+    const want = [[26.5625, 38.209, 46.953, 9.254], [6.25, 51.791, 87.5, 16.716], [81.25, 10.746, 13.125, 14.776]];
+    got.forEach((g, i) => g.forEach((v, j) => {
+      if (Math.abs(v - want[i][j]) > 0.05) throw new Error(`target ${i} coord ${j}: ${v}%, expected ${want[i][j]}%`);
+    }));
+    return 'all within 0.05%';
+  });
+
+  run('the open line is marked on the picture', () => {
+    if (!/hp-hit on/.test(hitsHtml(REG, 1))) throw new Error('the selected component is not shown as selected');
+    if (/hp-hit on/.test(hitsHtml(REG, null))) throw new Error('marked a component with nothing selected');
+    return 'ok';
+  });
+
+  run('no regions draws nothing rather than a broken overlay', () => {
+    for (const v of [null, undefined, {}, { width:1280, height:670, regions: [] }]) {
+      const h = hitsHtml(v);
+      if (h.trim()) throw new Error(`drew something for ${JSON.stringify(v)}`);
+    }
+    return 'ok';
+  });
+
+  run('sample headlines cover a real range of lengths', () => {
+    domForHits();
+    const a = make(...Object.values(sandbox));
+    a._renderSampleTabs();
+    const h = _hitHost.innerHTML || '';
+    const n = (h.match(/class="hp-sample/g) || []).length;
+    if (n !== 3) throw new Error(`expected 3 samples, got ${n}`);
+    // The point of the samples is the spread; three similar lengths would test nothing.
+    const lens = sandbox.HP_SAMPLE_TITLES.map(([, t]) => t.length);
+    if (Math.max(...lens) < Math.min(...lens) * 3) throw new Error(`lengths too similar: ${lens.join(', ')}`);
+    if (/undefined|NaN/.test(h)) throw new Error('leaked a raw value');
+    return lens.join('/') + ' chars';
+  });
 }
 
 if (missing) console.log(`\n${missing} function(s) missing from app.js — update scripts/smoke-render.js`);
