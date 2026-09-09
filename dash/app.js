@@ -2306,9 +2306,22 @@ function _renderStyleForm() {
       </div>`).join('')}
     ${set.length ? '' : '<div class="hp-ctl-json">項目がありません。下から追加できます。</div>'}
     <div class="hp-add">
-      <select class="form-select" id="hp-add-key"><option value="">項目を追加…</option>${addable}</select>
+      <select class="form-select" id="hp-add-key" onchange="_hpShowAddHint(this.value)"><option value="">項目を追加…</option>${addable}</select>
       <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>
+      <div class="hp-ctl-hint" id="hp-add-hint" style="display:none"></div>
     </div>`;
+}
+
+/* The native <select> for "項目を追加…" cannot show a description per option (no reliable hover
+   text on <option>), so the description for whichever key is currently chosen is shown underneath
+   instead, updating on selection. */
+function _hpShowAddHint(key) {
+  const hint = document.getElementById('hp-add-hint');
+  if (!hint) return;
+  const d = key && _hpVocab?.schema?.[key];
+  if (!d?.desc) { hint.style.display = 'none'; hint.textContent = ''; return; }
+  hint.style.display = '';
+  hint.textContent = d.desc;
 }
 
 /* ── The lines, editable one at a time ───────────────────────────────────────
@@ -2334,6 +2347,7 @@ function _hpWriteLines(lines) {
   if (!el) return;
   el.value = JSON.stringify(lines, null, 2);
   _renderLineForm();
+  _renderSampleTabs();
   _syncHpSummaries();
   _debouncedPreview();
 }
@@ -2371,11 +2385,21 @@ function _hpMoveLine(i, d) {
   _hpWriteLines(l);
 }
 
+// Mirrors LINE_SCHEMA's role enum (src/integrations/style-vocabulary.js) — purely a display label,
+// never read by the renderer.
+const HP_ROLE_LABELS = { title: 'タイトル', subtitle: 'サブタイトル', date: '日付', label: 'ラベル' };
+
 function _hpLineControl(i, key, desc, value) {
   const lbl = esc(desc.label || key);
   const setter = (expr) => `_hpSetLine(${i},'${key}',${expr})`;
   let body;
-  if (desc.type === 'range') {
+  if (key === 'role' && desc.type === 'enum') {
+    // A blank option, not defaulted to the first role — most lines have no role at all, and forcing
+    // one on every line would make the labels noise instead of signal.
+    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">未設定</option>`
+      + desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(HP_ROLE_LABELS[o] || o)}</option>`).join('')
+      + `</select>`;
+  } else if (desc.type === 'range') {
     const v = _hpNum(value ?? (key === 'scale' ? 1 : 0), desc);
     body = `<div class="hp-range"><input type="range" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
       + ` oninput="this.nextElementSibling.value=this.value" onchange="${setter('Number(this.value)')}">`
@@ -2445,9 +2469,10 @@ function _renderLineForm() {
   host.innerHTML = lines.map((l, i) => {
     const text = String(l?.text ?? '').trim() || '（空の行）';
     const bits = [l?.scale ? `×${l.scale}` : '', l?.color || '', typeof l?.metal === 'string' ? l.metal : ''].filter(Boolean).join(' · ');
+    const roleBadge = HP_ROLE_LABELS[l?.role] ? `<span class="hp-line-role">${esc(HP_ROLE_LABELS[l.role])}</span>` : '';
     const open = _hpOpenLine === i;
     const head = `<button class="hp-line-row${open ? ' open' : ''}" onclick="_hpOpenLineRow(${i})">`
-      + `<span class="hp-line-text">${esc(text)}</span><span class="hp-line-meta">${esc(bits)}</span><span class="chev">▶</span></button>`;
+      + `${roleBadge}<span class="hp-line-text">${esc(text)}</span><span class="hp-line-meta">${esc(bits)}</span><span class="chev">▶</span></button>`;
     if (!open) return `<div class="hp-line">${head}</div>`;
     const ctls = Object.entries(schema)
       .filter(([k]) => k !== 'runs')
@@ -2482,7 +2507,9 @@ function _renderPreviewHits() {
   const pc = (v, total) => `${(v / total) * 100}%`;
   host.innerHTML = r.regions.map((x) => {
     const sel = x.kind === 'line' && _hpOpenLine === x.index;
-    const label = x.kind === 'badge' ? 'バッジ' : `${x.index + 1}行目`;
+    // A line with a role reads as "タイトル"; one without falls back to its position, which is all
+    // there is to say about it until someone assigns one.
+    const label = x.kind === 'badge' ? 'バッジ' : (HP_ROLE_LABELS[x.role] || `${x.index + 1}行目`);
     return `<button class="hp-hit${sel ? ' on' : ''}" title="${label}を編集"
       style="left:${pc(x.left, r.width)};top:${pc(x.top, r.height)};width:${pc(x.right - x.left, r.width)};height:${pc(x.bottom - x.top, r.height)}"
       onclick="_hpTapRegion('${x.kind}',${x.index})"><span>${label}</span></button>`;
@@ -2528,8 +2555,14 @@ function _hpSetSample(i) {
 function _renderSampleTabs() {
   const host = document.getElementById('hp-sample-tabs');
   if (!host) return;
+  /* When this preset has authored lines, the renderer draws those verbatim and never falls back to
+     auto-wrapping the sample text (see buildOverlaySvg's `authored` branch) — so these buttons would
+     visibly do nothing, which reads as broken rather than as "not applicable here". Disabling them
+     and saying why beats a button that silently lies about what it controls. */
+  const hasLines = (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
   host.innerHTML = HP_SAMPLE_TITLES.map(([label, text], i) =>
-    `<button class="hp-sample${i === _hpSampleIdx ? ' on' : ''}" onclick="_hpSetSample(${i})" title="${esc(text)}">${esc(label)}<span>${text.length}字</span></button>`).join('');
+    `<button class="hp-sample${i === _hpSampleIdx ? ' on' : ''}" ${hasLines ? 'disabled' : ''} onclick="_hpSetSample(${i})" title="${esc(text)}">${esc(label)}<span>${text.length}字</span></button>`).join('')
+    + (hasLines ? '<div class="hp-ctl-hint">この見本は固定行（exampleLines）を使っているため、長さの見本は無効です。文字数を試すには exampleLines 自体を編集してください。</div>' : '');
 }
 
 const _hpSampleTitle = () => HP_SAMPLE_TITLES[_hpSampleIdx]?.[1] ?? HP_SAMPLE_TITLES[1][1];

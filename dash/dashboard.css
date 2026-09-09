@@ -2241,8 +2241,10 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt);min-height:32px}
 .hp-switch input{inline-size:20px;block-size:20px;accent-color:var(--acc)}
 
-.hp-add{display:flex;gap:8px;align-items:center;margin-top:4px}
+.hp-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
 .hp-add .form-select{flex:1;min-width:0}
+/* Full width on its own line under the select + button, not squeezed inline beside them. */
+.hp-add #hp-add-hint{flex-basis:100%;margin-left:0;font-size:11px}
 
 .hp-json{margin-top:10px}
 .hp-json > summary{
@@ -2276,6 +2278,8 @@ body:has(.mob-more-sheet.open) .page-area{
    at 11px in a row of grey chrome it stops reading as the content and starts reading as a label. */
 .hp-line-text{font-size:14px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .hp-line-meta{font-size:10px;color:var(--m2);white-space:nowrap;flex:0 0 auto}
+/* Same shape as ch-agent-pill — a role is metadata about the line, not the line itself. */
+.hp-line-role{font-size:9px;padding:2px 7px;border-radius:5px;background:var(--accent-bg);color:var(--acc);font-weight:600;flex:0 0 auto}
 .hp-line-body{padding:10px 0 2px}
 .hp-line-acts{display:flex;gap:8px;align-items:center;margin-top:4px}
 .hp-line-add{width:100%;justify-content:center;min-height:44px;margin-top:4px}
