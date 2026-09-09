@@ -2345,6 +2345,20 @@ function _hpSetLine(i, key, value) {
   _hpWriteLines(lines);
 }
 
+/* Merge one field into a line's glow.
+ *
+ * The handlers used to inline the whole object and let a duplicate key shadow the earlier one —
+ * valid JavaScript, and completely opaque to whoever reads the markup next. This says what it does.
+ * Defaults are supplied here so the first tap produces something visible rather than a glow with no
+ * colour, which draws nothing and reads as the control being broken. */
+function _hpSetGlow(i, patch) {
+  const cur = _hpLines()?.[i]?.glow;
+  const base = (cur && typeof cur === 'object' && !Array.isArray(cur))
+    ? cur
+    : { color: '#FF3366', em: 0.24, opacity: 0.6 };
+  _hpSetLine(i, 'glow', { ...base, ...patch });
+}
+
 function _hpOpenLineRow(i) { _hpOpenLine = _hpOpenLine === i ? null : i; _renderLineForm(); _renderPreviewHits(); }
 function _hpAddLine() { const l = _hpLines(); if (!l) return; l.push({ text: '新しい行', scale: 1 }); _hpOpenLine = l.length - 1; _hpWriteLines(l); }
 function _hpRemoveLine(i) { const l = _hpLines(); if (!l) return; l.splice(i, 1); _hpOpenLine = null; _hpWriteLines(l); }
@@ -2375,6 +2389,34 @@ function _hpLineControl(i, key, desc, value) {
     body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="${setter('this.checked')}"> <span>${value ? 'する' : 'しない'}</span></label>`;
   } else if (desc.type === 'string') {
     body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="${setter('this.value')}">`;
+  } else if (key === 'glow') {
+    /* Glow is an object — colour, radius, opacity — so the generic object branch would send it to
+       the JSON. It is also the thing most worth reaching for per line (lighting 「月5万円」 and
+       leaving 「副業で」 flat is why the renderer gained per-line glow at all), so it gets real
+       controls rather than being the one setting you have to hand-write. */
+    const g = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+    const col = /^#[0-9a-fA-F]{6}$/.test(g?.color) ? g.color : '#FF3366';
+    const em = Number.isFinite(g?.em) ? g.em : 0.24;
+    const op = Number.isFinite(g?.opacity) ? g.opacity : 0.6;
+    body = g
+      ? `<div class="hp-glow">
+           <div class="hp-colour">
+             <input type="color" value="${col}" oninput="_hpSetGlow(${i},{color:this.value.toUpperCase()})">
+             <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetGlow(${i},{color:this.value.toUpperCase()})">
+           </div>
+           <label class="hp-glow-row"><span>広がり</span>
+             <input type="range" min="0.05" max="0.6" step="0.01" value="${em}"
+               oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlow(${i},{em:Number(this.value)})">
+             <input class="form-input hp-num" type="number" min="0.05" max="0.6" step="0.01" value="${em}" onchange="_hpSetGlow(${i},{em:Number(this.value)})">
+           </label>
+           <label class="hp-glow-row"><span>強さ</span>
+             <input type="range" min="0.1" max="1" step="0.05" value="${op}"
+               oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlow(${i},{opacity:Number(this.value)})">
+             <input class="form-input hp-num" type="number" min="0.1" max="1" step="0.05" value="${op}" onchange="_hpSetGlow(${i},{opacity:Number(this.value)})">
+           </label>
+           <button class="act-btn" onclick="_hpSetLine(${i},'glow','')">発光をやめる</button>
+         </div>`
+      : `<button class="act-btn" onclick="_hpSetGlow(${i},{})">この行を光らせる</button>`;
   } else if (desc.type === 'union' && (_hpVocab?.metals || []).length) {
     // The named patterns the renderer resolves. A custom object stays editable in the JSON below.
     const named = typeof value === 'string' ? value : '';

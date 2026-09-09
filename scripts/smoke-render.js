@@ -64,7 +64,7 @@ const sandbox = {
   _loadConnections:async()=>{},
   _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
   _hpSetLine:()=>{}, _hpOpenLineRow:()=>{}, _hpAddLine:()=>{}, _hpRemoveLine:()=>{}, _hpMoveLine:()=>{}, _hpOpenLine:null,
-  _hpTapRegion:()=>{}, _hpRegions:null, _hpSetSample:()=>{}, _hpSampleIdx:1,
+  _hpTapRegion:()=>{}, _hpRegions:null, _hpSetGlow:()=>{}, _hpSetSample:()=>{}, _hpSampleIdx:1,
   HP_SAMPLE_TITLES:[['短い','AIの道徳'],['標準','なぜ赤字でも株価が上がるのか'],['長い','映画『インサイド・ヘッド２』が教えてくれる、私たちの「不安」との付き合い方']],
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
@@ -362,6 +362,29 @@ run('_syncHpSummaries on a brand new preset', () => {
         const h = lineHtml(v, 0);
         if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error(`leaked on ${label}`);
       }
+      return 'ok';
+    });
+
+    run('glow gets real controls, not a JSON field', () => {
+      /* Glow is an object, so the generic branch would send it to the JSON — and it is the setting
+         most worth reaching for per line, which is the whole reason the renderer gained per-line
+         glow. An unlit line offers to light it; a lit one exposes colour, spread and strength. */
+      const off = lineHtml(JSON.stringify([{ text:'月5万円', scale:1.5 }]), 0);
+      if (!/この行を光らせる/.test(off)) throw new Error('an unlit line offered no way to light it');
+      if (/下の JSON で編集/.test(off.split('発光')[1] ?? '')) throw new Error('glow fell through to the JSON');
+
+      const on = lineHtml(JSON.stringify([{ text:'月5万円', scale:1.5, glow:{ color:'#FF3366', em:0.3, opacity:0.8 } }]), 0);
+      if (!/value="#FF3366"/.test(on)) throw new Error('the glow colour did not reach its control');
+      if ((on.match(/hp-glow-row/g) || []).length !== 2) throw new Error('expected spread and strength');
+      if (!/発光をやめる/.test(on)) throw new Error('no way to turn it back off');
+      return 'ok';
+    });
+
+    run('a malformed glow falls back rather than rendering nothing', () => {
+      // `{color:'oops'}` is the shape a half-finished JSON edit leaves behind.
+      const h = lineHtml(JSON.stringify([{ text:'x', glow:{ color:'oops' } }]), 0);
+      if (!/value="#FF3366"/.test(h)) throw new Error('did not fall back to a usable colour');
+      if (/undefined|NaN/.test(h)) throw new Error('leaked a raw value');
       return 'ok';
     });
 

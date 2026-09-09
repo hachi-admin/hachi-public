@@ -2338,3 +2338,10 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-sample > span{font-size:9px;color:var(--m2);font-weight:500}
 .hp-sample.on{box-shadow:var(--sh-in);color:var(--acc)}
 .hp-sample.on > span{color:var(--acc)}
+
+/* Per-line glow: three settings that belong together, so they read as one control rather than as
+   three unrelated rows that happen to be adjacent. */
+.hp-glow{display:flex;flex-direction:column;gap:8px}
+.hp-glow-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--m)}
+.hp-glow-row > span{flex:0 0 42px}
+.hp-glow-row input[type=range]{flex:1;min-width:0;block-size:32px;accent-color:var(--acc)}
