@@ -11,7 +11,12 @@
   --accent:var(--acc);--accent-bg:color-mix(in srgb,var(--acc) 10%,transparent);--accent-light:color-mix(in srgb,var(--acc) 22%,transparent);
   --success:var(--grn);--warn:var(--yel);--error:var(--red);--info:var(--blue);
   --border:transparent;--border-strong:transparent;
-  --mob-tab-h:58px;--page-pad:12px;
+  /* Tall enough for what the bar actually contains: a 34px icon, a 4px gap, and the active tab's
+     1.4em label, inside .mob-tab's own padding and the bar's. At 58px the content box came to 43px
+     against ~56px of content, and .mob-tab clips its overflow — so the selected tab's name was cut
+     off along its bottom edge. Anything reserving space for the bar reads this, so it has to be the
+     real height rather than a guess. */
+  --mob-tab-h:72px;--page-pad:12px;
 }
 
 /* ── FULL-HEIGHT APP LAYOUT (enables flex:1 on .page-area) ── */
@@ -197,7 +202,9 @@ header{margin:12px;padding:10px 16px}
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;
   gap:4px;border:none;background:none;color:var(--m);
   font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.01em;
-  padding:6px 2px;border-radius:14px;
+  /* min-height below carries the touch target, so this padding only has to keep the icon off the
+     bar's edges — at 6px it was buying height the bar did not have and pushing the label out. */
+  padding:2px;border-radius:14px;
   transition:color .15s,background .15s;position:relative;min-height:44px;
 }
 
@@ -396,6 +403,14 @@ header{margin:12px;padding:10px 16px}
 .chip-queued{background:color-mix(in srgb,var(--pur) 14%,transparent);color:var(--pur)}
 .chip-inline{background:color-mix(in srgb,var(--m) 10%,transparent);color:var(--m)}
 .cat-chip{font-size:9px;padding:2px 7px;border-radius:99px;background:color-mix(in srgb,var(--m) 10%,transparent);color:var(--m)}
+/* The tile's single inline action. A raised chip, so it reads as an object sitting on the card
+   rather than as another status label — the two sit side by side and must not be confused. */
+.cat-quick{
+  font-size:9px;padding:3px 9px;border-radius:99px;font-weight:700;letter-spacing:.02em;
+  border:none;background:var(--bg);box-shadow:var(--sh-sm);color:var(--acc);
+  cursor:pointer;font-family:inherit;margin-left:auto;
+}
+.cat-quick:active{box-shadow:var(--sh-press)}
 .trig-chip{font-size:9px;padding:2px 7px;border-radius:99px;border:1px solid;text-transform:capitalize}
 .trig-chip.interactive{background:color-mix(in srgb,var(--grn) 14%,transparent);color:var(--grn);border-color:color-mix(in srgb,var(--grn) 28%,transparent)}
 .trig-chip.scheduled{background:color-mix(in srgb,var(--yel) 14%,transparent);color:var(--yel);border-color:color-mix(in srgb,var(--yel) 28%,transparent)}
@@ -2265,6 +2280,34 @@ body:has(.mob-more-sheet.open) .page-area{
   .hp-range{flex-wrap:wrap}
   .hp-num{inline-size:100%;text-align:left}
 }
+
+/* ── Preset catalogue cards ──────────────────────────────────────────────────
+ * The same card language as the category grid, one step wider because each one carries a picture.
+ * A preset is a look, and the list used to describe it only as JSON — so the card leads with the
+ * rendered hero and the text sits underneath as the caption it always was. */
+.hp-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.hp-card{
+  background:var(--bg);box-shadow:var(--sh);border-radius:14px;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.hp-card.is-off{opacity:.55}
+/* The hero's own 1280×670. Reserved before the picture arrives so the grid does not reflow as
+   each lazily-loaded preview lands. */
+.hp-card-shot{
+  aspect-ratio:1280/670;background:color-mix(in srgb,var(--m) 8%,transparent);
+  display:flex;align-items:center;justify-content:center;
+}
+.hp-card-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.hp-card-shot-fail{font-size:10px;color:var(--m2);padding:0 12px;text-align:center}
+.hp-card-body{padding:12px 12px 0;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+.hp-card-name{font-size:13px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
+.hp-card-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--acc)}
+.hp-card-chips{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.hp-card-desc{font-size:10px;color:var(--m);line-height:1.4}
+.hp-card-meta{font-size:10px;color:var(--m2)}
+.hp-card-upd{font-size:10px;color:var(--m2);margin-top:auto;padding-bottom:2px}
+.hp-card-acts{display:flex;gap:6px;padding:10px 12px 12px}
+.hp-card-acts .act-btn{flex:1;font-size:10px;min-height:36px;justify-content:center}
 
 /* ── Per-line editor ─────────────────────────────────────────────────────────
  * A row per authored line, showing that line's own text. The row is the tap target: to restyle

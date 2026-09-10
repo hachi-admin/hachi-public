@@ -1261,6 +1261,20 @@ const _CAT_FMT = {
   tutorial: 'tutorial', listicle: 'listicle', review: 'review',
 };
 
+/* The one action a tile offers inline.
+ *
+ * Every status has exactly one obvious next move, and it took two taps to reach — open the detail
+ * overlay, find the button, tap again — for something as routine as approving a scouted topic.
+ * That one is here; 却下 deliberately stays in the detail only, because it is the single
+ * irreversible action on this screen ("do not re-suggest") and it should keep costing a deliberate
+ * trip rather than sitting one stray thumb away from 承認. */
+const _CAT_QUICK = {
+  suggested: { action: 'approve', label: '承認' },
+  active:    { action: 'pause',   label: '停止' },
+  paused:    { action: 'resume',  label: '再開' },
+  blocked:   { action: 'resume',  label: '復帰' },
+};
+
 function _categoryTile(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const r = c.rating || {};
@@ -1269,6 +1283,7 @@ function _categoryTile(c) {
   const earns = ((c.monetization || {}).mode || 'none') !== 'none';
   const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
+  const quick = _CAT_QUICK[c.status];
   return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
@@ -1277,8 +1292,12 @@ function _categoryTile(c) {
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
-        <span class="chip">${st.label}</span>
+        <!-- _CAT_STATUS has always carried a colour per status and the chip never used it, so
+             未承認 and 稼働中 read identically at a glance — the one thing you scan this grid for. -->
+        <span class="chip cat-status" style="background:color-mix(in srgb,${st.color} 18%,transparent);color:${st.color}">${st.label}</span>
         <span class="cat-chip">${esc(freq)}</span>
+        ${quick ? `<button class="cat-quick" title="${esc(quick.label)}"
+          onclick="event.stopPropagation();catAction('${c.id}','${quick.action}')">${quick.label}</button>` : ''}
       </div>
       <div class="acard-foot">
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
@@ -1301,7 +1320,10 @@ function openCategoryDetail(id) {
   // continuing to tab through the page behind.
   document.getElementById('detail-panel')?.focus();
   _moneyChanged(c.id);
-  refreshCatPreview(c.id);
+  /* The style picker needs the catalogue and the preview needs the picker, so both wait on the
+     same fetch — and the preview is rendered once from inside it rather than also being fired
+     here, which would have drawn the un-pinned version first and replaced it a moment later. */
+  _ensureHeroPresets().then(() => { _fillCatPresetOptions(c.id); refreshCatPreview(c.id); });
 }
 
 function _categoryEditor(c) {
@@ -1775,6 +1797,19 @@ function _visualSection(c, section) {
         <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
       </label>
+      <!-- visual.heroPreset has existed on the category document and been honoured by the article
+           pipeline (_heroStyleFor short-circuits to it) since before this control did — so the
+           only thing missing was a way for a person to set it. Options are filled in by
+           _fillCatPresetOptions once the catalogue has loaded; data-selected carries the saved
+           value across that gap. -->
+      <label class="cat-field">
+        <span class="cat-label">ヒーロースタイル</span>
+        <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
+          onchange="queueCatPreview('${c.id}')">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
+      </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
       <label class="cat-field">
         <span class="cat-label">文字の位置</span>
@@ -1821,13 +1856,45 @@ function queueCatPreview(id) {
   _catPreviewTimers[id] = setTimeout(() => refreshCatPreview(id), 350);
 }
 
+/* The catalogue belongs to the ヒーロー画像 tab, but the picker above lives on カテゴリ — on a
+   session that opened a category first, `_heroPresets` would still be empty and the picker would
+   render with nothing in it. Fetches once; every later call is free. */
+async function _ensureHeroPresets() {
+  if (_heroPresets.length) return _heroPresets;
+  const res = await fetch(apiUrl('/api/hero-presets'), { headers: _authHeaders() }).catch(() => null);
+  if (res?.ok) _heroPresets = (await res.json().catch(() => ({})))?.presets || [];
+  return _heroPresets;
+}
+
+function _fillCatPresetOptions(catId) {
+  const sel = document.getElementById(`cat-preset-${catId}`);
+  if (!sel) return;
+  const want = sel.dataset.selected || '';
+  const usable = _heroPresets.filter((p) => p.enabled !== false);
+  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
+    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}（${esc(p.templateId)}）</option>`).join('');
+  /* A preset that was pinned and has since been disabled or deleted would otherwise vanish from
+     the list and leave the control reading 「自動」 — which is a lie about what is saved, and the
+     kind that only surfaces once someone saves the category and silently drops the pin. */
+  if (want && !usable.some((p) => p.id === want)) {
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
+  }
+}
+
 async function refreshCatPreview(id) {
   const img = document.getElementById(`cat-preview-${id}`);
   const status = document.getElementById(`cat-preview-status-${id}`);
   if (!img) return;
   const c = CATEGORIES.find((x) => x.id === id);
+  /* A pinned preset is what the article pipeline would actually draw with, so the preview has to
+     carry its styleSpec too — showing only the template would claim the decoration was 「自動」
+     when it is not. The category's own accent/align/eyebrow still layer over it, which is exactly
+     what _heroStyleFor and the visual block do together at publish time. */
+  const preset = _heroPresets.find((p) => p.id === _catVal(`cat-preset-${id}`));
   const body = {
-    templateId: _catVal(`cat-tpl-${id}`) || undefined,
+    templateId: _catVal(`cat-tpl-${id}`) || preset?.templateId || undefined,
+    styleSpec: preset?.styleSpec || undefined,
     categoryId: id,
     visual: {
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -1878,6 +1945,7 @@ async function saveCategory(id) {
     },
     visual: {
       template: _catVal(`cat-tpl-${id}`),
+      heroPreset: _catVal(`cat-preset-${id}`),
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -2009,10 +2077,65 @@ function _renderHeroPresets() {
   const listEl = document.getElementById('hero-presets-list');
   if (!listEl) return;
   if (!_heroPresets.length) {
+    listEl.className = '';
     listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
     return;
   }
-  listEl.innerHTML = _heroPresets.map(_heroPresetRow).join('');
+  listEl.className = 'hp-card-grid';
+  listEl.innerHTML = _heroPresets.map(_heroPresetCard).join('');
+  _observeHeroPreviews();
+}
+
+/* Previews are rendered server-side — one request and one JPEG per preset — so loading the whole
+ * catalogue eagerly would be two dozen renders every time this tab is opened, on a phone, for
+ * cards mostly below the fold. Each card asks for its own picture as it scrolls into view, once.
+ *
+ * The JSON dumps this replaced were exact and unreadable: `styleSpec を表示` told you the preset
+ * set `metal` and `glows` without telling you what that looks like, which is the only question
+ * anyone opens this screen with. */
+let _hpPreviewObserver = null;
+const _hpPreviewDone = new Set();
+
+function _observeHeroPreviews() {
+  _hpPreviewObserver?.disconnect();
+  _hpPreviewDone.clear();
+  _hpPreviewObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      _hpPreviewObserver.unobserve(e.target);
+      const id = e.target.dataset.presetId;
+      if (id && !_hpPreviewDone.has(id)) { _hpPreviewDone.add(id); _loadHeroPreviewInto(id); }
+    }
+  }, { rootMargin: '250px' });
+  document.querySelectorAll('#hero-presets-list .hp-card-shot').forEach((el) => _hpPreviewObserver.observe(el));
+}
+
+async function _loadHeroPreviewInto(id) {
+  const p = _heroPresets.find((x) => x.id === id);
+  const host = document.querySelector(`#hero-presets-list .hp-card-shot[data-preset-id="${CSS.escape(id)}"]`);
+  if (!p || !host) return;
+  // 標準 is the representative one; fall back only so a preset that has authored just 短い or 長い
+  // still shows something rather than the renderer's own 「サンプル」 placeholder.
+  const v = _hpNormalizeVariants(p.exampleLines);
+  const lines = v.standard.length ? v.standard : (v.short.length ? v.short : v.long);
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({
+        templateId: p.templateId,
+        styleSpec: p.styleSpec || {},
+        lines,
+        badge: p.exampleBadge || undefined,
+        article: p.name || 'サンプル見出し',
+      }),
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー">`;
+  } catch {
+    host.innerHTML = '<div class="hp-card-shot-fail">プレビューを生成できませんでした</div>';
+  }
 }
 
 /* What the agent may choose from, and on whose authority.
@@ -2034,56 +2157,34 @@ function _presetApproval(p) {
     : { label: '手動追加', color: '#94A3B8', bg: '#94A3B822' };
 }
 
-function _heroPresetRow(p) {
-  const tags = (p.mood || []).map(t => `<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(t)}</span>`).join(' ');
+function _heroPresetCard(p) {
+  const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
   const sysLabel = p.isSystem
-    ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--div);color:var(--m)">system</span>'
-    : '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#34D39933;color:#34D399">custom</span>';
+    ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>'
+    : '<span class="chip" style="background:#34D39933;color:#34D399">custom</span>';
   const ap = _presetApproval(p);
   const apTitle = p.approval?.decidedBy ? `決定: ${p.approval.decidedBy}` : '承認台帳に記録なし（既存項目として扱われています）';
-  const apLabel = `<span title="${esc(apTitle)}" style="font-size:9px;padding:1px 5px;border-radius:3px;background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
+  const apLabel = `<span class="chip" title="${esc(apTitle)}" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
   const off = p.enabled === false;
-  const offLabel = off ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#F8717122;color:#F87171">無効</span>' : '';
+  const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
   const faceVal = p.styleSpec?.face || '—';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
-  return `<div class="src-row" style="gap:10px;align-items:flex-start${off ? ';opacity:.55' : ''}">
-    <div class="src-body" style="flex:1;min-width:0">
-      <div class="src-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-family:monospace;font-size:11px;color:var(--acc)">${esc(p.id)}</span>
-        ${sysLabel}${apLabel}${offLabel}
-        <span style="font-size:12px;font-weight:700;color:var(--txt)">${esc(p.name)}</span>
-      </div>
-      <div class="src-meta" style="margin-top:4px">${esc(p.description || '')}</div>
-      <div class="src-meta" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:10px;color:var(--m2)">${esc(p.templateId)}</span>
-        <span style="font-size:10px;color:var(--m2)">face: ${esc(faceVal)}</span>
-        ${tags}
-      </div>
-      <!-- Collapsed spec preview -->
-      <details style="margin-top:8px">
-        <summary style="font-size:10px;color:var(--m);cursor:pointer">styleSpec を表示</summary>
-        <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.styleSpec, null, 2))}</pre>
-      </details>
-      ${(() => {
-        // exampleLines is `{short,standard,long}` now, but a preset saved before that existed (or
-        // written by a path that bypasses the API's normalization) may still be a flat array —
-        // handle both rather than assuming the current shape.
-        const hasAny = Array.isArray(p.exampleLines)
-          ? p.exampleLines.length > 0
-          : Object.values(p.exampleLines || {}).some((v) => Array.isArray(v) && v.length);
-        return hasAny ? `
-        <details style="margin-top:4px">
-          <summary style="font-size:10px;color:var(--m);cursor:pointer">exampleLines を表示</summary>
-          <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.exampleLines, null, 2))}</pre>
-        </details>` : '';
-      })()}
-      <div style="font-size:10px;color:var(--m2);margin-top:6px">更新: ${updAt}</div>
+  return `<div class="hp-card${off ? ' is-off' : ''}">
+    <div class="hp-card-shot" data-preset-id="${esc(p.id)}"></div>
+    <div class="hp-card-body">
+      <div class="hp-card-name">${esc(p.name)}</div>
+      <div class="hp-card-id">${esc(p.id)}</div>
+      <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}</div>
+      ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
+      <div class="hp-card-meta">${esc(p.templateId)} · face: ${esc(faceVal)}</div>
+      ${tags ? `<div class="hp-card-chips">${tags}</div>` : ''}
+      <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')" style="font-size:10px">編集</button>
-      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})" style="font-size:10px"
+    <div class="hp-card-acts">
+      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
+      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="font-size:10px;color:var(--red)">削除</button>` : ''}
+      ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
   </div>`;
 }
