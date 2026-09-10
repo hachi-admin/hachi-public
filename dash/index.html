@@ -181,8 +181,10 @@
   <section class="page" id="page-image-prompts" data-dest="articles">
     <div class="page-hd">
       <div class="page-title">絵のレシピ</div>
+      <button class="act-btn" id="ip-gen-all-btn" onclick="_genAllImagePromptSamples()" style="font-size:11px">見本のないレシピをまとめて生成</button>
       <button class="refresh-btn" onclick="_loadImagePrompts()" style="font-size:11px">&#8635; 更新</button>
     </div>
+    <div id="ip-gen-all-status" class="cat-hint" style="display:none;margin-bottom:8px"></div>
     <div id="image-prompts-list" class="feed-box"></div>
   </section>
 

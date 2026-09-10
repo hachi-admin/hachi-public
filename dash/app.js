@@ -3019,20 +3019,62 @@ function _imagePromptCard(r) {
 /* Generating costs real image calls and takes tens of seconds, so the button says so and stays
    disabled for the duration — a second tap would spend the quota twice for the same three
    pictures. */
+// Bare request, shared by the single-card button and the bulk runner below — the two differ only
+// in how they report progress, not in what they ask the server to do.
+async function _requestImagePromptSamples(id) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/samples`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+  }).catch(() => null);
+  if (res?.ok) return { ok: true };
+  const err = await res?.json().catch(() => ({}));
+  return { ok: false, error: err?.error || `Error ${res?.status ?? '—'}` };
+}
+
 async function _genImagePromptSamples(id) {
   const btn = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
   showToast('3枚生成しています…（1分ほどかかります）', 'info');
-  const res = await fetch(apiUrl(`/api/image-prompts/${id}/samples`), {
-    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
-  }).catch(() => null);
-  if (!res?.ok) {
-    const err = await res?.json().catch(() => ({}));
-    showToast(err?.error || '見本を生成できませんでした', 'error');
+  const r = await _requestImagePromptSamples(id);
+  if (!r.ok) {
+    showToast(r.error || '見本を生成できませんでした', 'error');
     if (btn) { btn.disabled = false; btn.textContent = '見本を作る'; }
     return;
   }
   showToast('見本を保存しました', 'success');
+  _loadImagePrompts();
+}
+
+/* One pass over every recipe that has no samples yet, rather than tapping 見本を作る nine times.
+ *
+ * Sequential, like `_generateSamples` on the server — a recipe's own three samples are already
+ * generated one at a time there to stay under the image endpoint's rate limit, and firing several
+ * recipes' worth of that at once from here would defeat the reason it is sequential in the first
+ * place. Slow (rendered as the honest cost — nine recipes is several minutes) rather than fast and
+ * partially failed.
+ */
+let _ipGenAllRunning = false;
+
+async function _genAllImagePromptSamples() {
+  if (_ipGenAllRunning) return;
+  const targets = _imagePrompts.filter((r) => !(Array.isArray(r.samples) && r.samples.some((s) => s?.url)));
+  const btn = document.getElementById('ip-gen-all-btn');
+  const status = document.getElementById('ip-gen-all-status');
+  if (!targets.length) { showToast('見本のないレシピはありません', 'info'); return; }
+
+  _ipGenAllRunning = true;
+  if (btn) { btn.disabled = true; }
+  if (status) status.style.display = '';
+  let done = 0, failed = 0;
+  for (const r of targets) {
+    if (status) status.textContent = `生成中… ${r.name || r.id}（${done + failed + 1}/${targets.length}）`;
+    const result = await _requestImagePromptSamples(r.id);
+    if (result.ok) done++; else failed++;
+  }
+  _ipGenAllRunning = false;
+  if (btn) btn.disabled = false;
+  if (status) status.style.display = 'none';
+  showToast(failed ? `${done}件生成、${failed}件失敗しました` : `${done}件のレシピに見本を保存しました`,
+    failed ? 'error' : 'success');
   _loadImagePrompts();
 }
 
