@@ -2247,6 +2247,28 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-ctl-key{font-size:10px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .hp-rm{margin-left:auto;min-height:28px;padding:2px 10px;font-size:12px;line-height:1}
 .hp-ctl-json{font-size:11px;color:var(--m);padding:6px 0}
+
+/* Generic object/array/union editors — path-addressed, for the styleSpec shapes (typography,
+   stroke, gradient stops, …) with no bespoke control. See _hpObjectFields/_hpArrayCtl/_hpUnionCtl. */
+.hp-obj-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.hp-obj-row:last-child{margin-bottom:0}
+.hp-obj-key{font-size:11px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:64px;flex-shrink:0}
+.hp-obj-row .hp-rm{margin-left:0}
+.hp-obj-nested{margin-bottom:8px}
+.hp-obj-nested:last-child{margin-bottom:0}
+.hp-obj-nested>.hp-obj-key{display:block;margin-bottom:6px;min-width:0}
+.hp-obj-sub{box-shadow:var(--sh-in);border-radius:8px;padding:8px;margin-left:0}
+.hp-obj-add{display:flex;gap:6px;align-items:center;margin-top:4px}
+.hp-obj-add .form-input{flex:1;min-width:0;font-size:12px}
+.hp-arr{display:flex;flex-direction:column;gap:8px}
+.hp-arr-item{box-shadow:var(--sh-in);border-radius:8px;padding:8px;position:relative}
+.hp-arr-item .act-btn.danger{margin-top:6px}
+.hp-stops{display:flex;flex-direction:column;gap:6px}
+.hp-stop-row{display:flex;gap:8px;align-items:center}
+.hp-stop-off{max-width:64px;flex:none}
+.hp-stop-row .form-input.hp-mono{flex:1;min-width:0}
+.hp-union-toggle{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.act-btn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .hp-ctl-hint{margin-left:8px;color:var(--m2)}
 
 .hp-colour{display:flex;gap:8px;align-items:center}
@@ -2374,6 +2396,22 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-line-body{padding:10px 0 2px}
 .hp-line-acts{display:flex;gap:8px;align-items:center;margin-top:4px}
 .hp-line-add{width:100%;justify-content:center;min-height:44px;margin-top:4px}
+
+/* ── Word-selection highlight editor ─────────────────────────────────────────
+ * Each character is its own tap target, sized for a thumb rather than for reading — this is a
+ * selector, not a text display, and the actual text is already shown at real size in the row above
+ * it and in the live preview. */
+.hp-run-editor{margin-top:8px}
+.hp-run-text{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px}
+.hp-run-ch{
+  min-width:30px;min-height:36px;padding:4px 2px;border:none;border-radius:6px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--txt);font-size:15px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.hp-run-ch.sel{box-shadow:var(--sh-in);background:var(--accent-bg);color:var(--acc)}
+.hp-run-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.hp-run-chip{width:32px;height:32px;border-radius:50%;border:none;box-shadow:var(--sh-sm);cursor:pointer}
+.hp-run-chip:active{box-shadow:var(--sh-press)}
 
 /* ── Keeping the preview on screen ───────────────────────────────────────────
  * Every control here changes the picture, and a preview that scrolls away turns each change into

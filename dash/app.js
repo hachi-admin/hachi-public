@@ -2481,6 +2481,243 @@ function _hpAddKey(key) {
 
 const _hpNum = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(d.max, Math.max(d.min, n)) : d.min; };
 
+/* Generic, JSON-free controls for the styleSpec keys whose value is a plain object, a union of
+ * shapes, or a list of them (bevel, metal, gradient, band, typography, strokes, ...). These used
+ * to fall straight to "下の JSON で編集" — the operator's only way to set an outline colour, a
+ * bevel, or a named gradient was to hand-write the object on a phone.
+ *
+ * Rather than one bespoke editor per key (fifteen-odd distinct shapes, several nested), this reads
+ * the *current value's own keys* and renders a field per key, guessing the right input from its
+ * runtime type — a number gets a number input, a `#RRGGBB` string gets a colour swatch, anything
+ * else gets text. It cannot describe what a field named `em` means (the JSON, still reachable
+ * below, is the place for that), but it never needs to know the shape in advance, which is what
+ * makes one implementation cover all of them.
+ *
+ * Every mutation is addressed by `path` — an array of keys/indices from the spec's root down to
+ * the field being changed — because these shapes nest (typography.eyebrow.sizeEm) and a flat
+ * `_hpSetKey(key, value)` has no way to reach inside one.
+ */
+function _hpPathAttr(path) { return esc(JSON.stringify(path)); }
+
+function _hpSetPath(path, value) {
+  const spec = _hpSpec();
+  if (spec === null || !path.length) return;
+  let cur = spec;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i];
+    if (cur[k] == null || typeof cur[k] !== 'object') cur[k] = typeof path[i + 1] === 'number' ? [] : {};
+    cur = cur[k];
+  }
+  cur[path[path.length - 1]] = value;
+  _hpWriteSpec(spec);
+}
+
+function _hpRemovePath(path) {
+  const spec = _hpSpec();
+  if (spec === null || !path.length) return;
+  let cur = spec;
+  for (let i = 0; i < path.length - 1; i++) { if (cur == null) return; cur = cur[path[i]]; }
+  if (cur == null) return;
+  const last = path[path.length - 1];
+  // A hole left by `delete` on an array (strokes[1] gone, strokes[2] still there) would round-trip
+  // through JSON as `null`, which is a value here, not an absence — splice instead.
+  if (Array.isArray(cur)) cur.splice(last, 1); else delete cur[last];
+  _hpWriteSpec(spec);
+}
+
+// A value typed into the "add field" boxes has no declared type to fall back on, unlike a schema
+// key — guessed from what it looks like, the same reading anyone would give it.
+function _hpGuessValue(raw) {
+  const s = String(raw ?? '').trim();
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  return s; // covers #RRGGBB and plain text alike — _hpTypeOf sorts the colour case out on redraw
+}
+
+function _hpAddObjField(path, keyElId, valElId) {
+  const keyEl = document.getElementById(keyElId);
+  const valEl = document.getElementById(valElId);
+  const k = keyEl?.value.trim();
+  if (!k) return;
+  _hpSetPath([...path, k], _hpGuessValue(valEl?.value));
+  keyEl.value = '';
+  valEl.value = '';
+}
+
+function _hpAddArrayItem(path) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  let cur = spec;
+  for (const k of path) { if (cur[k] == null) cur[k] = []; cur = cur[k]; }
+  if (!Array.isArray(cur)) return;
+  cur.push({});
+  _hpWriteSpec(spec);
+}
+
+function _hpAddStop(path) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  let cur = spec;
+  for (const k of path) { if (cur[k] == null) cur[k] = []; cur = cur[k]; }
+  if (!Array.isArray(cur)) return;
+  cur.push(['100%', '#FFFFFF']);
+  _hpWriteSpec(spec);
+}
+
+const _hpTypeOf = (v) => {
+  if (typeof v === 'boolean') return 'bool';
+  if (typeof v === 'number') return 'number';
+  if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) return 'colour';
+  return 'text';
+};
+
+// A gradient/metal override authored as a stop list — `[["0%","#FFFBE8"],["100%","#C8860B"]]`, the
+// shape `stopsOf`/`addGrad` in hero-title.js resolve directly — reads much better as offset+colour
+// rows than as N generic objects, so it gets its own small editor rather than falling into the
+// object-list branch below.
+const _hpIsStopList = (arr) => Array.isArray(arr) && arr.length > 0
+  && arr.every((s) => Array.isArray(s) && s.length === 2 && typeof s[0] === 'string' && typeof s[1] === 'string');
+
+function _hpStopListCtl(path, stops) {
+  const rows = stops.map((s, idx) => {
+    const offPath = [...path, idx, 0];
+    const colPath = [...path, idx, 1];
+    const col = /^#[0-9a-fA-F]{6}$/.test(s[1]) ? s[1] : '#FFFFFF';
+    return `<div class="hp-stop-row">
+      <input class="form-input hp-mono hp-stop-off" type="text" value="${esc(s[0])}" onchange="_hpSetPath(${_hpPathAttr(offPath)},this.value)">
+      <input type="color" value="${col}" oninput="_hpSetPath(${_hpPathAttr(colPath)},this.value.toUpperCase())">
+      <input class="form-input hp-mono" type="text" value="${esc(s[1])}" onchange="_hpSetPath(${_hpPathAttr(colPath)},this.value.toUpperCase())">
+      <button class="act-btn danger hp-rm" onclick="_hpRemovePath(${_hpPathAttr([...path, idx])})">×</button>
+    </div>`;
+  }).join('');
+  return `<div class="hp-stops">${rows}
+    <button class="act-btn" onclick="_hpAddStop(${_hpPathAttr(path)})">＋ 色の段を追加</button>
+  </div>`;
+}
+
+// Renders one row per existing key in `obj` — no wrapper, so this composes both as a top-level
+// shape's whole body and as one item inside a list. Recurses into nested objects/arrays (e.g.
+// `typography.eyebrow`) one indent level at a time.
+function _hpObjectFields(path, obj) {
+  const entries = Object.entries(obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {});
+  return entries.map(([k, v]) => {
+    const fieldPath = [...path, k];
+    const rm = `<button class="act-btn danger hp-rm" onclick="_hpRemovePath(${_hpPathAttr(fieldPath)})">×</button>`;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return `<div class="hp-obj-row hp-obj-nested">
+        <div class="hp-obj-key">${esc(k)}${rm}</div>
+        <div class="hp-obj-sub">${_hpObjectFields(fieldPath, v)}${_hpObjectAddRow(fieldPath)}</div>
+      </div>`;
+    }
+    if (Array.isArray(v)) {
+      return `<div class="hp-obj-row hp-obj-nested">
+        <div class="hp-obj-key">${esc(k)}${rm}</div>
+        <div class="hp-obj-sub">${_hpIsStopList(v) ? _hpStopListCtl(fieldPath, v) : _hpArrayCtl(fieldPath, v)}</div>
+      </div>`;
+    }
+    const t = _hpTypeOf(v);
+    const input = t === 'bool'
+      ? `<input type="checkbox"${v ? ' checked' : ''} onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.checked)">`
+      : t === 'number'
+        ? `<input class="form-input hp-num" type="number" step="any" value="${v}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},Number(this.value))">`
+        : t === 'colour'
+          ? `<input type="color" value="${v}" oninput="_hpSetPath(${_hpPathAttr(fieldPath)},this.value.toUpperCase())">`
+            + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.value.toUpperCase())">`
+          : `<input class="form-input" type="text" value="${esc(String(v ?? ''))}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.value)">`;
+    return `<div class="hp-obj-row"><span class="hp-obj-key">${esc(k)}</span>${input}${rm}</div>`;
+  }).join('');
+}
+
+function _hpObjectAddRow(path) {
+  const id = path.map(String).join('_').replace(/[^a-zA-Z0-9_]/g, '') || 'root';
+  return `<div class="hp-obj-add">
+    <input class="form-input" type="text" id="hp-oak-${id}" placeholder="キー名（例: em）">
+    <input class="form-input" type="text" id="hp-oav-${id}" placeholder="値（例: 0.05 / #FFFFFF / テキスト）">
+    <button class="act-btn" onclick="_hpAddObjField(${_hpPathAttr(path)},'hp-oak-${id}','hp-oav-${id}')">＋</button>
+  </div>`;
+}
+
+// A list of shape objects — strokes, glows. Each item is its own removable sub-panel of fields,
+// since a `strokes` array with two layers is two genuinely separate things to edit, not one object
+// with numbered keys.
+function _hpArrayCtl(path, arr) {
+  const rows = arr.map((item, idx) => {
+    const itemPath = [...path, idx];
+    const body = (item && typeof item === 'object' && !Array.isArray(item))
+      ? `${_hpObjectFields(itemPath, item)}${_hpObjectAddRow(itemPath)}`
+      : `<input class="form-input" type="text" value="${esc(String(item ?? ''))}" onchange="_hpSetPath(${_hpPathAttr(itemPath)},this.value)">`;
+    return `<div class="hp-arr-item">${body}
+      <button class="act-btn danger" onclick="_hpRemovePath(${_hpPathAttr(itemPath)})">この項目を削除</button></div>`;
+  }).join('');
+  return `<div class="hp-arr">${rows}
+    <button class="act-btn" onclick="_hpAddArrayItem(${_hpPathAttr(path)})">＋ 項目を追加</button>
+  </div>`;
+}
+
+// `either(...)` — a key that may hold one of several shapes (tintOutline: on/off or a colour;
+// metal: a named preset, a custom {hi,mid,lo}, or a stop list). Segmented buttons pick which shape
+// is in play; switching resets the value to that shape's own default so the control underneath is
+// never asked to render a value of the wrong kind.
+const HP_VARIANT_LABEL = { enum: '名前で指定', colour: '色', range: '数値', bool: 'オン/オフ', object: '詳細設定', array: 'リスト', string: '文字' };
+
+function _hpVariantMatches(v, variant) {
+  switch (variant.type) {
+    case 'enum':   return typeof v === 'string' && variant.options.includes(v);
+    case 'colour': return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+    case 'range':  return typeof v === 'number';
+    case 'bool':   return typeof v === 'boolean';
+    case 'object': return v != null && typeof v === 'object' && !Array.isArray(v);
+    case 'array':  return Array.isArray(v);
+    case 'string': return typeof v === 'string';
+    default:       return false;
+  }
+}
+
+function _hpSwitchVariant(key, variantType) {
+  const variant = _hpVocab?.schema?.[key]?.variants?.find((v) => v.type === variantType);
+  if (!variant) return;
+  const def = variant.type === 'enum' ? variant.options[0]
+    : variant.type === 'colour' ? '#FFFFFF'
+      : variant.type === 'range' ? Number(((variant.min + variant.max) / 2).toFixed(2))
+        : variant.type === 'bool' ? true
+          : variant.type === 'array' ? []
+            : variant.type === 'string' ? '' : {};
+  _hpSetPath([key], def);
+}
+
+function _hpUnionCtl(key, desc, value) {
+  const active = desc.variants.find((vr) => _hpVariantMatches(value, vr)) ?? desc.variants[0];
+  const toggle = desc.variants.map((vr) =>
+    `<button class="act-btn${vr.type === active.type ? ' on' : ''}" onclick="_hpSwitchVariant('${key}','${vr.type}')">${HP_VARIANT_LABEL[vr.type] || vr.type}</button>`).join('');
+  let inner;
+  if (active.type === 'enum') {
+    inner = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
+      active.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  } else if (active.type === 'colour') {
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    inner = `<div class="hp-colour"><input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetKey('${key}',this.value.toUpperCase())"></div>`;
+  } else if (active.type === 'range') {
+    const v = _hpNum(value, active);
+    inner = `<div class="hp-range"><input type="range" min="${active.min}" max="${active.max}" step="${active.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="_hpSetKey('${key}',Number(this.value))">`
+      + `<input class="form-input hp-num" type="number" min="${active.min}" max="${active.max}" step="${active.step}" value="${v}"`
+      + ` onchange="_hpSetKey('${key}',Number(this.value))"></div>`;
+  } else if (active.type === 'bool') {
+    inner = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="_hpSetKey('${key}',this.checked)"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (active.type === 'object') {
+    const obj = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    inner = _hpObjectFields([key], obj) + _hpObjectAddRow([key]);
+  } else if (active.type === 'array') {
+    const arr = Array.isArray(value) ? value : [];
+    inner = _hpIsStopList(arr) ? _hpStopListCtl([key], arr) : _hpArrayCtl([key], arr);
+  } else {
+    inner = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="_hpSetKey('${key}',this.value)">`;
+  }
+  return `<div class="hp-union-toggle">${toggle}</div>${inner}`;
+}
+
 /* These four keys only ever reach the renderer's "highlighted phrase" path (`isHot` in
    buildOverlaySvg's draw loop), which is forced entirely off whenever a preset carries authored
    exampleLines — the normal case for every seeded preset. Set on such a preset, they parse, they
@@ -2525,11 +2762,16 @@ function _hpControl(key, desc, value) {
     body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="_hpSetKey('${key}',this.checked)"> <span>${value ? 'する' : 'しない'}</span></label>`;
   } else if (desc.type === 'string') {
     body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="_hpSetKey('${key}',this.value)">`;
+  } else if (desc.type === 'union') {
+    body = _hpUnionCtl(key, desc, value);
+  } else if (desc.type === 'object') {
+    const obj = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    body = _hpObjectFields([key], obj) + _hpObjectAddRow([key]);
+  } else if (desc.type === 'array') {
+    const arr = Array.isArray(value) ? value : [];
+    body = _hpIsStopList(arr) ? _hpStopListCtl([key], arr) : _hpArrayCtl([key], arr);
   } else {
-    // object / array / union — a shape no single control expresses. Say so and point at the JSON,
-    // rather than offering a control that would quietly flatten it.
-    const n = Array.isArray(value) ? `${value.length}件` : (value && typeof value === 'object' ? `${Object.keys(value).length}項目` : '—');
-    body = `<div class="hp-ctl-json">${n}<span class="hp-ctl-hint">下の JSON で編集</span></div>`;
+    body = `<div class="hp-ctl-json">⚠ 未知の型（${esc(desc.type)}）<span class="hp-ctl-hint">下の JSON で編集</span></div>`;
   }
   const deadHint = deadWithLines
     ? '<div class="hp-ctl-hint">⚠ この見本は固定行（exampleLines）を使っているため、この項目は描画に反映されません。見本の行ごとの設定（大きさ・色・書体・発光）を使ってください。</div>'
@@ -2555,7 +2797,9 @@ function _renderStyleForm() {
     return;
   }
 
-  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !HP_CORE_KEYS.includes(k));
+  // `strokes` gets its own quick control below (`_hpStrokesCoreCtl`) for the common single-layer
+  // case; the generic array editor would just duplicate it under the same label.
+  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !HP_CORE_KEYS.includes(k) && k !== 'strokes');
   const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
   const groups = _hpVocab.groups
     .map((g) => [g, set.filter((k) => _hpVocab.schema[k].group === g.id)])
@@ -2582,10 +2826,10 @@ function _renderStyleForm() {
     </div>`;
 }
 
-/* `strokes` is an array of layered outlines — the generic union/array branch in `_hpControl` can
-   only offer "下の JSON で編集" for that shape, which is exactly the control the operator asked
-   for by name ("font outline colour"). This edits the first (and, for every seeded preset, only)
-   layer's colour and width directly; a second layer still needs the JSON, which the hint says. */
+/* `strokes` is an array of layered outlines. This gives one-click editing of the first (and, for
+   every seeded preset, only) layer's colour and width — the control the operator asked for by
+   name ("font outline colour"). Rarer additional layers fall through to the generic array editor
+   (`_hpArrayCtl`) rather than JSON, so nothing here still requires opening the JSON fallback. */
 function _hpStrokesCoreCtl(value) {
   const list = Array.isArray(value) ? value : [];
   const first = list[0] || null;
@@ -2607,7 +2851,7 @@ function _hpStrokesCoreCtl(value) {
         <input class="form-input hp-num" type="number" min="0.01" max="0.2" step="0.005" value="${em}"
           onchange="_hpSetStrokeEm(Number(this.value))">
       </div>
-      ${list.length > 1 ? `<div class="hp-ctl-hint">他 ${list.length - 1} 層は下の JSON で編集</div>` : ''}`;
+      ${list.length > 1 ? `<div class="hp-ctl-hint">他 ${list.length - 1} 層:</div>${_hpArrayCtl(['strokes'], list)}` : ''}`;
   }
   return `<div class="hp-ctl">${head}${body}</div>`;
 }
@@ -2693,7 +2937,14 @@ function _hpSetGlow(i, patch) {
   _hpSetLine(i, 'glow', { ...base, ...patch });
 }
 
-function _hpOpenLineRow(i) { _hpOpenLine = _hpOpenLine === i ? null : i; _renderLineForm(); _renderPreviewHits(); }
+function _hpOpenLineRow(i) {
+  _hpOpenLine = _hpOpenLine === i ? null : i;
+  // Reopening shows whatever's currently decorated, selected — so tapping back in reveals the
+  // existing choice instead of looking like it was forgotten.
+  _hpRunSel = _hpOpenLine === null ? null : _hpRunExistingRange(_hpLines()?.[_hpOpenLine]);
+  _renderLineForm();
+  _renderPreviewHits();
+}
 function _hpAddLine() { const l = _hpLines(); if (!l) return; l.push({ text: '新しい行', scale: 1 }); _hpOpenLine = l.length - 1; _hpWriteLines(l); }
 function _hpRemoveLine(i) { const l = _hpLines(); if (!l) return; l.splice(i, 1); _hpOpenLine = null; _hpWriteLines(l); }
 function _hpMoveLine(i, d) {
@@ -2708,6 +2959,98 @@ function _hpMoveLine(i, d) {
 // Mirrors LINE_SCHEMA's role enum (src/integrations/style-vocabulary.js) — purely a display label,
 // never read by the renderer.
 const HP_ROLE_LABELS = { title: 'タイトル', subtitle: 'サブタイトル', date: '日付', label: 'ラベル' };
+
+/* Highlighting a phrase within a line, rather than only the whole line.
+ *
+ * `palette`（LINE_SCHEMA, style-vocabulary.js）already let a whole line pick a named two-tone fill
+ * (SPLITS in hero-templates.js). The renderer's `runs` field has always been able to carry a
+ * different palette per phrase — 「本当に」不安 with 不安 alone lit — but nothing wrote to it: it
+ * was excluded from the per-line control list on purpose (`.filter(([k]) => k !== 'runs')`) because
+ * a raw run array is not something to hand-author as JSON on a phone. This is the control for it —
+ * tap characters to select a range, tap a swatch to light just that range.
+ *
+ * Scope, deliberately: one decorated span per line. Rebuilding `runs` from the line's own flattened
+ * text on every apply is simple and correct for that case; a line that wants two independently
+ * coloured phrases still needs the JSON. That covers what "highlight a word" actually asks for
+ * without building a full multi-span rich-text model for a phone-sized control. */
+let _hpRunSel = null; // { start, end } — character indices into the line's flattened text, inclusive
+
+const HP_SPLIT_LABELS = { ice: '氷', cyan: 'シアン', ember: '炎', blood: '血', violet: '紫', gold: '金', steel: '鋼', toxic: '毒' };
+// Representative swatch colours for the chip UI — not the real (multi-stop) gradient, just enough
+// to tell the eight apart at a glance. Mirrors SPLITS in hero-templates.js.
+const HP_SPLIT_SWATCH = { ice: '#1D6FC4', cyan: '#0B3F8F', ember: '#D2400C', blood: '#B3140A', violet: '#5B2BA8', gold: '#C8860B', steel: '#586B84', toxic: '#2E8B14' };
+
+// The text a line actually draws, whether it's plain `text` or already split into `runs`.
+function _hpRunFlatText(line) {
+  if (Array.isArray(line?.runs) && line.runs.length) return line.runs.map((r) => String(r?.text ?? '')).join('');
+  return String(line?.text ?? '');
+}
+
+// The span of the first styled run, so reopening a line restores what's already there instead of
+// starting blank. A line with more than one styled run (only reachable via the JSON) shows the
+// first — consistent with "one decorated span" being what this control edits.
+function _hpRunExistingRange(line) {
+  if (!Array.isArray(line?.runs) || !line.runs.length) return null;
+  let pos = 0;
+  for (const r of line.runs) {
+    const len = String(r?.text ?? '').length;
+    if (r?.palette || r?.metal || r?.gradient) return { start: pos, end: pos + len - 1 };
+    pos += len;
+  }
+  return null;
+}
+
+function _hpRunEditor(i, line) {
+  const text = _hpRunFlatText(line);
+  if (!text.trim()) return '';
+  const sel = _hpRunSel;
+  const lo = sel ? Math.min(sel.start, sel.end ?? sel.start) : -1;
+  const hi = sel ? Math.max(sel.start, sel.end ?? sel.start) : -1;
+  const chars = [...text].map((ch, k) =>
+    `<button class="hp-run-ch${k >= lo && k <= hi ? ' sel' : ''}" onclick="_hpTapRunChar(${i},${k})">${esc(ch)}</button>`).join('');
+  const hasSel = sel && sel.end != null;
+  const opts = _hpVocab?.lineSchema?.palette?.options || [];
+  const chips = hasSel
+    ? opts.map((o) => `<button class="hp-run-chip" style="background:${HP_SPLIT_SWATCH[o] || '#888'}"
+        title="${esc(HP_SPLIT_LABELS[o] || o)}" onclick="_hpApplyRunPalette(${i},'${o}')"></button>`).join('')
+      + `<button class="act-btn" onclick="_hpApplyRunPalette(${i},null)">色を外す</button>`
+    : '';
+  return `<div class="hp-ctl hp-run-editor">
+    <div class="hp-ctl-head"><span class="hp-ctl-name">文字を選んで装飾</span></div>
+    <div class="hp-run-text">${chars}</div>
+    ${hasSel ? `<div class="hp-run-chips">${chips}</div>` : '<div class="hp-ctl-hint">文字をタップ→タップで範囲を選び、色のパターンを選びます</div>'}
+  </div>`;
+}
+
+function _hpTapRunChar(i, k) {
+  if (!_hpRunSel || _hpRunSel.end != null) {
+    _hpRunSel = { start: k, end: null };
+  } else {
+    _hpRunSel = { start: Math.min(_hpRunSel.start, k), end: Math.max(_hpRunSel.start, k) };
+  }
+  _renderLineForm();
+}
+
+function _hpApplyRunPalette(i, palette) {
+  const lines = _hpLines();
+  const line = lines?.[i];
+  if (!line || !_hpRunSel || _hpRunSel.end == null) return;
+  const text = _hpRunFlatText(line);
+  const s = Math.min(_hpRunSel.start, _hpRunSel.end);
+  const e = Math.max(_hpRunSel.start, _hpRunSel.end);
+  const prefix = text.slice(0, s);
+  const mid = text.slice(s, e + 1);
+  const suffix = text.slice(e + 1);
+  const runs = [];
+  if (prefix) runs.push({ text: prefix });
+  if (mid) runs.push(palette ? { text: mid, palette } : { text: mid });
+  if (suffix) runs.push({ text: suffix });
+  // A single, undecorated run is just the line's plain text — collapse back to none rather than
+  // carry a `runs` array that says nothing `text` didn't already.
+  if (runs.length > 1) line.runs = runs; else delete line.runs;
+  _hpRunSel = null;
+  _hpWriteLines(lines);
+}
 
 // Line-level enums whose absence means "inherit the template's", not "the first option" — unlike
 // the global styleSpec editor's `_hpAddKey`, which defaults a newly-added enum key to `options[0]`
@@ -2802,6 +3145,7 @@ function _renderLineForm() {
       .filter(([k]) => k !== 'runs')
       .map(([k, d]) => _hpLineControl(i, k, d, l?.[k])).join('');
     return `<div class="hp-line">${head}<div class="hp-line-body">${ctls}
+      ${_hpRunEditor(i, l)}
       <div class="hp-line-acts">
         <button class="act-btn" onclick="_hpMoveLine(${i},-1)"${i === 0 ? ' disabled' : ''}>↑</button>
         <button class="act-btn" onclick="_hpMoveLine(${i},1)"${i === lines.length - 1 ? ' disabled' : ''}>↓</button>
