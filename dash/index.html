@@ -211,10 +211,20 @@
                 </label>
                 <label class="hp-label">テンプレート地（templateId）
                   <select id="hp-template-id" class="form-select" onchange="_debouncedPreview();_syncHpSummaries()">
-                    <option value="photo_scrim">photo_scrim（写真+スクリム）</option>
-                    <option value="light_flat">light_flat（明るいフラット）</option>
-                    <option value="photo_full">photo_full（写真フル）</option>
-                    <option value="dark_flat">dark_flat（黒地）</option>
+                    <option value="light_flat">light_flat（白地・文字主役）</option>
+                    <option value="dark_flat">dark_flat（黒地・白抜き）</option>
+                    <option value="colour_block">colour_block（色地・白文字）</option>
+                    <option value="photo_scrim">photo_scrim（写真＋スクリム）</option>
+                    <option value="photo_punch">photo_punch（写真＋縁取り）</option>
+                    <option value="photo_full">photo_full（写真全面・グラデ文字）</option>
+                    <option value="photo_tilt">photo_tilt（写真＋傾き・立体文字）</option>
+                    <option value="photo_metal">photo_metal（写真＋メタリック立体文字）</option>
+                    <option value="photo_crown">photo_crown（写真＋上部見出し）</option>
+                    <option value="photo_lower">photo_lower（写真＋左下見出し）</option>
+                    <option value="photo_stack">photo_stack（写真＋三段見出し）</option>
+                    <option value="photo_gold">photo_gold（写真＋金文字）</option>
+                    <option value="photo_vivid">photo_vivid（写真＋ハーフグラデ）</option>
+                    <option value="photo_split">photo_split（写真＋左テキスト）</option>
                   </select>
                 </label>
                 <label class="hp-label">名前
