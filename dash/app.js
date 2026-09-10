@@ -373,7 +373,7 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','ヒーロー画像'], ['image-prompts','絵のレシピ'] ] },
+  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','サムネタイトル'], ['image-prompts','絵のレシピ'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
@@ -1173,6 +1173,7 @@ function _renderTopics() {
                                 _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
   if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
+  if (_catView === 'categories') _observeCatThumbs();
 }
 
 // ─── #approvals, without leaving the dashboard ────────────────────────────────
@@ -1280,15 +1281,23 @@ function _categoryTile(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const r = c.rating || {};
   const style = c.style || {};
+  const v = c.visual || {};
   const fmt = _CAT_FMT[style.format] || 'analysis';
   const earns = ((c.monetization || {}).mode || 'none') !== 'none';
   const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
   const quick = _CAT_QUICK[c.status];
+  /* Whether a mapping exists is visualised two ways: the thumbnail itself (rendered lazily below,
+     for the common "サムネタイトルのスタイル固定" case), and a small marker for pins harder to see
+     at a glance — an icon rather than text, since a category grid is scanned, not read, and
+     spelling out 見出しの絵/本文の絵 would be the longest text on the card for something most
+     categories leave on 自動. */
+  const pins = [v.heroPreset && 'サムネの型', v.imagePrompt && '見出しの絵', v.figurePrompt && '本文の絵'].filter(Boolean);
   return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
+    ${v.heroPreset ? `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>` : ''}
     <i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
@@ -1304,9 +1313,57 @@ function _categoryTile(c) {
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
+        ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
       </div>
     </div>
   </div>`;
+}
+
+/* Same lazy-on-scroll pattern as the preset catalogue's own cards (see `_observeHeroPreviews`):
+   a full render costs a real image generation, and a category grid can run to dozens of tiles, so
+   only the ones actually scrolled into view ever ask for one. */
+let _catThumbObserver = null;
+const _catThumbDone = new Set();
+
+function _observeCatThumbs() {
+  _catThumbObserver?.disconnect();
+  _catThumbDone.clear();
+  _catThumbObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      _catThumbObserver.unobserve(e.target);
+      const id = e.target.dataset.catThumb;
+      if (id && !_catThumbDone.has(id)) { _catThumbDone.add(id); _loadCatThumbInto(id); }
+    }
+  }, { rootMargin: '250px' });
+  document.querySelectorAll('#page-articles [data-cat-thumb]').forEach((el) => _catThumbObserver.observe(el));
+}
+
+async function _loadCatThumbInto(id) {
+  const c = CATEGORIES.find((x) => x.id === id);
+  const host = document.querySelector(`#page-articles [data-cat-thumb="${CSS.escape(id)}"]`);
+  if (!c || !host) return;
+  await _ensureHeroPresets();
+  const preset = _heroPresets.find((p) => p.id === c.visual?.heroPreset);
+  if (!preset) { host.remove(); return; }
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({
+        templateId: c.visual?.template || preset.templateId,
+        styleSpec: preset.styleSpec || {},
+        categoryId: id,
+        visual: { accent: c.visual?.accent || '', align: c.visual?.align || '', eyebrow: c.visual?.eyebrow || '' },
+        article: c.name || 'サンプル',
+        lines: [{ text: c.name || 'サンプル', scale: 1.2, indent: 0 }],
+      }),
+    });
+    if (!res.ok) throw new Error();
+    const url = URL.createObjectURL(await res.blob());
+    host.innerHTML = `<img src="${url}" alt="${esc(c.name)} のサムネタイトル見本" onclick="event.stopPropagation();_openLightbox('${url}','${esc(c.name)}')">`;
+  } catch {
+    host.remove();
+  }
 }
 
 // The full editor, opened in the shared detail overlay.
@@ -1796,7 +1853,7 @@ function _visualSection(c, section) {
     </div>
     <div class="cat-grid neu-well">
       <label class="cat-field">
-        <span class="cat-label">ヒーローの型</span>
+        <span class="cat-label">サムネの型</span>
         <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
       </label>
@@ -1806,7 +1863,7 @@ function _visualSection(c, section) {
            _fillCatPresetOptions once the catalogue has loaded; data-selected carries the saved
            value across that gap. -->
       <label class="cat-field">
-        <span class="cat-label">ヒーロースタイル</span>
+        <span class="cat-label">サムネタイトルのスタイル</span>
         <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
           onchange="queueCatPreview('${c.id}')">
           <option value="">自動（記事ごとに選ぶ）</option>
@@ -1814,14 +1871,24 @@ function _visualSection(c, section) {
         <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
       </label>
       <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
-           visual.imagePrompt has been on the category document and honoured by resolveRecipe all
-           along, with no way for a person to set it. -->
+           visual.imagePrompt/figurePrompt have been on the category document and honoured by
+           resolveRecipe (hero) / _generateImage (figure) — the figure side only as of the same
+           change that added this second field, since _generateImage never passed a pinned id
+           before. Independent choices: a category can fix its cover, its in-body pictures, both,
+           or neither. -->
       <label class="cat-field">
-        <span class="cat-label">絵のレシピ</span>
+        <span class="cat-label">見出し画像の絵のレシピ</span>
         <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
           <option value="">自動（記事ごとに選ぶ）</option>
         </select>
-        <span class="cat-hint">写真や挿絵の作風を固定します。選ばないと記事ごとに変わります</span>
+        <span class="cat-hint">サムネイトル（表紙）の写真・挿絵の作風を固定します</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">本文中の絵のレシピ</span>
+        <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">記事本文に入る図版・挿絵の作風を固定します。見出し画像とは別に選べます</span>
       </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
       <label class="cat-field">
@@ -1895,19 +1962,24 @@ function _fillCatPresetOptions(catId) {
   }
 }
 
-function _fillCatImagePromptOptions(catId) {
-  const sel = document.getElementById(`cat-imgprompt-${catId}`);
+// One picker each for kind:'hero' (the cover) and kind:'figure' (in-body diagrams) — a recipe
+// meant for one would be the wrong shape drawn into the other.
+function _fillCatImagePromptOptionsFor(selId, kind) {
+  const sel = document.getElementById(selId);
   if (!sel) return;
   const want = sel.dataset.selected || '';
-  // Only hero-kind recipes: `figure` ones are whiteboard diagrams for inside an article, and a
-  // category pinning one as its cover would produce a diagram where the hero should be.
-  const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === 'hero');
+  const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === kind);
   sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
     + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}</option>`).join('');
   if (want && !usable.some((r) => r.id === want)) {
     sel.insertAdjacentHTML('beforeend',
       `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
   }
+}
+
+function _fillCatImagePromptOptions(catId) {
+  _fillCatImagePromptOptionsFor(`cat-imgprompt-${catId}`, 'hero');
+  _fillCatImagePromptOptionsFor(`cat-figprompt-${catId}`, 'figure');
 }
 
 async function refreshCatPreview(id) {
@@ -1975,6 +2047,7 @@ async function saveCategory(id) {
       template: _catVal(`cat-tpl-${id}`),
       heroPreset: _catVal(`cat-preset-${id}`),
       imagePrompt: _catVal(`cat-imgprompt-${id}`),
+      figurePrompt: _catVal(`cat-figprompt-${id}`),
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -2161,7 +2234,7 @@ async function _loadHeroPreviewInto(id) {
     });
     if (!res.ok) throw new Error(`Error ${res.status}`);
     const url = URL.createObjectURL(await res.blob());
-    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー">`;
+    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー" onclick="_openLightbox('${url}','${esc(p.name)} のプレビュー')">`;
   } catch {
     host.innerHTML = '<div class="hp-card-shot-fail">プレビューを生成できませんでした</div>';
   }
@@ -2185,6 +2258,26 @@ function _presetApproval(p) {
     ? { label: '既定',     color: '#94A3B8', bg: '#94A3B822' }
     : { label: '手動追加', color: '#94A3B8', bg: '#94A3B822' };
 }
+
+/* A generic full-size image viewer, built once and reused — the preview thumbnails across both the
+   preset cards and the recipe cards are deliberately small (a grid of them is the point), so seeing
+   one at real size needs a way out of the grid that doesn't navigate anywhere. */
+function _openLightbox(url, alt = '') {
+  let ov = document.getElementById('img-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'img-lightbox';
+    ov.className = 'lightbox-ov';
+    ov.onclick = (e) => { if (e.target === ov) _closeLightbox(); };
+    ov.innerHTML = '<img id="img-lightbox-img" alt=""><button class="lightbox-close" onclick="_closeLightbox()" aria-label="閉じる">×</button>';
+    document.body.appendChild(ov);
+  }
+  document.getElementById('img-lightbox-img').src = url;
+  document.getElementById('img-lightbox-img').alt = alt;
+  ov.classList.add('open');
+}
+function _closeLightbox() { document.getElementById('img-lightbox')?.classList.remove('open'); }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLightbox(); });
 
 function _heroPresetCard(p) {
   const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
@@ -2444,6 +2537,11 @@ function _hpControl(key, desc, value) {
   return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}">${head}${body}${deadHint}</div>`;
 }
 
+// Always on screen regardless of whether the spec currently sets them — the two questions "what
+// colour is the ground" and "what colour is the outline" are the ones asked before any other, and
+// requiring 項目を追加 first for exactly those two read as though the control didn't exist at all.
+const HP_CORE_KEYS = ['ground', 'text'];
+
 function _renderStyleForm() {
   const host = document.getElementById('hp-style-form');
   if (!host) return;
@@ -2457,28 +2555,79 @@ function _renderStyleForm() {
     return;
   }
 
-  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k]);
+  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !HP_CORE_KEYS.includes(k));
   const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
   const groups = _hpVocab.groups
     .map((g) => [g, set.filter((k) => _hpVocab.schema[k].group === g.id)])
     .filter(([, keys]) => keys.length);
 
   const addable = Object.entries(_hpVocab.schema)
-    .filter(([k]) => !(k in spec))
+    .filter(([k]) => !(k in spec) && !HP_CORE_KEYS.includes(k))
     .map(([k, d]) => `<option value="${k}">${esc(d.label || k)}（${k}）</option>`).join('');
 
+  const core = HP_CORE_KEYS.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null)).join('')
+    + _hpStrokesCoreCtl(spec.strokes);
+
   host.innerHTML = `
+    <div class="hp-grp"><div class="hp-grp-hd">基本の色</div>${core}</div>
     ${unknown.length ? `<div class="hp-ctl-json">⚠ レンダラーが読まないキー: <code>${unknown.map(esc).join(', ')}</code> — 描画時に無視されます</div>` : ''}
     ${groups.map(([g, keys]) => `
       <div class="hp-grp"><div class="hp-grp-hd">${esc(g.label)}</div>
         ${keys.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k])).join('')}
       </div>`).join('')}
-    ${set.length ? '' : '<div class="hp-ctl-json">項目がありません。下から追加できます。</div>'}
     <div class="hp-add">
       <select class="form-select" id="hp-add-key" onchange="_hpShowAddHint(this.value)"><option value="">項目を追加…</option>${addable}</select>
       <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>
       <div class="hp-ctl-hint" id="hp-add-hint" style="display:none"></div>
     </div>`;
+}
+
+/* `strokes` is an array of layered outlines — the generic union/array branch in `_hpControl` can
+   only offer "下の JSON で編集" for that shape, which is exactly the control the operator asked
+   for by name ("font outline colour"). This edits the first (and, for every seeded preset, only)
+   layer's colour and width directly; a second layer still needs the JSON, which the hint says. */
+function _hpStrokesCoreCtl(value) {
+  const list = Array.isArray(value) ? value : [];
+  const first = list[0] || null;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">縁取り</span><code class="hp-ctl-key">strokes</code></div>';
+  let body;
+  if (!first) {
+    body = '<button class="act-btn" onclick="_hpSetStrokeColor(\'#000000\')">縁取りを追加</button>';
+  } else {
+    const col = /^#[0-9a-fA-F]{6}$/.test(first.color) ? first.color : '#000000';
+    const em = Number.isFinite(first.em) ? first.em : 0.05;
+    body = `<div class="hp-colour">
+        <input type="color" value="${col}" oninput="_hpSetStrokeColor(this.value.toUpperCase())">
+        <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetStrokeColor(this.value.toUpperCase())">
+        <button class="act-btn" title="縁取りをやめる" onclick="_hpRemoveKey('strokes')">なし</button>
+      </div>
+      <div class="hp-range" style="margin-top:8px">
+        <input type="range" min="0.01" max="0.2" step="0.005" value="${em}"
+          oninput="this.nextElementSibling.value=this.value" onchange="_hpSetStrokeEm(Number(this.value))">
+        <input class="form-input hp-num" type="number" min="0.01" max="0.2" step="0.005" value="${em}"
+          onchange="_hpSetStrokeEm(Number(this.value))">
+      </div>
+      ${list.length > 1 ? `<div class="hp-ctl-hint">他 ${list.length - 1} 層は下の JSON で編集</div>` : ''}`;
+  }
+  return `<div class="hp-ctl">${head}${body}</div>`;
+}
+
+function _hpSetStrokeColor(color) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const list = Array.isArray(spec.strokes) ? [...spec.strokes] : [];
+  list[0] = { ...(list[0] || { em: 0.05 }), color };
+  spec.strokes = list;
+  _hpWriteSpec(spec);
+}
+
+function _hpSetStrokeEm(em) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const list = Array.isArray(spec.strokes) ? [...spec.strokes] : [];
+  list[0] = { ...(list[0] || { color: '#000000' }), em };
+  spec.strokes = list;
+  _hpWriteSpec(spec);
 }
 
 /* The native <select> for "項目を追加…" cannot show a description per option (no reliable hover
@@ -2982,14 +3131,16 @@ function _imagePromptCard(r) {
   const off = r.enabled === false;
   const samples = Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : [];
   const keywords = (r.keywords || []).slice(0, 6).map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('');
-  /* The spec is the recipe's actual content, so it is shown — but as its values, not as JSON.
-     「シネマティック · 低照度 · 35mm」 is the look; `{"lighting":"low-key"}` is a data structure
-     that happens to contain it. */
-  const spec = Object.values(r.spec || {}).map((v) => String(v)).filter(Boolean).join(' · ');
+  const isApproved = ap.label === '承認済';
+  /* Only what a Japanese operator actually reads: `spec`'s values are the English prompt fragments
+     sent straight to the image model ("Hyper-photorealistic documentary photography of..."), and
+     showing them here was the generator's input leaking into the card meant for judging its
+     output — the same leak image-curator's own doc comment warns against for the Discord card. The
+     Japanese description is the recipe's content as far as this display is concerned. */
   return `<div class="hp-card${off ? ' is-off' : ''}">
     <div class="ip-shots">
       ${samples.length
-    ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
+    ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
     : '<div class="ip-shots-empty">見本がまだありません</div>'}
     </div>
     <div class="hp-card-body">
@@ -3002,16 +3153,15 @@ function _imagePromptCard(r) {
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
       </div>
       ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
-      ${spec ? `<div class="hp-card-meta">${esc(spec)}</div>` : ''}
       ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
     </div>
     <div class="hp-card-acts">
       <button class="act-btn" data-ip-gen="${esc(r.id)}" onclick="_genImagePromptSamples('${esc(r.id)}')"
-        title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">見本を作る</button>
+        title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">${samples.length ? '見本を作り直す' : '見本を作る'}</button>
       <button class="act-btn" onclick="_toggleImagePrompt('${esc(r.id)}',${off})"
         title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
-      <button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
-        title="Discord に承認カードを送ります">承認へ</button>
+      ${samples.length ? `<button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
+        title="Discord に承認カードを送ります。承認済みのレシピでも、変更を相談したいときに送れます">${isApproved ? '変更をDiscordで相談' : '承認へ'}</button>` : ''}
     </div>
   </div>`;
 }
@@ -3044,39 +3194,6 @@ async function _genImagePromptSamples(id) {
   _loadImagePrompts();
 }
 
-/* One pass over every recipe that has no samples yet, rather than tapping 見本を作る nine times.
- *
- * Sequential, like `_generateSamples` on the server — a recipe's own three samples are already
- * generated one at a time there to stay under the image endpoint's rate limit, and firing several
- * recipes' worth of that at once from here would defeat the reason it is sequential in the first
- * place. Slow (rendered as the honest cost — nine recipes is several minutes) rather than fast and
- * partially failed.
- */
-let _ipGenAllRunning = false;
-
-async function _genAllImagePromptSamples() {
-  if (_ipGenAllRunning) return;
-  const targets = _imagePrompts.filter((r) => !(Array.isArray(r.samples) && r.samples.some((s) => s?.url)));
-  const btn = document.getElementById('ip-gen-all-btn');
-  const status = document.getElementById('ip-gen-all-status');
-  if (!targets.length) { showToast('見本のないレシピはありません', 'info'); return; }
-
-  _ipGenAllRunning = true;
-  if (btn) { btn.disabled = true; }
-  if (status) status.style.display = '';
-  let done = 0, failed = 0;
-  for (const r of targets) {
-    if (status) status.textContent = `生成中… ${r.name || r.id}（${done + failed + 1}/${targets.length}）`;
-    const result = await _requestImagePromptSamples(r.id);
-    if (result.ok) done++; else failed++;
-  }
-  _ipGenAllRunning = false;
-  if (btn) btn.disabled = false;
-  if (status) status.style.display = 'none';
-  showToast(failed ? `${done}件生成、${failed}件失敗しました` : `${done}件のレシピに見本を保存しました`,
-    failed ? 'error' : 'success');
-  _loadImagePrompts();
-}
 
 async function _toggleImagePrompt(id, currentlyOff) {
   const res = await fetch(apiUrl(`/api/image-prompts/${id}`), {
@@ -3116,6 +3233,86 @@ async function _proposeImagePrompt(id) {
     return;
   }
   showToast('Discord に承認カードを送りました', 'success');
+  _loadImagePrompts();
+}
+
+// ─── New recipe from reference images ──────────────────────────────────────
+// Files never leave the browser as File objects — the API takes base64 JSON like every other
+// image path in this dashboard (hero preset previews, category thumbnails), so they are read into
+// data URLs client-side and the `data:...;base64,` prefix is stripped before sending.
+let _ipNewImages = [];
+
+function _openNewRecipeModal() {
+  _ipNewImages = [];
+  document.getElementById('ip-new-files').value = '';
+  document.getElementById('ip-new-thumbs').innerHTML = '';
+  document.getElementById('ip-new-note').value = '';
+  document.getElementById('ip-new-id').value = '';
+  document.getElementById('ip-new-error').style.display = 'none';
+  document.getElementById('ip-new-modal').classList.add('open');
+}
+function _closeNewRecipeModal() { document.getElementById('ip-new-modal')?.classList.remove('open'); }
+
+async function _onNewRecipeFiles(fileList) {
+  const files = Array.from(fileList || []).slice(0, 5);
+  const errEl = document.getElementById('ip-new-error');
+  errEl.style.display = 'none';
+  _ipNewImages = [];
+  const thumbs = document.getElementById('ip-new-thumbs');
+  thumbs.innerHTML = '';
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(f);
+    }).catch(() => null);
+    if (!dataUrl) continue;
+    const [, mimeType, data] = dataUrl.match(/^data:([^;]+);base64,(.*)$/s) || [];
+    if (!data) continue;
+    _ipNewImages.push({ data, mimeType: mimeType || f.type });
+    thumbs.insertAdjacentHTML('beforeend', `<img src="${dataUrl}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;box-shadow:var(--sh-sm)">`);
+  }
+  if (!_ipNewImages.length && files.length) {
+    errEl.textContent = '画像を読み込めませんでした';
+    errEl.style.display = '';
+  }
+}
+
+async function _submitNewRecipe() {
+  const errEl = document.getElementById('ip-new-error');
+  const btn = document.getElementById('ip-new-submit');
+  const id = document.getElementById('ip-new-id').value.trim();
+  const note = document.getElementById('ip-new-note').value.trim();
+  if (!/^[a-z0-9-]+$/.test(id)) {
+    errEl.textContent = 'ID は英小文字・数字・ハイフンのみ';
+    errEl.style.display = '';
+    return;
+  }
+  if (!_ipNewImages.length) {
+    errEl.textContent = '参考画像を1枚以上選んでください';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '解析しています…（1分ほどかかります）';
+  const res = await fetch(apiUrl('/api/image-prompts/generate'), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, note, images: _ipNewImages }),
+  }).catch(() => null);
+  btn.disabled = false;
+  btn.textContent = '生成する';
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    errEl.textContent = err?.error || '作成できませんでした';
+    errEl.style.display = '';
+    return;
+  }
+  const data = await res.json();
+  _closeNewRecipeModal();
+  showToast(data.confidence === 'low' ? '作成しました（参考画像の傾向がばらついていました。内容を確認してください）' : '絵のレシピを作成しました', 'success');
   _loadImagePrompts();
 }
 

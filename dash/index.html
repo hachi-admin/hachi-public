@@ -181,17 +181,44 @@
   <section class="page" id="page-image-prompts" data-dest="articles">
     <div class="page-hd">
       <div class="page-title">絵のレシピ</div>
-      <button class="act-btn" id="ip-gen-all-btn" onclick="_genAllImagePromptSamples()" style="font-size:11px">見本のないレシピをまとめて生成</button>
+      <button class="act-btn" onclick="_openNewRecipeModal()" style="font-size:11px">＋ 参考画像から作る</button>
       <button class="refresh-btn" onclick="_loadImagePrompts()" style="font-size:11px">&#8635; 更新</button>
     </div>
-    <div id="ip-gen-all-status" class="cat-hint" style="display:none;margin-bottom:8px"></div>
     <div id="image-prompts-list" class="feed-box"></div>
   </section>
+
+  <!-- ── New recipe from reference images ──────────────────────────────────────
+       Up to 5 images + a note go to agents/recipe-vision/, which writes back a spec — the operator
+       never hand-types style/composition/lighting/... vocabulary they may not have. -->
+  <div class="lightbox-ov" id="ip-new-modal" onclick="_closeNewRecipeModal()">
+    <div class="neu-well" style="background:var(--surf);max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()">
+      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">参考画像から絵のレシピを作る</div>
+      <div class="cat-hint" style="margin-bottom:12px">似た見た目の画像を1〜5枚。共通する画づくり（構図・光・質感・トーン）をAIが言葉にします。写っている被写体そのものではなく、その作風が抽出されます。</div>
+      <label class="cat-field">
+        <span class="cat-label">参考画像（最大5枚）</span>
+        <input type="file" id="ip-new-files" accept="image/*" multiple onchange="_onNewRecipeFiles(this.files)">
+      </label>
+      <div id="ip-new-thumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"></div>
+      <label class="cat-field">
+        <span class="cat-label">メモ（任意）</span>
+        <input type="text" id="ip-new-note" class="cat-in" placeholder="例: 記事の見出し画像に使いたい／文字が入っても潰れない構図で">
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">ID（英小文字・ハイフン。AIが名前を決めた後に自分で調整可）</span>
+        <input type="text" id="ip-new-id" class="cat-in" placeholder="例: soft-editorial-portrait">
+      </label>
+      <div id="ip-new-error" style="display:none;color:var(--error);font-size:11px;margin-top:6px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="act-btn" onclick="_closeNewRecipeModal()" style="flex:1;justify-content:center">キャンセル</button>
+        <button class="act-btn resume" id="ip-new-submit" onclick="_submitNewRecipe()" style="flex:1;justify-content:center">生成する</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── HERO PRESETS ──────────────────────────── -->
   <section class="page" id="page-hero-presets" data-dest="articles">
     <div class="page-hd">
-      <div class="page-title">ヒーロー画像テンプレート</div>
+      <div class="page-title">サムネタイトルテンプレート</div>
       <button class="act-btn" onclick="_showNewPresetForm()" style="font-size:11px">＋ 新規テンプレート</button>
       <button class="refresh-btn" onclick="_loadHeroPresets()" style="font-size:11px">&#8635; 更新</button>
     </div>
