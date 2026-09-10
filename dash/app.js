@@ -2064,11 +2064,19 @@ function _heroPresetRow(p) {
         <summary style="font-size:10px;color:var(--m);cursor:pointer">styleSpec を表示</summary>
         <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.styleSpec, null, 2))}</pre>
       </details>
-      ${(p.exampleLines||[]).length ? `
+      ${(() => {
+        // exampleLines is `{short,standard,long}` now, but a preset saved before that existed (or
+        // written by a path that bypasses the API's normalization) may still be a flat array —
+        // handle both rather than assuming the current shape.
+        const hasAny = Array.isArray(p.exampleLines)
+          ? p.exampleLines.length > 0
+          : Object.values(p.exampleLines || {}).some((v) => Array.isArray(v) && v.length);
+        return hasAny ? `
         <details style="margin-top:4px">
           <summary style="font-size:10px;color:var(--m);cursor:pointer">exampleLines を表示</summary>
           <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.exampleLines, null, 2))}</pre>
-        </details>` : ''}
+        </details>` : '';
+      })()}
       <div style="font-size:10px;color:var(--m2);margin-top:6px">更新: ${updAt}</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
@@ -2096,6 +2104,18 @@ async function _toggleHeroPreset(id, currentlyOff) {
   _loadHeroPresets();
 }
 
+/* `exampleLines` holds one authored set per length rather than one demo — mirrors
+   `_normalizeExampleLines` in src/routes/hero-presets.js so a preset saved before this existed (a
+   flat array) still loads: it becomes the 標準 variant, and 短い/長い start empty rather than the
+   editor guessing content that was never authored. */
+function _hpNormalizeVariants(v) {
+  if (Array.isArray(v)) return { short: [], standard: v, long: [] };
+  if (v && typeof v === 'object') {
+    return { short: v.short || [], standard: v.standard || [], long: v.long || [] };
+  }
+  return { short: [], standard: [], long: [] };
+}
+
 function _showNewPresetForm() {
   _hpEditingId = null;
   document.getElementById('hp-editor-title').textContent = '新規テンプレートを作成';
@@ -2106,7 +2126,13 @@ function _showNewPresetForm() {
   document.getElementById('hp-description').value = '';
   document.getElementById('hp-template-id').value = 'photo_scrim';
   document.getElementById('hp-style-spec').value = JSON.stringify({ face: 'sans', strokes: [], glow: { color: '#000000', em: 0.16, opacity: 0.40 } }, null, 2);
-  document.getElementById('hp-example-lines').value = JSON.stringify([{ text: 'メインコピー', scale: 1.2, indent: 0 }, { text: 'サブコピー', scale: 0.48, indent: 0.1 }], null, 2);
+  _hpVariants = {
+    short: [{ text: 'コピー', scale: 1.2, indent: 0 }],
+    standard: [{ text: 'メインコピー', scale: 1.2, indent: 0 }, { text: 'サブコピー', scale: 0.48, indent: 0.1 }],
+    long: [{ text: 'もう少し長いメインコピー', scale: 1.0, indent: 0 }, { text: 'もう少し長いサブコピー', scale: 0.48, indent: 0.1 }],
+  };
+  _hpVariant = 'standard';
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants.standard, null, 2);
   document.getElementById('hp-example-badge').value = '';
   document.getElementById('hp-editor-error').style.display = 'none';
   // Reset preview pane
@@ -2133,7 +2159,9 @@ function _editHeroPreset(id) {
   document.getElementById('hp-description').value = p.description || '';
   document.getElementById('hp-template-id').value = p.templateId || 'photo_scrim';
   document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
-  document.getElementById('hp-example-lines').value = JSON.stringify(p.exampleLines || [], null, 2);
+  _hpVariants = _hpNormalizeVariants(p.exampleLines);
+  _hpVariant = 'standard';
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants.standard, null, 2);
   document.getElementById('hp-example-badge').value = p.exampleBadge ? JSON.stringify(p.exampleBadge, null, 2) : '';
   document.getElementById('hp-editor-error').style.display = 'none';
   // Reset preview pane then trigger first render
@@ -2562,39 +2590,50 @@ function _hpTapRegion(kind, index) {
   }
 }
 
-/* Sample headlines, rather than one field to type into.
+/* Three authored line-sets per preset, one per length, rather than one demo plus three throwaway
+ * sample titles.
  *
  * The question this preview answers is "does the style hold up", and that depends almost entirely
  * on how much text arrives — a preset that looks decisive at eight characters can wrap to four
- * cramped lines at thirty. Typing a title each time to check that is work; these are the lengths
- * real note headlines actually come in, so the range can be swept in three taps. */
-const HP_SAMPLE_TITLES = [
-  ['短い', 'AIの道徳'],
-  ['標準', 'なぜ赤字でも株価が上がるのか'],
-  ['長い', '映画『インサイド・ヘッド２』が教えてくれる、私たちの「不安」との付き合い方'],
-];
-let _hpSampleIdx = 1;
+ * cramped lines at thirty. A single sample title used to stand in for that, but the renderer always
+ * draws authored `exampleLines` verbatim and never falls back to wrapping a title once any are
+ * present (see buildOverlaySvg's `authored` branch) — so the sample-title buttons could not
+ * actually show what they claimed to. Each button now switches to its own real, editable line-set
+ * instead: the buttons and the content are the same thing, so there is nothing left for them to
+ * silently fail to affect.
+ *
+ * `_hpVariants` holds all three; `#hp-example-lines` (and everything downstream of `_hpLines()`)
+ * always holds the *current* one, so the whole line-editor is unaware anything changed underneath
+ * it. Switching tabs just flushes the outgoing variant and loads the incoming one into that slot. */
+const HP_VARIANT_KEYS = ['short', 'standard', 'long'];
+const HP_VARIANT_LABELS = { short: '短い', standard: '標準', long: '長い' };
+let _hpVariants = { short: [], standard: [], long: [] };
+let _hpVariant = 'standard';
 
 function _hpSetSample(i) {
-  _hpSampleIdx = Number(i);
+  const key = HP_VARIANT_KEYS[i];
+  if (!key) return;
+  const outgoing = _hpLines();
+  if (outgoing !== null) _hpVariants[_hpVariant] = outgoing;
+  _hpVariant = key;
+  _hpOpenLine = null;
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants[key] || [], null, 2);
+  _renderLineForm();
   _renderSampleTabs();
-  _refreshPreview();
+  _renderStyleForm();
+  _syncHpSummaries();
+  _debouncedPreview();
 }
 
 function _renderSampleTabs() {
   const host = document.getElementById('hp-sample-tabs');
   if (!host) return;
-  /* When this preset has authored lines, the renderer draws those verbatim and never falls back to
-     auto-wrapping the sample text (see buildOverlaySvg's `authored` branch) — so these buttons would
-     visibly do nothing, which reads as broken rather than as "not applicable here". Disabling them
-     and saying why beats a button that silently lies about what it controls. */
-  const hasLines = (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
-  host.innerHTML = HP_SAMPLE_TITLES.map(([label, text], i) =>
-    `<button class="hp-sample${i === _hpSampleIdx ? ' on' : ''}" ${hasLines ? 'disabled' : ''} onclick="_hpSetSample(${i})" title="${esc(text)}">${esc(label)}<span>${text.length}字</span></button>`).join('')
-    + (hasLines ? '<div class="hp-ctl-hint">この見本は固定行（exampleLines）を使っているため、長さの見本は無効です。文字数を試すには exampleLines 自体を編集してください。</div>' : '');
+  host.innerHTML = HP_VARIANT_KEYS.map((key, i) => {
+    const lines = key === _hpVariant ? (_hpLines() || []) : (_hpVariants[key] || []);
+    const chars = lines.reduce((n, l) => n + String(l?.text ?? '').length, 0);
+    return `<button class="hp-sample${key === _hpVariant ? ' on' : ''}" onclick="_hpSetSample(${i})">${esc(HP_VARIANT_LABELS[key])}<span>${chars}字</span></button>`;
+  }).join('');
 }
-
-const _hpSampleTitle = () => HP_SAMPLE_TITLES[_hpSampleIdx]?.[1] ?? HP_SAMPLE_TITLES[1][1];
 
 let _previewTimer = null;
 function _debouncedPreview() {
@@ -2651,7 +2690,9 @@ async function _refreshPreview() {
   const rawSpec    = document.getElementById('hp-style-spec')?.value.trim() || '{}';
   const rawLines   = document.getElementById('hp-example-lines')?.value.trim() || '[]';
   const rawBadge   = document.getElementById('hp-example-badge')?.value.trim() || '';
-  const article    = _hpSampleTitle();
+  // Only reached if the active variant's lines are empty — the renderer always prefers authored
+  // lines and falls back to wrapping this title otherwise (see buildOverlaySvg's `authored` branch).
+  const article    = document.getElementById('hp-name')?.value.trim() || 'サンプル見出し';
 
   let styleSpec, lines, badge;
   try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON'; errEl.style.display = ''; return; }
@@ -2708,10 +2749,14 @@ async function _saveHeroPreset() {
   const rawLines    = document.getElementById('hp-example-lines').value.trim();
   const rawBadge    = document.getElementById('hp-example-badge').value.trim();
 
-  let styleSpec, exampleLines, exampleBadge;
+  let styleSpec, activeLines, exampleBadge;
   try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON です'; errEl.style.display = ''; return; }
-  try { exampleLines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON です'; errEl.style.display = ''; return; }
+  try { activeLines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON です'; errEl.style.display = ''; return; }
   try { exampleBadge = rawBadge ? JSON.parse(rawBadge) : null; } catch { errEl.textContent = 'exampleBadge が不正な JSON です'; errEl.style.display = ''; return; }
+  // The textarea only ever holds the currently selected length's lines; the other two live in
+  // memory until now, when all three are assembled into what actually gets saved.
+  _hpVariants[_hpVariant] = activeLines;
+  const exampleLines = { short: _hpVariants.short || [], standard: _hpVariants.standard || [], long: _hpVariants.long || [] };
 
   const isNew = _hpEditingId === null;
   const url   = isNew ? apiUrl('/api/hero-presets') : apiUrl(`/api/hero-presets/${_hpEditingId}`);
