@@ -373,7 +373,7 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','ヒーロー画像'] ] },
+  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','ヒーロー画像'], ['image-prompts','絵のレシピ'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
@@ -441,6 +441,7 @@ function _initPage(pageId) {
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
   if (pageId === 'hero-presets') _loadHeroPresets();
+  if (pageId === 'image-prompts') _loadImagePrompts();
   // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
   // only fires when a nav button is clicked.
   if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
@@ -1324,6 +1325,8 @@ function openCategoryDetail(id) {
      same fetch — and the preview is rendered once from inside it rather than also being fired
      here, which would have drawn the un-pinned version first and replaced it a moment later. */
   _ensureHeroPresets().then(() => { _fillCatPresetOptions(c.id); refreshCatPreview(c.id); });
+  // Independent of the hero catalogue — it only fills a picker, and nothing waits on it.
+  _ensureImagePrompts().then(() => _fillCatImagePromptOptions(c.id));
 }
 
 function _categoryEditor(c) {
@@ -1810,6 +1813,16 @@ function _visualSection(c, section) {
         </select>
         <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
       </label>
+      <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
+           visual.imagePrompt has been on the category document and honoured by resolveRecipe all
+           along, with no way for a person to set it. -->
+      <label class="cat-field">
+        <span class="cat-label">絵のレシピ</span>
+        <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">写真や挿絵の作風を固定します。選ばないと記事ごとに変わります</span>
+      </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
       <label class="cat-field">
         <span class="cat-label">文字の位置</span>
@@ -1882,6 +1895,21 @@ function _fillCatPresetOptions(catId) {
   }
 }
 
+function _fillCatImagePromptOptions(catId) {
+  const sel = document.getElementById(`cat-imgprompt-${catId}`);
+  if (!sel) return;
+  const want = sel.dataset.selected || '';
+  // Only hero-kind recipes: `figure` ones are whiteboard diagrams for inside an article, and a
+  // category pinning one as its cover would produce a diagram where the hero should be.
+  const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === 'hero');
+  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
+    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}</option>`).join('');
+  if (want && !usable.some((r) => r.id === want)) {
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
+  }
+}
+
 async function refreshCatPreview(id) {
   const img = document.getElementById(`cat-preview-${id}`);
   const status = document.getElementById(`cat-preview-status-${id}`);
@@ -1946,6 +1974,7 @@ async function saveCategory(id) {
     visual: {
       template: _catVal(`cat-tpl-${id}`),
       heroPreset: _catVal(`cat-preset-${id}`),
+      imagePrompt: _catVal(`cat-imgprompt-${id}`),
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -2893,6 +2922,160 @@ async function _deleteHeroPreset(id) {
 }
 
 // ─── End Hero Image Presets ───────────────────────────────────────────────────
+
+/* ─── Image prompt recipes ─────────────────────────────────────────────────────
+ *
+ * A hero preset says how the *type* is drawn; a recipe says what the *picture* is. The library and
+ * its approval loop have existed on the server since before this page did — the recipes were only
+ * reachable through Discord cards and a category's `visual.imagePrompt` field, so there was no
+ * screen on which to see what the catalogue contained.
+ *
+ * The samples are the substance of the card. A recipe's text ("cinematic, low-key, 35mm") reads as
+ * plausible for almost any look, and the only honest way to judge one is to see three pictures it
+ * produced and ask whether they belong to the same publication.
+ */
+let _imagePrompts = [];
+
+async function _loadImagePrompts() {
+  const listEl = document.getElementById('image-prompts-list');
+  if (!listEl) return;
+  listEl.className = '';
+  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/image-prompts'), { headers: _authHeaders() });
+    if (res.status === 401) { _handleUnauthorized(); return; }
+    if (!res.ok) { listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error ${res.status}</div>`; return; }
+    const data = await res.json();
+    _imagePrompts = data.recipes || [];
+    _renderImagePrompts();
+  } catch (e) {
+    listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
+  }
+}
+
+/* The catalogue as the category picker needs it. Same shape and same reason as
+   `_ensureHeroPresets` — the picker lives on カテゴリ, the list belongs to this page. */
+async function _ensureImagePrompts() {
+  if (_imagePrompts.length) return _imagePrompts;
+  const res = await fetch(apiUrl('/api/image-prompts'), { headers: _authHeaders() }).catch(() => null);
+  if (res?.ok) _imagePrompts = (await res.json().catch(() => ({})))?.recipes || [];
+  return _imagePrompts;
+}
+
+function _renderImagePrompts() {
+  const listEl = document.getElementById('image-prompts-list');
+  if (!listEl) return;
+  if (!_imagePrompts.length) {
+    listEl.className = '';
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">レシピがありません</div>';
+    return;
+  }
+  listEl.className = 'hp-card-grid';
+  listEl.innerHTML = _imagePrompts.map(_imagePromptCard).join('');
+}
+
+const _IP_KIND = { hero: '見出し画像', figure: '図解' };
+const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画像→加工' };
+
+function _imagePromptCard(r) {
+  const ap = _presetApproval(r);
+  const off = r.enabled === false;
+  const samples = Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : [];
+  const keywords = (r.keywords || []).slice(0, 6).map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('');
+  /* The spec is the recipe's actual content, so it is shown — but as its values, not as JSON.
+     「シネマティック · 低照度 · 35mm」 is the look; `{"lighting":"low-key"}` is a data structure
+     that happens to contain it. */
+  const spec = Object.values(r.spec || {}).map((v) => String(v)).filter(Boolean).join(' · ');
+  return `<div class="hp-card${off ? ' is-off' : ''}">
+    <div class="ip-shots">
+      ${samples.length
+    ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
+    : '<div class="ip-shots-empty">見本がまだありません</div>'}
+    </div>
+    <div class="hp-card-body">
+      <div class="hp-card-name">${esc(r.name || r.id)}</div>
+      <div class="hp-card-id">${esc(r.id)}</div>
+      <div class="hp-card-chips">
+        <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
+        <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
+        <span class="cat-chip">${esc(_IP_SOURCE[r.sourceMode] || r.sourceMode || '')}</span>
+        ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
+      </div>
+      ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
+      ${spec ? `<div class="hp-card-meta">${esc(spec)}</div>` : ''}
+      ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
+    </div>
+    <div class="hp-card-acts">
+      <button class="act-btn" data-ip-gen="${esc(r.id)}" onclick="_genImagePromptSamples('${esc(r.id)}')"
+        title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">見本を作る</button>
+      <button class="act-btn" onclick="_toggleImagePrompt('${esc(r.id)}',${off})"
+        title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
+      <button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
+        title="Discord に承認カードを送ります">承認へ</button>
+    </div>
+  </div>`;
+}
+
+/* Generating costs real image calls and takes tens of seconds, so the button says so and stays
+   disabled for the duration — a second tap would spend the quota twice for the same three
+   pictures. */
+async function _genImagePromptSamples(id) {
+  const btn = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  showToast('3枚生成しています…（1分ほどかかります）', 'info');
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/samples`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+  }).catch(() => null);
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    showToast(err?.error || '見本を生成できませんでした', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '見本を作る'; }
+    return;
+  }
+  showToast('見本を保存しました', 'success');
+  _loadImagePrompts();
+}
+
+async function _toggleImagePrompt(id, currentlyOff) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !!currentlyOff }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
+  showToast(currentlyOff ? '有効にしました。' : '無効にしました。記事の生成時に選ばれなくなります。', 'success');
+  _loadImagePrompts();
+}
+
+/* Approval stays a Discord decision rather than becoming a button here.
+ *
+ * It is the same `approve_design` ledger the hero presets use, and the ledger records who decided
+ * and when — a dashboard button that wrote "approved" locally would either lose that provenance or
+ * duplicate the loop that already exists. So this posts the card and the decision happens where
+ * every other design decision in this system is already made. */
+async function _proposeImagePrompt(id) {
+  const r = _imagePrompts.find((x) => x.id === id);
+  const samples = Array.isArray(r?.samples) ? r.samples.filter((s) => s?.url) : [];
+  if (!samples.length) {
+    showToast('先に「見本を作る」で3枚生成してください', 'error');
+    return;
+  }
+  showToast('承認カードを作っています…', 'info');
+  /* `reuseSamples` sends the three pictures already on the card — the ones just looked at and
+     judged worth approving. Without it the endpoint would generate three more, so the card would
+     ask about a different set of pictures than the ones that prompted the request, and bill for
+     them again. */
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/propose`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reuseSamples: true }),
+  }).catch(() => null);
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    showToast(err?.error || '承認カードを送れませんでした', 'error');
+    return;
+  }
+  showToast('Discord に承認カードを送りました', 'success');
+  _loadImagePrompts();
+}
 
 function _renderKnowledge() {
   document.getElementById('k-sources').innerHTML   = _buildSourceRows(SOURCES.filter(s => !s.blocked));
