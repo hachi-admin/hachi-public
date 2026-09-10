@@ -2230,10 +2230,18 @@ function _hpAddKey(key) {
 
 const _hpNum = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(d.max, Math.max(d.min, n)) : d.min; };
 
+/* These four keys only ever reach the renderer's "highlighted phrase" path (`isHot` in
+   buildOverlaySvg's draw loop), which is forced entirely off whenever a preset carries authored
+   exampleLines — the normal case for every seeded preset. Set on such a preset, they parse, they
+   save, and they draw nothing: the silent-no-op class of bug the sample-length buttons were also
+   in. Line-level equivalents exist instead — `scale`/`color`/`face`/`glow` per line in 見本. */
+const HP_DEAD_WITH_LINES = new Set(['emphasisScale', 'highlight', 'accentMetal', 'accentGradient']);
+
 function _hpControl(key, desc, value) {
   const lbl = esc(desc.label || key);
   const rm = `<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey('${key}')">×</button>`;
   const head = `<div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code>${rm}</div>`;
+  const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
   let body;
 
   if (desc.type === 'enum') {
@@ -2272,7 +2280,10 @@ function _hpControl(key, desc, value) {
     const n = Array.isArray(value) ? `${value.length}件` : (value && typeof value === 'object' ? `${Object.keys(value).length}項目` : '—');
     body = `<div class="hp-ctl-json">${n}<span class="hp-ctl-hint">下の JSON で編集</span></div>`;
   }
-  return `<div class="hp-ctl">${head}${body}</div>`;
+  const deadHint = deadWithLines
+    ? '<div class="hp-ctl-hint">⚠ この見本は固定行（exampleLines）を使っているため、この項目は描画に反映されません。見本の行ごとの設定（大きさ・色・書体・発光）を使ってください。</div>'
+    : '';
+  return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}">${head}${body}${deadHint}</div>`;
 }
 
 function _renderStyleForm() {
@@ -2319,9 +2330,10 @@ function _hpShowAddHint(key) {
   const hint = document.getElementById('hp-add-hint');
   if (!hint) return;
   const d = key && _hpVocab?.schema?.[key];
-  if (!d?.desc) { hint.style.display = 'none'; hint.textContent = ''; return; }
+  const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
+  if (!d?.desc && !deadWithLines) { hint.style.display = 'none'; hint.textContent = ''; return; }
   hint.style.display = '';
-  hint.textContent = d.desc;
+  hint.textContent = [d?.desc, deadWithLines ? '⚠ この見本は固定行を使っているため、この項目は描画に反映されません。' : ''].filter(Boolean).join(' ');
 }
 
 /* ── The lines, editable one at a time ───────────────────────────────────────
@@ -2348,6 +2360,7 @@ function _hpWriteLines(lines) {
   el.value = JSON.stringify(lines, null, 2);
   _renderLineForm();
   _renderSampleTabs();
+  _renderStyleForm();
   _syncHpSummaries();
   _debouncedPreview();
 }
@@ -2389,14 +2402,18 @@ function _hpMoveLine(i, d) {
 // never read by the renderer.
 const HP_ROLE_LABELS = { title: 'タイトル', subtitle: 'サブタイトル', date: '日付', label: 'ラベル' };
 
+// Line-level enums whose absence means "inherit the template's", not "the first option" — unlike
+// the global styleSpec editor's `_hpAddKey`, which defaults a newly-added enum key to `options[0]`
+// because a styleSpec key with no value would not otherwise exist. A blank line field is meaningful
+// here: most lines carry no role, and most inherit the template's face rather than naming their own.
+const HP_LINE_BLANK_ENUMS = { role: '未設定', face: 'テンプレートの書体', palette: 'なし（metal/gradient か地の色のまま）' };
+
 function _hpLineControl(i, key, desc, value) {
   const lbl = esc(desc.label || key);
   const setter = (expr) => `_hpSetLine(${i},'${key}',${expr})`;
   let body;
-  if (key === 'role' && desc.type === 'enum') {
-    // A blank option, not defaulted to the first role — most lines have no role at all, and forcing
-    // one on every line would make the labels noise instead of signal.
-    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">未設定</option>`
+  if (desc.type === 'enum' && key in HP_LINE_BLANK_ENUMS) {
+    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">${esc(HP_LINE_BLANK_ENUMS[key])}</option>`
       + desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(HP_ROLE_LABELS[o] || o)}</option>`).join('')
       + `</select>`;
   } else if (desc.type === 'range') {
@@ -2468,7 +2485,7 @@ function _renderLineForm() {
 
   host.innerHTML = lines.map((l, i) => {
     const text = String(l?.text ?? '').trim() || '（空の行）';
-    const bits = [l?.scale ? `×${l.scale}` : '', l?.color || '', typeof l?.metal === 'string' ? l.metal : ''].filter(Boolean).join(' · ');
+    const bits = [l?.scale ? `×${l.scale}` : '', l?.color || '', typeof l?.metal === 'string' ? l.metal : '', l?.face || '', l?.palette || ''].filter(Boolean).join(' · ');
     const roleBadge = HP_ROLE_LABELS[l?.role] ? `<span class="hp-line-role">${esc(HP_ROLE_LABELS[l.role])}</span>` : '';
     const open = _hpOpenLine === i;
     const head = `<button class="hp-line-row${open ? ' open' : ''}" onclick="_hpOpenLineRow(${i})">`
@@ -2519,12 +2536,24 @@ function _renderPreviewHits() {
 function _hpTapRegion(kind, index) {
   if (kind === 'line') {
     /* Open the section too. Selecting a row inside a collapsed 見本 would highlight the picture and
-       show nothing, which reads as the tap having failed. */
+       show nothing, which reads as the tap having failed.
+
+       `block: 'start'`, not 'nearest': the always-open スタイル section sits directly above 見本, so
+       the opened row is often already partly on screen and 'nearest' would not move at all — which
+       reads exactly like a failed tap, except the thing left on screen (スタイル, プリセット全体に
+       効く設定) is the one panel that is *not* what got opened, and someone could easily mistake its
+       controls for being scoped to the tapped line. Forcing the jump to the top removes that
+       ambiguity; a brief flash on the row confirms which one actually opened. */
     const sec = document.getElementById('hp-sec-example');
     if (sec) sec.open = true;
     _hpOpenLineRow(index);
     _renderPreviewHits();
-    document.getElementById('hp-line-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const row = document.querySelectorAll('#hp-line-form .hp-line-row')[index];
+    (row || document.getElementById('hp-line-form'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (row) {
+      row.classList.add('hp-flash');
+      setTimeout(() => row.classList.remove('hp-flash'), 900);
+    }
   } else {
     const sec = document.getElementById('hp-sec-example');
     if (sec) sec.open = true;

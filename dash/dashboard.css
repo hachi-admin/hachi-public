@@ -2218,6 +2218,10 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-grp{margin-bottom:14px}
 .hp-grp-hd{font-size:11px;font-weight:700;color:var(--m2);margin:0 0 8px;letter-spacing:.04em}
 .hp-ctl{background:var(--bg);box-shadow:var(--sh-in);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+/* Set, valid, and drawn nowhere — see HP_DEAD_WITH_LINES. Muted rather than hidden: the value is
+   still there in the JSON and still worth seeing, just not worth acting on for this preset. */
+.hp-ctl-dead{opacity:.55}
+.hp-ctl-dead .hp-ctl-hint{opacity:1;color:var(--m)}
 .hp-ctl-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .hp-ctl-name{font-size:12px;font-weight:600;color:var(--txt)}
 .hp-ctl-key{font-size:10px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -2272,6 +2276,13 @@ body:has(.mob-more-sheet.open) .page-area{
   font-family:inherit;cursor:pointer;text-align:left;
 }
 .hp-line-row.open{box-shadow:var(--sh-in)}
+/* Confirms which row a tap on the preview actually opened, since the jump alone can be subtle on a
+   tall page. */
+.hp-line-row.hp-flash{animation:hp-line-flash .9s ease-out}
+@keyframes hp-line-flash{
+  0%{background:var(--accent-light)}
+  100%{background:var(--bg)}
+}
 .hp-line-row .chev{margin-left:auto;font-size:9px;color:var(--m2);transition:transform .15s;flex:0 0 auto}
 .hp-line-row.open .chev{transform:rotate(90deg)}
 /* The line's text at something close to its real weight — this is the thing being pointed at, and
