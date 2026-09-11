@@ -1162,3 +1162,124 @@ test('legacy deferred auth/data responses cannot overwrite X entry', async () =>
     dom.window.close();
   }
 });
+
+const skillFixture = () => ({
+  id: 'text-amazon-hook-fixed', version: '1.0.0', status: 'active', priority: 30, revision: 0,
+  body: '# 構成テンプレート\n本文', validationScope: 'synthetic_only',
+  angles: [{ id: 'feature', label: '確認済みの特徴' }],
+  example: { angleId: 'feature', productIds: ['fixture-p1'], blocks: [
+    { kind: 'hook', text: '机の配線、気にならない？Amazonで見つけた整理用品の気になる1品', factRefs: [] },
+    { kind: 'product_fact', text: '合成商品は整理に使える', factRefs: ['f1'] },
+  ] },
+  exampleValidation: { valid: true, errors: [] }, assignment: { enabled: false, priority: null, revision: 0 }, usage: { enabledAccountCount: 2 },
+});
+
+test('Skill catalog shows all adoption decisions and imports only through an admin action', async () => {
+  const requests = []; let imported = false;
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.endsWith('/skills/import')) { imported = true; return json({ imported: ['text-amazon-hook-fixed'], candidateCount: 11 }); }
+    if (path.includes('/skills?')) return json({ imported, source: { repository: 'hachi-aff', commit: 'fixed-commit' }, candidates: [
+      { id: 'text-amazon-hook-fixed', decision: 'adopt', reason: '合成構造検証済み' },
+      { id: 'text-sale-alert', decision: 'hold', reason: '価格条件が未整備' },
+      { id: 'text-fashion-room', decision: 'exclude', reason: 'Amazon用途外' },
+    ], skills: imported ? [skillFixture()] : [] });
+    return json({});
+  };
+  const dom = page('#x_code=skill-import', true, router, { verifier: 'skill-import-v' });
+  await flush(); await selectFirstAccount(dom);
+  const skillBox = dom.window.document.getElementById('x-skills');
+  assert.match(skillBox.textContent, /候補11件の採用・保留理由/);
+  assert.match(skillBox.textContent, /価格条件が未整備/);
+  const importButton = [...skillBox.querySelectorAll('button')].find(button => button.textContent === '採用候補5件を取り込む');
+  assert.ok(importButton); importButton.click(); await flush();
+  const request = requests.find(item => item.path.endsWith('/skills/import'));
+  assert.ok(request); assert.match(JSON.parse(request.options.body).idempotencyKey, /^[a-f0-9]{64}$/);
+  assert.match(skillBox.textContent, /text-amazon-hook-fixed @ 1.0.0/);
+});
+
+test('member can change only the account Skill assignment and conflict keeps inputs', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.includes('/assignment')) return json({ error: { message: 'conflict' } }, 409);
+    if (path.includes('/skills?')) return json({ imported: true, source: {}, candidates: [], skills: [skillFixture()] });
+    return json({});
+  };
+  const dom = page('#x_code=skill-member', true, router, { verifier: 'skill-member-v' });
+  await flush(); await selectFirstAccount(dom);
+  const skill = dom.window.document.querySelector('#x-skills .x-skill');
+  assert.equal(skill.querySelectorAll('form[data-admin-only]').length, 0);
+  const form = skill.querySelector('form');
+  form.querySelector('[name="enabled"]').checked = true;
+  form.querySelector('[name="priority"]').value = '72';
+  form.querySelector('button').click(); await flush();
+  const request = requests.find(item => item.path.includes('/assignment'));
+  const body = JSON.parse(request.options.body);
+  assert.deepEqual(body.fields, { enabled: true, priority: 72 }); assert.equal(body.expectedRevision, 0); assert.equal(body.accountId, 'A');
+  assert.equal(form.querySelector('[name="priority"]').value, '72'); assert.match(form.textContent, /最新状態を再確認/);
+});
+
+test('admin Skill body edit always creates a named version with its matching structure example', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.includes('/skills/text-amazon-hook-fixed') && options.method === 'PATCH') return json({ skill: { version: '1.1.0' }, revision: 1 });
+    if (path.includes('/skills?')) return json({ imported: true, source: {}, candidates: [], skills: [skillFixture()] });
+    return json({});
+  };
+  const dom = page('#x_code=skill-version', true, router, { verifier: 'skill-version-v' });
+  await flush(); await selectFirstAccount(dom);
+  const forms = dom.window.document.querySelectorAll('#x-skills .x-skill form[data-admin-only]');
+  const form = forms[1]; assert.ok(form);
+  assert.match(dom.window.document.querySelector('#x-skills .x-skill').textContent, /利用中の2 account/);
+  form.querySelector('[name="version"]').value = '1.1.0';
+  form.querySelector('[name="body"]').value += '\n更新';
+  form.querySelector('button').click(); await flush();
+  const request = requests.find(item => item.path.includes('/skills/text-amazon-hook-fixed') && item.options.method === 'PATCH');
+  const body = JSON.parse(request.options.body);
+  assert.equal(body.expectedRevision, 0); assert.equal(body.fields.version, '1.1.0'); assert.match(body.fields.body, /更新/); assert.equal(body.fields.example.angleId, 'feature');
+});
+
+test('allocation preview shows the exact Skill and does not call a generation endpoint', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.includes('/skills?')) return json({ imported: true, source: {}, candidates: [], skills: [skillFixture()] });
+    if (path.endsWith('/skill-allocation-previews')) return json({ status: 'ready', productionReady: false, allocations: [{ variantId: 'variant-1', skillId: 'text-amazon-hook-fixed', skillVersion: '1.0.0', angleId: 'feature', factRefs: ['f1'] }] });
+    return json({});
+  };
+  const dom = page('#x_code=skill-preview', true, router, { verifier: 'skill-preview-v' });
+  await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-skills .x-skill-preview-form');
+  form.querySelector('[name="productIds"]').value = 'JP-B012345678';
+  form.querySelector('[name="requestedVariantCount"]').value = '1';
+  form.querySelector('button').click(); await flush();
+  const request = requests.find(item => item.path.endsWith('/skill-allocation-previews'));
+  assert.deepEqual(JSON.parse(request.options.body).productIds, ['JP-B012345678']);
+  assert.match(form.textContent, /text-amazon-hook-fixed@1.0.0/);
+  assert.match(form.textContent, /productionReady=false/);
+  assert.equal(requests.some(item => item.path.includes('/generation-jobs')), false);
+});

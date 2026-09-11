@@ -10,7 +10,7 @@
   if (pendingCode) history.replaceState({}, '', location.pathname + location.search + '#xentry');
   let xJwt = '';
   let browserProof = '';
-  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, settings: null, importResult: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, settings: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -59,6 +59,7 @@
     state.linkFinalizePending = false;
     state.settings = null;
     state.importResult = null;
+    state.skillPreview = null;
     retryState = new WeakMap();
     pendingWrites = new WeakSet();
     xJwt = '';
@@ -66,7 +67,7 @@
     sessionStorage.removeItem(VERIFIER_KEY);
     sessionStorage.removeItem(PROOF_KEY);
     document.querySelectorAll('#page-x-affiliate input[type="password"]').forEach(input => { input.value = ''; });
-    ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-link', '#x-settings'].forEach(selector => {
+    ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-skills', '#x-link', '#x-settings'].forEach(selector => {
       document.querySelector(selector)?.replaceChildren();
     });
     const root = document.getElementById('page-x-affiliate');
@@ -92,6 +93,7 @@
     document.querySelector('#x-accounts form[data-admin-only]')?.remove();
     document.querySelector('#x-members form[data-admin-only]')?.remove();
     document.querySelector('#x-tags form[data-admin-only]')?.remove();
+    document.querySelectorAll('#x-skills form[data-admin-only], #x-skills button[data-admin-only]').forEach(node => node.remove());
     document.querySelector('#x-settings [name="reviewChannelRef"]')?.closest('label')?.remove();
   }
   function field(label, type, name, value, placeholder) { const input = el(type === 'textarea' ? 'textarea' : 'input', { name, className: 'form-input', type: type === 'textarea' ? undefined : type, placeholder: placeholder || '' }); if (value != null) input.value = value; return el('label', { className: 'x-field' }, [el('span', { text: label }), input]); }
@@ -104,7 +106,7 @@
     document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
     root.classList.add('active'); root.hidden = false;
     root.replaceChildren();
-    root.append(el('div', { className: 'page-hd' }, [el('div', {}, [el('div', { className: 'page-title', text: 'X投稿BOT 管理' }), el('div', { className: 'page-sub', text: 'アカウント・商品・メンバー・タグ・投稿設定' })]) ]));
+    root.append(el('div', { className: 'page-hd' }, [el('div', {}, [el('div', { className: 'page-title', text: 'X投稿BOT 管理' }), el('div', { className: 'page-sub', text: 'アカウント・商品・Skill・メンバー・タグ・投稿設定' })]) ]));
     if (!FEATURE_ENABLED) { root.append(card('利用停止中', el('p', { className: 'x-muted', text: 'X投稿BOT管理APIは現在無効です。商品登録はローカル検証段階で、実商品取得、Skill、生成、レビュー、通知送信は有効化されていません。' }))); return; }
     if (!xJwt) { root.append(card('ログイン', el('div', {}, [el('p', { className: 'x-muted', text: 'GitHubでX BOT管理へログインしてください。' }), button('GitHubでログイン', login)]))); return; }
     const toolbar = el('div', { className: 'x-toolbar' }, [button('再読み込み', load), button('サインアウト', logout)]); root.append(toolbar);
@@ -112,6 +114,7 @@
     root.append(card('メンバー', el('div', { id: 'x-members' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('商品（実取得は未接続）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('Skill（合成検証のみ）', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
     root.append(card('プロフィール・テンプレート・通知先', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     renderLinkCard();
@@ -124,7 +127,7 @@
     box.replaceChildren();
     (data.accounts || []).forEach(a => {
       const b = button(`${a.label} (${a.accountId})`, () => {
-        if (state.accountId !== a.accountId) state.importResult = null;
+        if (state.accountId !== a.accountId) { state.importResult = null; state.skillPreview = null; }
         state.accountId = a.accountId;
         loadSettings();
       });
@@ -433,6 +436,180 @@
       if (isCurrentScope(accountId, generation)) renderProducts(result, accountId, generation);
     } catch (error) {
       const box = document.getElementById('x-products');
+      if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
+    }
+  }
+  function renderSkillPreview(result, root) {
+    root.querySelector('.x-skill-preview')?.remove();
+    const box = el('div', { className: 'x-skill-preview' });
+    box.append(el('strong', { text: result.status === 'ready' ? '割当可能（合成検証範囲）' : '割当停止' }));
+    if (result.status === 'ready') {
+      (result.allocations || []).forEach(item => box.append(el('div', { className: 'x-row' }, [
+        el('span', { text: `${item.variantId}: ${item.skillId}@${item.skillVersion}` }),
+        el('span', { className: 'x-muted', text: `切り口 ${item.angleId} · 根拠 ${item.factRefs.length}件` }),
+      ])));
+      box.append(el('p', { className: 'x-muted', text: 'productionReady=false。下書き生成・費用予約・外部送信は行っていません。' }));
+    } else {
+      const reasons = (result.blockingReasons || []).map(item => item.code).join(', ') || '適合するSkillと切り口が不足しています';
+      box.append(el('p', { className: 'x-status', text: reasons }));
+    }
+    root.append(box);
+  }
+  function renderSkills(data, accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-skills');
+    if (!box) return;
+    box.replaceChildren();
+    box.append(el('p', { className: 'x-muted', text: `参照元 ${data.source?.repository || 'hachi-aff'} @ ${data.source?.commit || '未確認'}。候補11件のうち合成構造検証対象5件だけを取り込み、実生成は停止しています。` }));
+    const decisions = el('details', { className: 'x-skill-decisions' }, [el('summary', { text: '候補11件の採用・保留理由' })]);
+    (data.candidates || []).forEach(item => decisions.append(el('div', { className: 'x-row' }, [
+      el('span', { text: `${item.id} · ${item.decision === 'adopt' ? '採用候補' : item.decision === 'hold' ? '保留' : '除外'}` }),
+      el('span', { className: 'x-muted', text: item.reason }),
+    ])));
+    box.append(decisions);
+    if (!data.imported) {
+      box.append(el('p', { className: 'x-status', text: 'Skillはまだcoreへ取り込まれていません。アカウント割当は初期OFFで作成されます。' }));
+      if (isAdmin()) {
+        const importButton = button('採用候補5件を取り込む', async () => {
+          if (!isCurrentScope(accountId, generation) || importButton.disabled) return;
+          importButton.disabled = true;
+          try {
+            const idempotencyKey = await keyFor(importButton, { operation: 'skill-import', sourceCommit: data.source?.commit });
+            await api('/api/x-affiliate/skills/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotencyKey }) });
+            clearRetry(importButton);
+            if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
+          } catch (error) {
+            importButton.disabled = false;
+            if (isCurrentScope(accountId, generation)) message(box, error.message + (error.code === 409 ? ' 既存編集を上書きせず停止しました。' : ''), 'error');
+          }
+        });
+        importButton.setAttribute('data-admin-only', 'true');
+        box.append(importButton);
+      }
+      enforceMemberUI();
+      return;
+    }
+    const list = el('div', { className: 'x-skill-list' });
+    (data.skills || []).forEach(skill => {
+      const article = el('article', { className: 'x-product x-skill' }, [
+        el('div', { className: 'x-product-head' }, [
+          el('strong', { text: `${skill.id} @ ${skill.version}` }),
+          el('span', { className: 'x-muted', text: `${skill.status} · 共通優先度 ${skill.priority} · 構成見本 ${skill.exampleValidation?.valid ? 'OK' : 'NG'} · ${skill.validationScope}` }),
+        ]),
+      ]);
+      const assignment = el('form', { className: 'x-inline-form' }, [
+        checkbox('このaccountで利用', 'enabled', skill.assignment?.enabled),
+        field('account優先度（空欄=共通）', 'number', 'priority', skill.assignment?.priority == null ? '' : String(skill.assignment.priority)),
+        button('割当を保存', async event => {
+          event.preventDefault();
+          if (!assignment.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(assignment)) return;
+          const values = formData(assignment);
+          const fields = { enabled: values.enabled === 'on', priority: values.priority === '' ? null : Number(values.priority) };
+          const payload = { accountId, expectedRevision: skill.assignment?.revision || 0, fields };
+          try {
+            const idempotencyKey = await keyFor(assignment, { operation: 'skill-assignment', skillId: skill.id, ...payload });
+            if (!assignment.isConnected || !isCurrentScope(accountId, generation)) { endWrite(assignment); return; }
+            await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}/assignment`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+            clearRetry(assignment); endWrite(assignment);
+            if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
+          } catch (error) {
+            endWrite(assignment);
+            if (assignment.isConnected && isCurrentScope(accountId, generation)) message(assignment, error.message + (error.code === 409 ? ' 最新状態を再確認してください。入力は保持しています。' : ''), 'error');
+          }
+        }),
+      ]);
+      article.append(assignment);
+      const details = el('details', {}, [
+        el('summary', { text: '本文・切り口・構成見本を確認' }),
+        el('pre', { className: 'x-skill-body', text: skill.body }),
+        el('p', { className: 'x-muted', text: `切り口: ${(skill.angles || []).map(angle => `${angle.id} (${angle.label})`).join(', ')}` }),
+        el('pre', { className: 'x-skill-body', text: JSON.stringify(skill.example, null, 2) }),
+      ]);
+      article.append(details);
+      if (isAdmin()) {
+        article.append(el('p', { className: 'x-status', text: `共通本文・状態の変更は、このSkillを利用中の${skill.usage?.enabledAccountCount ?? 0} accountの次回割当に影響します。既存の版は保持されます。` }));
+        const metaForm = el('form', { className: 'x-inline-form', 'data-admin-only': 'true' }, [
+          selectField('共通状態', 'status', skill.status, ['active', 'paused', 'retired']),
+          field('共通優先度', 'number', 'priority', String(skill.priority)),
+          button('共通設定を保存', async event => {
+            event.preventDefault();
+            if (!metaForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(metaForm)) return;
+            const values = formData(metaForm); const fields = { status: values.status, priority: Number(values.priority) };
+            const payload = { expectedRevision: skill.revision, fields };
+            try {
+              const idempotencyKey = await keyFor(metaForm, { operation: 'skill-meta', skillId: skill.id, ...payload });
+              if (!metaForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(metaForm); return; }
+              await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+              clearRetry(metaForm); endWrite(metaForm);
+              if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
+            } catch (error) {
+              endWrite(metaForm);
+              if (metaForm.isConnected && isCurrentScope(accountId, generation)) message(metaForm, error.message + (error.code === 409 ? ' 最新状態を再確認してください。入力は保持しています。' : ''), 'error');
+            }
+          }),
+        ]);
+        const versionForm = el('form', { className: 'x-form', 'data-admin-only': 'true' }, [
+          field('新しい版（必須）', 'text', 'version', null, `現在 ${skill.version}（例: 1.1.0）`),
+          field('Skill本文', 'textarea', 'body', skill.body),
+          field('合成構成見本（JSON）', 'textarea', 'example', JSON.stringify(skill.example, null, 2)),
+          button('新しい版として保存', async event => {
+            event.preventDefault();
+            if (!versionForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(versionForm)) return;
+            const values = formData(versionForm); let example;
+            try { example = JSON.parse(values.example); }
+            catch { endWrite(versionForm); message(versionForm, '構成見本はJSONで入力してください', 'error'); return; }
+            const fields = { version: values.version, body: values.body, example };
+            const payload = { expectedRevision: skill.revision, fields };
+            try {
+              const idempotencyKey = await keyFor(versionForm, { operation: 'skill-version', skillId: skill.id, ...payload });
+              if (!versionForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(versionForm); return; }
+              await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+              clearRetry(versionForm); endWrite(versionForm);
+              if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
+            } catch (error) {
+              endWrite(versionForm);
+              if (versionForm.isConnected && isCurrentScope(accountId, generation)) message(versionForm, error.message + (error.code === 409 ? ' 旧版を上書きせず停止しました。入力は保持しています。' : ''), 'error');
+            }
+          }),
+        ]);
+        article.append(metaForm, versionForm);
+      }
+      list.append(article);
+    });
+    box.append(list);
+    const previewForm = el('form', { className: 'x-form x-skill-preview-form' }, [
+      field('商品ID（カンマ区切り・1〜3件）', 'text', 'productIds'),
+      selectField('案数', 'requestedVariantCount', '3', ['1', '2', '3']),
+      button('適合と割当を確認', async event => {
+        event.preventDefault();
+        if (!previewForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(previewForm)) return;
+        const values = formData(previewForm);
+        const productIds = String(values.productIds || '').split(',').map(value => value.trim()).filter(Boolean);
+        if (productIds.length < 1 || productIds.length > 3) { endWrite(previewForm); message(previewForm, '商品IDは1〜3件で入力してください', 'error'); return; }
+        const payload = { accountId, productIds, requestedVariantCount: Number(values.requestedVariantCount) };
+        try {
+          const idempotencyKey = await keyFor(previewForm, { operation: 'skill-allocation-preview', ...payload });
+          if (!previewForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(previewForm); return; }
+          const result = await api('/api/x-affiliate/skill-allocation-previews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+          clearRetry(previewForm); endWrite(previewForm);
+          if (isCurrentScope(accountId, generation)) { state.skillPreview = { accountId, result }; renderSkillPreview(result, previewForm); }
+        } catch (error) {
+          endWrite(previewForm);
+          if (previewForm.isConnected && isCurrentScope(accountId, generation)) message(previewForm, error.message + (error.code === 409 ? ' Skillまたは割当設定が変わりました。再確認してください。' : ''), 'error');
+        }
+      }),
+    ]);
+    box.append(previewForm);
+    if (state.skillPreview?.accountId === accountId) renderSkillPreview(state.skillPreview.result, previewForm);
+    enforceMemberUI();
+  }
+  async function loadSkills(accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    try {
+      const result = await api(`/api/x-affiliate/skills?accountId=${encodeURIComponent(accountId)}`);
+      if (isCurrentScope(accountId, generation)) renderSkills(result, accountId, generation);
+    } catch (error) {
+      const box = document.getElementById('x-skills');
       if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
     }
   }
@@ -816,6 +993,7 @@
     document.getElementById('x-settings')?.replaceChildren();
     document.getElementById('x-tags')?.replaceChildren();
     document.getElementById('x-products')?.replaceChildren();
+    document.getElementById('x-skills')?.replaceChildren();
     try {
       const result = await api(`/api/x-affiliate/settings?accountId=${encodeURIComponent(accountId)}`);
       if (!isCurrentScope(accountId, generation)) return;
@@ -823,6 +1001,7 @@
       enforceMemberUI();
       await loadTags(accountId, generation);
       await loadProducts(accountId, generation);
+      await loadSkills(accountId, generation);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');

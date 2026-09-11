@@ -2148,5 +2148,11 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product{padding:13px;background:var(--bg);border-radius:12px;box-shadow:var(--sh-press)}
 .x-product-head{display:flex;flex-direction:column;gap:3px}
 .x-product-head strong{font-size:13px;color:var(--txt)}
+.x-skill-list{display:grid;gap:12px;margin-top:14px}
+.x-skill details,.x-skill-decisions{margin-top:10px}
+.x-skill summary,.x-skill-decisions summary{cursor:pointer;font-size:12px;color:var(--txt)}
+.x-skill-body{max-height:260px;overflow:auto;white-space:pre-wrap;padding:10px;border-radius:9px;background:var(--surf);font-size:11px;line-height:1.65;color:var(--m2)}
+.x-skill .x-form textarea{min-height:150px}
+.x-skill-preview{margin-top:10px;padding:10px;border-radius:9px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-import-results{grid-column:1/-1}
 @media(max-width:600px){.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}}
