@@ -1320,9 +1320,9 @@ function _catTileMapBar(c, v) {
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
     ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
     ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
-    ${manual || v.samplePhotoUrl
+    ${manual || v.sampleAt
       ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
-          onclick="regenCategorySample('${esc(c.id)}')">${v.samplePhotoUrl ? '絵を作り直す' : '絵をつける'}</button>` : ''}
+          onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
 }
 
@@ -1428,8 +1428,12 @@ let _autoSampleRunning = false;
 
 async function _autoSampleQueue() {
   if (_autoSampleRunning) return;
+  /* `sampleAt`, not `samplePhotoUrl`. A category whose composite uploaded but whose bare picture
+     did not has an empty samplePhotoUrl and a perfectly good sample — keyed off that, those
+     categories generated a new picture on every single page load. `sampleAt` is written whenever a
+     sample was produced, so it is the one field that answers "has this been done". */
   const pending = (CATEGORIES || []).filter((c) =>
-    c.status === 'active' && !c.visual?.samplePhotoUrl && !_autoSampleTried.has(c.id));
+    c.status === 'active' && !c.visual?.sampleAt && !_autoSampleTried.has(c.id));
   if (!pending.length) return;
   _autoSampleRunning = true;
   /* Said out loud. This is the one thing on this page that spends money without being pressed, and
@@ -1445,7 +1449,14 @@ async function _autoSampleQueue() {
       if (!res?.ok) continue;
       const data = await res.json().catch(() => null);
       if (!data?.url) continue;
-      if (c.visual) Object.assign(c.visual, { sampleUrl: data.url, samplePhotoUrl: data.photoUrl, sampleTitle: data.title });
+      if (c.visual) {
+        Object.assign(c.visual, {
+          sampleUrl: data.url, samplePhotoUrl: data.photoUrl || '', sampleTitle: data.title,
+          // Mirrors what the server just stored, so a second pass in this session sees it as done
+          // even before the next _loadTopics refreshes CATEGORIES from the server.
+          sampleAt: new Date().toISOString(),
+        });
+      }
       // Swapped in place rather than re-rendering the grid: a full re-render mid-scroll would move
       // the ground under whoever is reading it, once per category.
       const host = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-thumb`);
@@ -2416,8 +2427,11 @@ async function regenCategorySample(id) {
   if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
   try {
     if (inEditor) await saveCategory(id, { silent: true });
+    // Pressing 絵を作り直す is the one place a *new* picture is asked for, so it is the one place
+    // that forces past the server's "return what is stored" guard.
     const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
-      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true }),
     }).catch(() => null);
     if (!res?.ok) {
       const msg = await res?.json().catch(() => null);
