@@ -387,10 +387,19 @@ let _activeDest = 'today';
 const _destOf = (pageId) =>
   Object.keys(DESTINATIONS).find(d => DESTINATIONS[d].pages.some(([id]) => id === pageId));
 
-/** Accepts either a destination key or a page id — deep links and old call sites both work. */
-function navTo(target) {
+/**
+ * Accepts either a destination key or a page id — deep links and old call sites both work.
+ *
+ * `asPage` resolves the one collision in the table above: `articles` is both a destination key and
+ * the id of that destination's first page. Resolving destinations first (which is right for a nav
+ * pill) meant the カテゴリ sub-tab asked for the *destination*, which restores `_lastPage` — and
+ * once サムネタイトル had been visited, `_lastPage.articles` was `hero-presets`. So the tab returned
+ * you to the page you were trying to leave, and カテゴリ became unreachable for the rest of the
+ * session. Callers that know they mean a page say so.
+ */
+function navTo(target, asPage = false) {
   let dest, pageId;
-  if (DESTINATIONS[target]) {
+  if (!asPage && DESTINATIONS[target]) {
     dest = target;
     pageId = _lastPage[dest] ?? DESTINATIONS[dest].pages[0][0];
   } else {
@@ -429,7 +438,7 @@ function _renderDestSub(dest, pageId) {
   if (pages.length < 2) { bar.innerHTML = ''; bar.classList.remove('show'); return; }
   bar.classList.add('show');
   bar.innerHTML = pages.map(([id, label]) =>
-    `<button class="dest-sub-btn${id === pageId ? ' active' : ''}" role="tab" aria-selected="${id === pageId}" onclick="navTo('${id}')">${label}</button>`
+    `<button class="dest-sub-btn${id === pageId ? ' active' : ''}" role="tab" aria-selected="${id === pageId}" onclick="navTo('${id}',true)">${label}</button>`
   ).join('');
 }
 
@@ -459,7 +468,9 @@ function _syncHash(pageId) {
 }
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
-  if (id && id !== _activePage) navTo(id);
+  // `_syncHash` only ever writes a page id, so this is a page — including `#articles`, which would
+  // otherwise be read as the destination and land on whatever page it was last left on.
+  if (id && id !== _activePage) navTo(id, true);
 });
 const _openAt = location.hash.slice(1);
 
@@ -7654,5 +7665,6 @@ async function createRepo() {
 ══════════════════════════════════════════════════════════════ */
 // Draw the sub-navigation for whichever destination we open on, so the strip is correct before
 // the first click rather than only after one.
-if (_openAt && _destOf(_openAt)) navTo(_openAt); else _renderDestSub(_activeDest, _activePage);
+// Guarded by _destOf, so _openAt is always a page id here — never a destination key.
+if (_openAt && _destOf(_openAt)) navTo(_openAt, true); else _renderDestSub(_activeDest, _activePage);
 loadDashboard();
