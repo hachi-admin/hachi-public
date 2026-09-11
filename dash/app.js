@@ -1173,7 +1173,7 @@ function _renderTopics() {
                                 _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
   if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
-  if (_catView === 'categories') _observeCatThumbs();
+  if (_catView === 'categories') { _observeCatThumbs(); _fillCatTilePresetOptions(); }
 }
 
 // ─── #approvals, without leaving the dashboard ────────────────────────────────
@@ -1277,6 +1277,28 @@ const _CAT_QUICK = {
   blocked:   { action: 'resume',  label: '復帰' },
 };
 
+/* The mapping, changeable where the result of it is being looked at.
+ *
+ * Picking a title style and seeing what it does to this category's thumbnails were two screens
+ * apart — open the detail, change a select, save, wait, go back. Judging a look is iterative, so
+ * that round trip was the whole cost of the feature. Both controls sit under the picture instead.
+ *
+ * 変える re-renders type over the picture already generated for this category, which is free and
+ * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
+function _catTileMapBar(c, v) {
+  if (!v.sampleUrl && !v.heroPreset) return '';
+  return `<div class="acard-map" onclick="event.stopPropagation()">
+    <select class="cat-in acard-map-sel" data-selected="${esc(v.heroPreset || '')}"
+      id="cat-tilepreset-${esc(c.id)}" onchange="restyleCategorySample('${esc(c.id)}',this.value)"
+      aria-label="${esc(c.name)} のサムネタイトル">
+      <option value="">自動（記事ごとに選ぶ）</option>
+    </select>
+    ${v.samplePhotoUrl
+      ? `<button class="cat-quick" title="絵を作り直します（pro課金）"
+          onclick="regenCategorySample('${esc(c.id)}')">絵を作り直す</button>` : ''}
+  </div>`;
+}
+
 function _categoryTile(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const r = c.rating || {};
@@ -1297,8 +1319,14 @@ function _categoryTile(c) {
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
-    ${v.heroPreset ? `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>` : ''}
-    <i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>
+    ${v.sampleUrl
+      ? `<div class="acard-thumb is-sample">
+           <img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+             onclick="event.stopPropagation();_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
+         </div>`
+      : v.heroPreset ? `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>` : ''}
+    ${_catTileMapBar(c, v)}
+    ${v.sampleUrl ? '' : `<i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>`}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
@@ -1324,6 +1352,15 @@ function _categoryTile(c) {
    only the ones actually scrolled into view ever ask for one. */
 let _catThumbObserver = null;
 const _catThumbDone = new Set();
+
+/* Fills every tile's style picker once the catalogue is in. Deliberately not awaited by the render:
+   the grid is useful before the pickers are, and blocking it on a catalogue fetch would leave the
+   whole list blank while one select's options load. */
+function _fillCatTilePresetOptions() {
+  const sels = document.querySelectorAll('#page-articles .acard-map-sel');
+  if (!sels.length) return;
+  _ensureHeroPresets().then(() => sels.forEach(_fillPresetSelect));
+}
 
 function _observeCatThumbs() {
   _catThumbObserver?.disconnect();
@@ -1400,6 +1437,52 @@ function openCategoryDetail(id) {
   _ensureImagePrompts().then(() => _fillCatImagePromptOptions(c.id));
 }
 
+/* The four settings that actually get changed, above the fold and saving on change.
+ *
+ * They existed already — 頻度 under 読者と頻度, the other three under 記事のかたち — but reaching
+ * one meant opening the right fold, changing a select, scrolling to 保存 and pressing it, then
+ * waiting for the panel to close and the list to reload. Four interactions and a full round trip
+ * to answer "make this weekly instead of daily", which is the most common edit on this screen.
+ *
+ * Ids are prefixed `catq-` so they do not collide with the section controls below, which
+ * `saveCategory` reads by id; each writes through immediately and re-renders the panel so the two
+ * copies of a setting can never disagree about what is stored.
+ */
+function _catQuickBar(c, style) {
+  const opts = (list, cur) => (list || [])
+    .map((o) => `<option value="${esc(o.id)}"${o.id === cur ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+  const field = (key, label, list, cur, path) => `
+    <label class="cat-quickf"><span>${label}</span>
+      <select class="cat-in" id="catq-${key}-${c.id}"
+        onchange="quickSetCategory('${c.id}','${path}',this.value)">${opts(list, cur)}</select>
+    </label>`;
+  return `<div class="cat-quickbar neu-well">
+    ${field('freq', '頻度', CAT_META?.frequencies, c.frequency, 'frequency')}
+    ${field('format', '形式', CAT_META?.formats, style.format, 'style.format')}
+    ${field('voice', '語り口', CAT_META?.voices, style.voice, 'style.voice')}
+    ${field('depth', '情報量', CAT_META?.depths, style.depth, 'style.depth')}
+  </div>`;
+}
+
+async function quickSetCategory(id, path, value) {
+  const [head, tail] = path.split('.');
+  const body = tail ? { [head]: { [tail]: value } } : { [head]: value };
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  const data = await res.json().catch(() => null);
+  // Re-render from what the server stored, not from what was clicked — normalizeStyle can reject a
+  // value, and a panel that kept showing the rejected one would be lying about the category.
+  if (data?.category) {
+    const i = CATEGORIES.findIndex((x) => x.id === id);
+    if (i >= 0) CATEGORIES[i] = data.category;
+    openCategoryDetail(id);
+  }
+  showToast('変更しました。', 'success');
+}
+
 function _categoryEditor(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const t = c.targeting || {};
@@ -1466,25 +1549,24 @@ function _categoryEditor(c) {
 
     <div class="neu-well" style="font-size:11.5px;color:var(--m);line-height:1.65">${esc(c.definition || '')}</div>
 
+    ${_catQuickBar(c, style)}
+
     ${/* Read-only on purpose. This text goes into every writing brief this category ever produces,
           so changing it is not a per-article edit — it redirects the whole stream. It now changes
           the way an image recipe changes: drafted into a couple of concrete alternatives, shown
           next to what is in force, and chosen with a button in Discord. */ ''}
-    ${section('編集方針', '', `
-      <div class="neu-well cat-prompt-ro">${esc(c.prompt || '（未設定）')}</div>
-      <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
-        毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。<br>
-        以後すべての記事に効くため、変更は Discord の承認カードで決めます。
-      </div>
+    ${/* The policy text itself is not shown. It is long, it is written for an agent rather than for
+          a person, and it is not edited here any more — so printing it only pushed everything that
+          *is* actionable below the fold. What stays is the way to change it. */ ''}
+    ${section('編集方針', 'Discordで変更', `
+      <div class="cat-hint">毎回の記事ブリーフにそのまま渡され、以後すべての記事に効きます。変更は Discord の承認カードで決めます。</div>
       <div class="cat-prompt-acts">
         <input class="form-input" id="cat-promptnote-${c.id}" type="text"
           placeholder="どう変えたいか（例: もう少し軽く／事例を必ず1つ）— 空でも可">
         <button class="act-btn" onclick="proposeCategoryPrompt('${c.id}')">Discordで変更を相談</button>
       </div>
       ${c.promptPrevious && c.promptPrevious !== c.prompt
-        ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}
-      ${c.promptSuggested && c.promptSuggested !== c.prompt
-        ? `<button class="act-btn" style="margin-top:8px" onclick="resetCategoryPrompt('${c.id}')">最初の提案に戻す</button>` : ''}`, true)}
+        ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}`)}
 
     ${section('記事のかたち',
       `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
@@ -1991,8 +2073,11 @@ async function _ensureHeroPresets() {
   return _heroPresets;
 }
 
-function _fillCatPresetOptions(catId) {
-  const sel = document.getElementById(`cat-preset-${catId}`);
+// Also used for the per-tile picker in the category list, which is the same control in a smaller
+// place — hence the element rather than an id derived from the category.
+function _fillCatPresetOptions(catId) { _fillPresetSelect(document.getElementById(`cat-preset-${catId}`)); }
+
+function _fillPresetSelect(sel) {
   if (!sel) return;
   const want = sel.dataset.selected || '';
   const usable = _heroPresets.filter((p) => p.enabled !== false);
@@ -2162,14 +2247,64 @@ function revertCategoryPrompt(id) {
   }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
 }
 
-/* Saves first, deliberately. The pickers above the button are unsaved form state, so regenerating
-   without saving would render the mapping that is stored rather than the one being looked at —
-   and the resulting picture would be read as evidence about a choice it never used. */
+/* Change the lettering without buying another picture.
+ *
+ * The expensive half of a thumbnail is the photograph; the title style is a render. Because the
+ * sample's bare picture is kept (visual.samplePhotoUrl), trying a different preset is one call to
+ * the preview renderer with that picture underneath — no image generation, no wait, and the result
+ * is the real pair rather than type over a grey stand-in.
+ *
+ * The rendered bytes are shown immediately and saved as the category's sample, so the list keeps
+ * what was just chosen rather than reverting to the old composite on the next load. */
+async function restyleCategorySample(id, presetId) {
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  const host = document.querySelector(`.acard[data-id="${CSS.escape(id)}"] .acard-thumb img`);
+  if (!c) return;
+  await _ensureHeroPresets();
+  const preset = _heroPresets.find((p) => p.id === presetId);
+  const v = c.visual || {};
+  if (host) host.style.opacity = '.4';
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        photoUrl: v.samplePhotoUrl || '',
+        templateId: v.template || preset?.templateId || 'photo_scrim',
+        styleSpec: preset?.styleSpec || {},
+        categoryId: id,
+        visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
+        article: v.sampleTitle || c.name,
+      }),
+    }).catch(() => null);
+    if (!res?.ok) { showToast('描き直せませんでした', 'error'); return; }
+    const url = URL.createObjectURL(await res.blob());
+    if (host) host.src = url;
+    // The pin itself is the durable part; the picture follows from it on the next full render.
+    await fetch(apiUrl(`/api/article-categories/${id}`), {
+      method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visual: { heroPreset: presetId } }),
+    }).catch(() => {});
+    if (c.visual) c.visual.heroPreset = presetId;
+    showToast(presetId ? 'このスタイルに変えました。' : '自動に戻しました。', 'success');
+  } finally {
+    if (host) host.style.opacity = '';
+  }
+}
+
+/* Saves first when the editor is open, deliberately: the pickers above the button are unsaved form
+   state, so regenerating without committing them would render the mapping that is *stored* rather
+   than the one being looked at, and the resulting picture would be read as evidence about a choice
+   it never used.
+
+   Only when it is open. This is also called from the category list, where none of those fields
+   exist — and `_catVal` returns '' for a missing element, so saving from there would PATCH every
+   setting to empty and quietly wipe the category. The form's own presence is the test. */
 async function regenCategorySample(id) {
+  const inEditor = !!document.getElementById(`cat-freq-${id}`);
   const btn = document.getElementById(`cat-sample-btn-${id}`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
   try {
-    await saveCategory(id, { silent: true });
+    if (inEditor) await saveCategory(id, { silent: true });
     const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
     }).catch(() => null);
@@ -2180,7 +2315,9 @@ async function regenCategorySample(id) {
     }
     showToast('合成見本を作りました。', 'success');
     await _loadTopics();
-    openCategoryDetail(id);
+    // Reopening is a refresh of a panel already on screen. Called from a tile there is no panel,
+    // and opening one would be the button doing something nobody asked it to.
+    if (inEditor) openCategoryDetail(id);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '見本を作り直す'; }
   }
@@ -3018,10 +3155,15 @@ function _renderStyleForm() {
     <div class="hp-grp"><div class="hp-grp-hd">よく使う設定</div>${quick}</div>
     ${_hpGroundNotice(spec)}
     ${unknown.length ? `<div class="hp-ctl-json">⚠ レンダラーが読まないキー: <code>${unknown.map(esc).join(', ')}</code> — 描画時に無視されます</div>` : ''}
+    ${/* Everything past よく使う設定 is folded away by default. These groups hold the settings a
+          preset is fine-tuned with once and then left alone, and open they ran to several screens
+          of scrolling above the controls actually being reached for. The heading says how many are
+          set, so a folded group still answers "is there anything in here". */ ''}
     ${groups.map(([g, keys]) => `
-      <div class="hp-grp"><div class="hp-grp-hd">${esc(g.label)}</div>
+      <details class="hp-grp hp-grp-fold">
+        <summary><span class="hp-grp-hd">${esc(g.label)}</span><span class="hp-grp-n">${keys.length}</span></summary>
         ${keys.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k])).join('')}
-      </div>`).join('')}
+      </details>`).join('')}
     <div class="hp-add">
       <select class="form-select" id="hp-add-key" onchange="_hpShowAddHint(this.value)"><option value="">項目を追加…</option>${addable}</select>
       <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>

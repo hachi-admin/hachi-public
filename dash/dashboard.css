@@ -2287,6 +2287,27 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-sample-wrap{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:10px}
 .cat-sample-hd{font-size:11px;font-weight:700;color:var(--m2);letter-spacing:.04em}
 .cat-sample-img{width:100%;border-radius:10px;display:block;cursor:zoom-in}
+
+/* The merged sample in the list, plus the two controls that change it in place. */
+.acard-thumb.is-sample{background:none}
+.acard-map{display:flex;gap:6px;align-items:center;margin:2px 0 4px}
+.acard-map-sel{flex:1;min-width:0;font-size:10.5px;padding:4px 6px}
+.acard-map .cat-quick{flex:none;white-space:nowrap}
+
+/* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
+.hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}
+.hp-grp-fold>summary::-webkit-details-marker{display:none}
+.hp-grp-fold>summary::after{content:'▶';font-size:9px;color:var(--m2);margin-left:auto;transition:transform .15s}
+.hp-grp-fold[open]>summary::after{transform:rotate(90deg)}
+.hp-grp-fold>summary .hp-grp-hd{margin:0}
+.hp-grp-n{font-size:9px;color:var(--m2);background:color-mix(in srgb,var(--m) 12%,transparent);border-radius:99px;padding:1px 6px}
+
+/* The four most-changed category settings, above the fold and saving on change. */
+.cat-quickbar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+.cat-quickf{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cat-quickf>span{font-size:9.5px;color:var(--m2);font-weight:600}
+.cat-quickf .cat-in{width:100%;font-size:11px}
+@media(min-width:600px){.cat-quickbar{grid-template-columns:repeat(4,1fr)}}
 .hp-ctl-hint{margin-left:8px;color:var(--m2)}
 
 .hp-colour{display:flex;gap:8px;align-items:center}
