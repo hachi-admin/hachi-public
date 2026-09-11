@@ -1286,16 +1286,14 @@ const _CAT_QUICK = {
  * 変える re-renders type over the picture already generated for this category, which is free and
  * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
 function _catTileMapBar(c, v) {
-  if (!v.sampleUrl && !v.heroPreset) return '';
   return `<div class="acard-map" onclick="event.stopPropagation()">
     <select class="cat-in acard-map-sel" data-selected="${esc(v.heroPreset || '')}"
       id="cat-tilepreset-${esc(c.id)}" onchange="restyleCategorySample('${esc(c.id)}',this.value)"
       aria-label="${esc(c.name)} のサムネタイトル">
       <option value="">自動（記事ごとに選ぶ）</option>
     </select>
-    ${v.samplePhotoUrl
-      ? `<button class="cat-quick" title="絵を作り直します（pro課金）"
-          onclick="regenCategorySample('${esc(c.id)}')">絵を作り直す</button>` : ''}
+    <button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
+      onclick="regenCategorySample('${esc(c.id)}')">${v.samplePhotoUrl ? '絵を作り直す' : '絵をつける'}</button>
   </div>`;
 }
 
@@ -1319,14 +1317,19 @@ function _categoryTile(c) {
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
+    ${/* Every tile carries a picture, not only the ones with something pinned.
+          Drawing the type is a render, not a generation — it costs no image call — so there was
+          never a reason to make a category earn its thumbnail by first having a preset pinned or a
+          paid sample made. Gating it that way is why this list showed format icons and nothing
+          else. What it draws is what this category would actually get: its pinned style if it has
+          one, the template's own treatment if it does not. */ ''}
     ${v.sampleUrl
       ? `<div class="acard-thumb is-sample">
            <img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
              onclick="event.stopPropagation();_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
          </div>`
-      : v.heroPreset ? `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>` : ''}
+      : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
-    ${v.sampleUrl ? '' : `<i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>`}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
@@ -1395,25 +1398,39 @@ async function _loadCatThumbInto(id) {
   }
 
   await _ensureHeroPresets();
-  const preset = _heroPresets.find((p) => p.id === c.visual?.heroPreset);
-  if (!preset) { host.remove(); return; }
+  /* No pinned preset is not a reason to show nothing — it means "whatever the template does on its
+     own", which is a real answer and the one most of these categories are living with. Rendering it
+     is what makes 自動 visible instead of theoretical. */
+  const preset = _heroPresets.find((p) => p.id === c.visual?.heroPreset) || null;
+
+  /* A title this category actually published, not its name. The articles list is already loaded for
+     this page, so this costs nothing — and the category name set in 48pt previews a thumbnail that
+     will never exist, which is the whole failure this preview is meant to catch. */
+  const title = String(c.visual?.sampleTitle || '').trim()
+    || CAT_ARTICLES.filter((a) => a.categoryId === id).map((a) => String(a.title ?? '').trim()).find(Boolean)
+    || c.name || 'サンプル';
+
   try {
     const res = await fetch(apiUrl('/api/hero-presets/preview'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
       body: JSON.stringify({
-        templateId: c.visual?.template || preset.templateId,
-        styleSpec: preset.styleSpec || {},
+        // Uses the sample's own picture when one has been generated, so the list shows type over a
+        // real photograph rather than the synthetic stand-in wherever that is possible.
+        photoUrl: c.visual?.samplePhotoUrl || '',
+        templateId: c.visual?.template || preset?.templateId || 'photo_scrim',
+        styleSpec: preset?.styleSpec || {},
         categoryId: id,
         visual: { accent: c.visual?.accent || '', align: c.visual?.align || '', eyebrow: c.visual?.eyebrow || '' },
-        article: c.name || 'サンプル',
-        lines: [{ text: c.name || 'サンプル', scale: 1.2, indent: 0 }],
+        article: title,
       }),
     });
     if (!res.ok) throw new Error();
     const url = URL.createObjectURL(await res.blob());
-    host.innerHTML = `<img src="${url}" alt="${esc(c.name)} のサムネタイトル見本" onclick="event.stopPropagation();_openLightbox('${url}','${esc(c.name)}')">`;
+    host.innerHTML = `<img src="${url}" alt="${esc(c.name)} のサムネ見本" onclick="event.stopPropagation();_openLightbox('${url}','${esc(c.name)}')">`;
   } catch {
-    host.remove();
+    // Leave the reserved box rather than removing it: collapsing one tile out of a grid mid-scroll
+    // reflows every tile after it, and an empty frame reads as "no picture" correctly enough.
+    host.classList.add('is-empty');
   }
 }
 

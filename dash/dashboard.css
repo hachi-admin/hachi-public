@@ -2290,9 +2290,14 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* The merged sample in the list, plus the two controls that change it in place. */
 .acard-thumb.is-sample{background:none}
-.acard-map{display:flex;gap:6px;align-items:center;margin:2px 0 4px}
-.acard-map-sel{flex:1;min-width:0;font-size:10.5px;padding:4px 6px}
-.acard-map .cat-quick{flex:none;white-space:nowrap}
+/* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
+.acard-thumb.is-empty{opacity:.4}
+/* Two columns of tiles on a phone leaves ~170px, so these wrap rather than crushing the select
+   down to an unreadable stub beside the button. */
+.acard-map{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 4px}
+.acard-map-sel{flex:1 1 100%;min-width:0;font-size:10.5px;padding:4px 6px}
+.acard-map .cat-quick{flex:0 0 auto;white-space:nowrap}
+@media(min-width:900px){.acard-map-sel{flex:1 1 auto}}
 
 /* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
 .hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}
