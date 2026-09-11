@@ -2124,3 +2124,22 @@ body:has(.mob-more-sheet.open) .page-area{
   font-size:.62rem;text-transform:uppercase;
 }
 .cat-hint{font-size:.5rem;color:var(--m2);line-height:1.5;margin-top:4px}
+
+/* X affiliate management cards */
+.x-card{margin:14px 0;padding:16px;background:var(--surf);border-radius:14px;box-shadow:var(--sh-sm)}
+.x-card h3{margin:0 0 12px;font-size:14px;color:var(--txt)}
+.x-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end;margin-top:12px}
+.x-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--m)}
+.x-field .form-input,.x-field .form-select{width:100%;box-sizing:border-box}
+.x-inline-form{display:flex;align-items:end;gap:8px;flex:1;flex-wrap:wrap}
+.x-inline-form .x-field{min-width:130px;flex:1}
+.x-inline-form .x-check{min-width:auto;flex:0 0 auto;flex-direction:row;align-items:center;gap:5px}
+.x-inline-form .x-check .form-input{width:auto}
+.x-link-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;letter-spacing:.04em;color:var(--txt);user-select:text}
+.x-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--div);font-size:12px;color:var(--txt)}
+.x-muted{font-size:11px;color:var(--m2);line-height:1.6}
+.x-status{padding:8px 10px;border-radius:8px;font-size:12px;color:var(--txt);background:var(--bg)}
+.x-status[data-kind="error"]{color:var(--error)}
+.x-status[data-kind="warn"]{color:var(--yel)}
+.x-toolbar{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:600px){.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}}

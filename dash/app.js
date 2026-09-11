@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '16';
+const DASH_BUILD = '17';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -63,6 +63,7 @@ function _renderUserPill() {
 }
 
 function logoutUser() {
+  if (window.HachiXAffiliate?.isActive()) { window.HachiXAffiliate.signOut(); window.HachiXAffiliate.refresh(); return; }
   localStorage.removeItem('dash-jwt');
   if (API_BASE) window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
   else window.location.reload();
@@ -82,7 +83,7 @@ function _handleForbidden(msg) {
 let _currentUser = _jwtPayload();
 
 // Verify JWT with backend on load; redirect to OAuth if missing or invalid.
-async function _ensureAuth() {
+async function _ensureAuth(isCurrent = () => true) {
   if (!API_BASE) return true; // local dev — no auth required
   if (!_jwt()) {
     window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`;
@@ -90,9 +91,11 @@ async function _ensureAuth() {
   }
   try {
     const res = await fetch(apiUrl('/auth/verify'), { headers: _authHeaders() });
+    if (!isCurrent()) return false;
     if (res.status === 403) { _handleForbidden(); return false; }
-    if (!res.ok) { _handleUnauthorized(); return false; }
+    if (!res.ok) { _handleUnauthorized(isCurrent); return false; }
     const { user } = await res.json();
+    if (!isCurrent()) return false;
     _currentUser = user;
   } catch {
     // network error — proceed, API calls will 401 if truly invalid
@@ -101,11 +104,11 @@ async function _ensureAuth() {
 }
 
 // On 401 from any API call: clear JWT and redirect to re-auth.
-function _handleUnauthorized() {
+function _handleUnauthorized(isCurrent = () => true) {
   localStorage.removeItem('dash-jwt');
   if (API_BASE) {
     document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);font-family:inherit;color:var(--m);font-size:13px">セッションが期限切れです — ログインページへ移動します…</div>`;
-    setTimeout(() => { window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`; }, 1200);
+    setTimeout(() => { if (isCurrent()) window.location.href = `${API_BASE}/auth/login?return=${encodeURIComponent(window.location.href)}`; }, 1200);
   }
 }
 
@@ -178,6 +181,7 @@ function _animateCounters(root = document) {
 
 /** Mark rows that were not in the feed last render, so new work announces itself once. */
 const _seenFeedIds = new Set();
+let _dashboardLoadGeneration = 0;
 function _markNewFeedRows(selector = '#task-feed .feed-item') {
   const first = _seenFeedIds.size === 0;
   document.querySelectorAll(selector).forEach((el) => {
@@ -191,7 +195,15 @@ function _markNewFeedRows(selector = '#task-feed .feed-item') {
 }
 
 async function loadDashboard() {
-  if (!await _ensureAuth()) return;
+  if (window.HachiXAffiliate?.isActive()) {
+    window._dashInvalidate?.();
+    window.HachiXAffiliate.refresh();
+    return;
+  }
+  const loadGeneration = ++_dashboardLoadGeneration;
+  const isCurrent = () => loadGeneration === _dashboardLoadGeneration && !window.HachiXAffiliate?.isActive();
+  if (!isCurrent()) return;
+  if (!await _ensureAuth(isCurrent) || !isCurrent()) return;
   _renderUserPill();
   document.getElementById('refresh-btn')?.classList.add('busy');
 
@@ -210,14 +222,17 @@ async function loadDashboard() {
 
   try {
     const res = await fetch(apiUrl('/api/dashboard-data'), { headers: _authHeaders() });
-    if (res.status === 401) { _handleUnauthorized(); return; }
+    if (!isCurrent()) return;
+    if (res.status === 401) { _handleUnauthorized(isCurrent); return; }
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));
+      if (!isCurrent()) return;
       _handleForbidden(body.error || 'Your account is not authorized for this dashboard.');
       return;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const data = await res.json();
+    if (!isCurrent()) return;
     _applyData(data);
     _renderAll(data);
 
@@ -231,6 +246,7 @@ async function loadDashboard() {
       document.body.appendChild(loader);
     }
   } catch (err) {
+    if (!isCurrent()) return;
     const errEl = document.querySelector('.page.active') || document.querySelector('.page');
     if (errEl) errEl.innerHTML = `
       <div class="dash-error">
@@ -346,6 +362,8 @@ function _renderAll(d) {
    NAVIGATION
 ══════════════════════════════════════════════════════════════ */
 let _activePage = 'tasks';
+let _xRouteActive = location.hash === '#xentry';
+let _navGeneration = 0;
 
 /* ═══════════════════════════════════════════════════════════
    KEYBOARD ACTIVATION
@@ -389,6 +407,7 @@ const _destOf = (pageId) =>
 
 /** Accepts either a destination key or a page id — deep links and old call sites both work. */
 function navTo(target) {
+  const returningFromX = window.HachiXAffiliate?.isActive();
   let dest, pageId;
   if (DESTINATIONS[target]) {
     dest = target;
@@ -401,12 +420,16 @@ function navTo(target) {
   _activeDest = dest;
   _lastPage[dest] = pageId;
   _activePage = pageId;
+  _xRouteActive = false;
+  const navGeneration = ++_navGeneration;
+  window.HachiXAffiliate?.setActive(false);
   _syncHash(pageId);
 
   const swap = () => {
+    if (navGeneration !== _navGeneration || window.HachiXAffiliate?.isActive()) return;
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageId));
-    document.querySelectorAll('.nav-pill[data-dest]').forEach(p => p.classList.toggle('active', p.dataset.dest === dest));
-    document.querySelectorAll('.mob-tab[data-dest]').forEach(b => b.classList.toggle('active', b.dataset.dest === dest));
+    document.querySelectorAll('.nav-pill[data-dest]').forEach(p => { p.classList.toggle('active', p.dataset.dest === dest); p.setAttribute('aria-selected', String(p.dataset.dest === dest)); });
+    document.querySelectorAll('.mob-tab[data-dest]').forEach(b => { b.classList.toggle('active', b.dataset.dest === dest); b.setAttribute('aria-selected', String(b.dataset.dest === dest)); });
     _renderDestSub(dest, pageId);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
@@ -418,6 +441,7 @@ function navTo(target) {
   } else {
     swap();
   }
+  if (returningFromX) loadDashboard();
   _initPage(pageId);
 }
 
@@ -458,8 +482,22 @@ function _syncHash(pageId) {
 }
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
-  if (id && id !== _activePage) navTo(id);
+  if (id === 'xentry') {
+    const wasX = _xRouteActive;
+    _xRouteActive = true;
+    // Invalidate auth/data work already in flight before X owns the document.
+    _dashboardLoadGeneration += 1;
+    if (!wasX) window.HachiXAffiliate?.refresh();
+    return;
+  }
+  if (id && (_xRouteActive || id !== _activePage)) {
+    const leavingX = _xRouteActive;
+    _xRouteActive = false;
+    navTo(id);
+    if (leavingX) loadDashboard();
+  }
 });
+window._dashInvalidate = () => { _dashboardLoadGeneration += 1; _xRouteActive = true; };
 const _openAt = location.hash.slice(1);
 
 
@@ -4865,6 +4903,8 @@ function _inline(text) {
   }
 
   function flush() {
+    // X-only entry must never flush legacy activity (or its Note JWT) to the API.
+    if (window.location.hash.startsWith('#xentry')) { _buf = []; return; }
     if (!_buf.length || _isIdle()) return;
     const batch = _buf.splice(0, MAX_BATCH);
     const payload = JSON.stringify({ events: batch });
@@ -5781,7 +5821,12 @@ async function createRepo() {
 /* ═══════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════════ */
+// X affiliate has an isolated entrypoint; never let its fragment start the Note dashboard flow.
+if (window.location.hash.startsWith('#xentry')) {
+  // x-affiliate.js owns this route and will render its state after app.js is loaded.
+} else {
 // Draw the sub-navigation for whichever destination we open on, so the strip is correct before
 // the first click rather than only after one.
 if (_openAt && _destOf(_openAt)) navTo(_openAt); else _renderDestSub(_activeDest, _activePage);
 loadDashboard();
+}
