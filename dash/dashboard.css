@@ -2269,6 +2269,24 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-stop-row .form-input.hp-mono{flex:1;min-width:0}
 .hp-union-toggle{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .act-btn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+
+/* A よく使う設定 row the preset does not actually set. Dimmed rather than hidden: the control is
+   live, and touching it is what sets the key — see HP_QUICK_KEYS. */
+.hp-ctl-unset{opacity:.6}
+.hp-ctl-unset:focus-within{opacity:1}
+.hp-ground-note{background:#F59E0B14;border-radius:12px;padding:10px 12px}
+.hp-ground-note .hp-ctl-hint{margin-bottom:8px}
+.hp-card-note{font-size:10.5px;color:var(--m2);line-height:1.5;padding:0 12px 10px}
+
+/* 編集方針 is read here and changed in Discord — see proposeCategoryPrompt. */
+.cat-prompt-ro{font-size:12px;color:var(--txt);line-height:1.7;white-space:pre-wrap}
+.cat-prompt-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.cat-prompt-acts .form-input{flex:1;min-width:140px;font-size:12px}
+
+/* The merged thumbnail: recipe picture with the title preset drawn over it. */
+.cat-sample-wrap{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:10px}
+.cat-sample-hd{font-size:11px;font-weight:700;color:var(--m2);letter-spacing:.04em}
+.cat-sample-img{width:100%;border-radius:10px;display:block;cursor:zoom-in}
 .hp-ctl-hint{margin-left:8px;color:var(--m2)}
 
 .hp-colour{display:flex;gap:8px;align-items:center}

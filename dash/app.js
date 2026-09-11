@@ -1343,6 +1343,20 @@ async function _loadCatThumbInto(id) {
   const c = CATEGORIES.find((x) => x.id === id);
   const host = document.querySelector(`#page-articles [data-cat-thumb="${CSS.escape(id)}"]`);
   if (!c || !host) return;
+
+  /* A merged sample, if one has been made: the mapped 絵のレシピ's picture with the mapped
+     サムネタイトル drawn over it — what a thumbnail from this category will actually look like.
+     Shown in preference to the title-only preview below, which renders the lettering against a
+     synthetic placeholder and so cannot show the one thing worth checking (whether the type
+     survives the picture). Not generated here: it costs a pro-tier image call, so it is made by
+     the 見本を作り直す button in the detail panel and served from cache afterwards. */
+  if (c.visual?.sampleUrl) {
+    const u = c.visual.sampleUrl;
+    host.innerHTML = `<img src="${esc(u)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+      onclick="event.stopPropagation();_openLightbox('${esc(u)}','${esc(c.name)}')">`;
+    return;
+  }
+
   await _ensureHeroPresets();
   const preset = _heroPresets.find((p) => p.id === c.visual?.heroPreset);
   if (!preset) { host.remove(); return; }
@@ -1452,13 +1466,25 @@ function _categoryEditor(c) {
 
     <div class="neu-well" style="font-size:11.5px;color:var(--m);line-height:1.65">${esc(c.definition || '')}</div>
 
+    ${/* Read-only on purpose. This text goes into every writing brief this category ever produces,
+          so changing it is not a per-article edit — it redirects the whole stream. It now changes
+          the way an image recipe changes: drafted into a couple of concrete alternatives, shown
+          next to what is in force, and chosen with a button in Discord. */ ''}
     ${section('編集方針', '', `
-      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="9">${esc(c.prompt || '')}</textarea>
+      <div class="neu-well cat-prompt-ro">${esc(c.prompt || '（未設定）')}</div>
       <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
-        毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。
+        毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。<br>
+        以後すべての記事に効くため、変更は Discord の承認カードで決めます。
       </div>
+      <div class="cat-prompt-acts">
+        <input class="form-input" id="cat-promptnote-${c.id}" type="text"
+          placeholder="どう変えたいか（例: もう少し軽く／事例を必ず1つ）— 空でも可">
+        <button class="act-btn" onclick="proposeCategoryPrompt('${c.id}')">Discordで変更を相談</button>
+      </div>
+      ${c.promptPrevious && c.promptPrevious !== c.prompt
+        ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}
       ${c.promptSuggested && c.promptSuggested !== c.prompt
-        ? `<button class="act-btn" style="margin-top:10px" onclick="resetCategoryPrompt('${c.id}')">提案に戻す</button>` : ''}`, true)}
+        ? `<button class="act-btn" style="margin-top:8px" onclick="resetCategoryPrompt('${c.id}')">最初の提案に戻す</button>` : ''}`, true)}
 
     ${section('記事のかたち',
       `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
@@ -1846,7 +1872,26 @@ function _visualSection(c, section) {
     </label>`;
 
   const summary = v.eyebrow || v.template || v.accent || v.align ? (v.eyebrow || '指定あり') : '自動';
+  /* The two halves shown together, on a real picture.
+   *
+   * The preview below this one draws the lettering over a synthetic placeholder, which is fine for
+   * judging the type and useless for judging the pair — pale type reads cleanly on flat grey and
+   * vanishes on the recipe's actual photograph. This runs the real pipeline once and keeps the
+   * result, because a generation costs a pro-tier image call and must be asked for rather than
+   * happening whenever the panel opens. */
+  const sample = v.sampleUrl
+    ? `<img src="${esc(v.sampleUrl)}" class="cat-sample-img" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+         onclick="_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
+       <div class="cat-hint">絵のレシピ＋サムネタイトルを合成した実物です${v.sampleAt ? `（${relTime(v.sampleAt)}）` : ''}</div>`
+    : '<div class="cat-hint">まだ合成見本がありません。下で絵のレシピとサムネタイトルを選んでから作成してください。</div>';
+
   return section('見た目', summary, `
+    <div class="cat-sample-wrap neu-well">
+      <div class="cat-sample-hd">合成見本</div>
+      ${sample}
+      <button class="act-btn" id="cat-sample-btn-${c.id}" onclick="regenCategorySample('${c.id}')"
+        title="画像を1枚生成します（pro課金）">${v.sampleUrl ? '見本を作り直す' : '見本を作る'}</button>
+    </div>
     <div class="cat-preview-wrap neu-well">
       <img id="cat-preview-${c.id}" class="cat-preview-img" alt="見出し画像プレビュー" loading="lazy">
       <div id="cat-preview-status-${c.id}" class="cat-hint" style="margin-top:6px">読み込み中…</div>
@@ -1881,7 +1926,7 @@ function _visualSection(c, section) {
         <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
           <option value="">自動（記事ごとに選ぶ）</option>
         </select>
-        <span class="cat-hint">サムネイトル（表紙）の写真・挿絵の作風を固定します</span>
+        <span class="cat-hint">サムネタイトル（表紙）の写真・挿絵の作風を固定します</span>
       </label>
       <label class="cat-field">
         <span class="cat-label">本文中の絵のレシピ</span>
@@ -2024,10 +2069,15 @@ async function refreshCatPreview(id) {
   if (status) status.textContent = '';
 }
 
-async function saveCategory(id) {
+/* `silent` is for callers that save as a step rather than as the point — regenCategorySample
+   commits the pickers before rendering against them. Those must not close the panel the operator
+   is still working in, nor claim "保存しました" for an action that has not finished yet. */
+async function saveCategory(id, { silent = false } = {}) {
   const chk = (k) => !!document.getElementById(`cat-${k}-${id}`)?.checked;
   const body = {
-    prompt: _catVal(`cat-prompt-${id}`),
+    // `prompt` deliberately absent: it is changed by approving a rewrite in Discord, not by 保存.
+    // Sending it from here would write back whatever the panel happened to be showing and quietly
+    // undo a change approved while this panel was open.
     frequency: _catVal(`cat-freq-${id}`),
     approvalMode: _catVal(`cat-approval-${id}`),
     style: {
@@ -2066,6 +2116,7 @@ async function saveCategory(id) {
     method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }).catch(() => null);
   if (!res?.ok) { showToast('保存に失敗しました', 'error'); return; }
+  if (silent) return;
   showToast('保存しました。次回以降の記事に反映されます。', 'success');
   closeDetail(); _loadTopics();
 }
@@ -2076,6 +2127,63 @@ function resetCategoryPrompt(id) {
     showToast('提案内容に戻しました。', 'success');
     _loadTopics();
   }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+}
+
+/* Ask for a rewrite. Drafting runs a Pro-tier agent and posts a card, so the button reports what
+   it is doing and stays disabled until it has — pressing it twice posts two cards for the same
+   question, and the second one is answered by whoever reads it first. */
+async function proposeCategoryPrompt(id) {
+  const note = document.getElementById(`cat-promptnote-${id}`)?.value?.trim() || '';
+  const btn = document.querySelector(`#cat-promptnote-${CSS.escape(id)} + .act-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = '案を作成中…'; }
+  const res = await fetch(apiUrl(`/api/article-categories/${id}/propose-prompt`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  }).catch(() => null);
+  if (btn) { btn.disabled = false; btn.textContent = 'Discordで変更を相談'; }
+  if (!res?.ok) {
+    const msg = await res?.json().catch(() => null);
+    showToast(msg?.error ? `案を作れませんでした: ${msg.error}` : '案を作れませんでした', 'error');
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  showToast(`Discord に ${data.options?.length ?? 0} 件の案を送りました。選ぶと反映されます。`, 'success');
+}
+
+function revertCategoryPrompt(id) {
+  showConfirm('編集方針を直前の内容に戻しますか？', async () => {
+    const cat = (CATEGORIES || []).find((c) => c.id === id);
+    await fetch(apiUrl(`/api/article-categories/${id}`), {
+      method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: cat?.promptPrevious ?? '', promptPrevious: cat?.prompt ?? '' }),
+    }).catch(() => {});
+    showToast('直前の方針に戻しました。', 'success');
+    _loadTopics();
+  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+}
+
+/* Saves first, deliberately. The pickers above the button are unsaved form state, so regenerating
+   without saving would render the mapping that is stored rather than the one being looked at —
+   and the resulting picture would be read as evidence about a choice it never used. */
+async function regenCategorySample(id) {
+  const btn = document.getElementById(`cat-sample-btn-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
+  try {
+    await saveCategory(id, { silent: true });
+    const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+    }).catch(() => null);
+    if (!res?.ok) {
+      const msg = await res?.json().catch(() => null);
+      showToast(msg?.error ? `見本を作れませんでした: ${msg.error}` : '見本を作れませんでした', 'error');
+      return;
+    }
+    showToast('合成見本を作りました。', 'success');
+    await _loadTopics();
+    openCategoryDetail(id);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '見本を作り直す'; }
+  }
 }
 
 async function catAction(id, action) {
@@ -2306,8 +2414,11 @@ function _heroPresetCard(p) {
       <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
       <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
+      ${off && !p.isSystem
+        ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
+    ${off && p.isSystem
+      ? '<div class="hp-card-note">既定のスタイルは削除できません（次のデプロイで再生成されます）。無効のままにしておけば選ばれません。</div>' : ''}
   </div>`;
 }
 
@@ -2725,9 +2836,10 @@ function _hpUnionCtl(key, desc, value) {
    in. Line-level equivalents exist instead — `scale`/`color`/`face`/`glow` per line in 見本. */
 const HP_DEAD_WITH_LINES = new Set(['emphasisScale', 'highlight', 'accentMetal', 'accentGradient']);
 
-function _hpControl(key, desc, value) {
+function _hpControl(key, desc, value, unset = false) {
   const lbl = esc(desc.label || key);
-  const rm = `<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey('${key}')">×</button>`;
+  // Nothing to remove when the key is not in the spec — the × would read as "undo", which it isn't.
+  const rm = unset ? '' : `<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey('${key}')">×</button>`;
   const head = `<div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code>${rm}</div>`;
   const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
   let body;
@@ -2776,13 +2888,96 @@ function _hpControl(key, desc, value) {
   const deadHint = deadWithLines
     ? '<div class="hp-ctl-hint">⚠ この見本は固定行（exampleLines）を使っているため、この項目は描画に反映されません。見本の行ごとの設定（大きさ・色・書体・発光）を使ってください。</div>'
     : '';
-  return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}">${head}${body}${deadHint}</div>`;
+  const unsetHint = unset ? '<div class="hp-ctl-hint">未設定 — 触ると設定されます（テンプレートの値のまま）</div>' : '';
+  return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}${unset ? ' hp-ctl-unset' : ''}">${head}${body}${unsetHint}${deadHint}</div>`;
 }
 
-// Always on screen regardless of whether the spec currently sets them — the two questions "what
-// colour is the ground" and "what colour is the outline" are the ones asked before any other, and
-// requiring 項目を追加 first for exactly those two read as though the control didn't exist at all.
-const HP_CORE_KEYS = ['ground', 'text'];
+// Always on screen regardless of whether the spec currently sets them — "what colour is the text"
+// and "what colour is the outline" are the questions asked before any other, and requiring
+// 項目を追加 first for exactly those read as though the control didn't exist at all.
+const HP_CORE_KEYS = ['text'];
+
+/* The background is not this catalogue's to fix.
+ *
+ * A サムネタイトル preset describes the *lettering*; what sits behind it comes from 絵のレシピ and
+ * from the article's own picture, and differs article to article. A preset that pins `ground` or
+ * `usesPhoto` overrides that choice for every article it is ever applied to — so these are taken
+ * out of the editor rather than left as a control that quietly outranks the picture.
+ *
+ * `accentFrom` stays: it groups under 地・写真 in the vocabulary but decides where the *accent
+ * colour* comes from, which is a lettering decision. Presets that already set the background keep
+ * their values until the operator clears them — see the notice `_hpGroundNotice` renders. */
+const HP_GROUND_KEYS = ['ground', 'usesPhoto', 'scrimMax'];
+
+/* The settings worth reaching for, on screen without being asked for.
+ *
+ * Everything outside 基本の色 used to require picking the key out of 項目を追加 first, which is a
+ * dropdown of forty entries — so the dozen decisions actually made when designing a title (which
+ * face, how tight, how many lines, what colour the emphasis is) cost the same effort as the ones
+ * nobody touches. These are rendered whether or not the preset sets them; an unset one is dimmed
+ * and says so, and setting it is one interaction with the control itself rather than three.
+ *
+ * Ordered by how often the question comes up, not by group. */
+const HP_QUICK_KEYS = [
+  'face', 'align', 'anchor', 'leading', 'letterSpacing', 'condense',
+  'preferLines', 'maxLines', 'accent', 'metal', 'emphasisScale',
+];
+
+/* Glow gets a written control rather than a place in HP_QUICK_KEYS, for the same reason the
+   per-line editor gives it one: the vocabulary types it as a bare shape, so the generic object
+   editor would offer an empty "add a field" form — technically complete, and useless as the
+   two-tap answer to "make the lettering glow". */
+function _hpGlowCoreCtl(value) {
+  const g = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+  const col = /^#[0-9a-fA-F]{6}$/.test(g?.color) ? g.color : '#FF3366';
+  const em = Number.isFinite(g?.em) ? g.em : 0.24;
+  const op = Number.isFinite(g?.opacity) ? g.opacity : 0.6;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">発光</span><code class="hp-ctl-key">glow</code>'
+    + (g ? '<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey(\'glow\')">×</button>' : '')
+    + '</div>';
+  const row = (label, min, max, step, v, field) => `<label class="hp-glow-row"><span>${label}</span>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${v}"
+      oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlowSpec({${field}:Number(this.value)})">
+    <input class="form-input hp-num" type="number" min="${min}" max="${max}" step="${step}" value="${v}"
+      onchange="_hpSetGlowSpec({${field}:Number(this.value)})"></label>`;
+  const body = g
+    ? `<div class="hp-glow">
+         <div class="hp-colour">
+           <input type="color" value="${col}" oninput="_hpSetGlowSpec({color:this.value.toUpperCase()})">
+           <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetGlowSpec({color:this.value.toUpperCase()})">
+         </div>
+         ${row('広がり', 0.05, 0.6, 0.01, em, 'em')}
+         ${row('強さ', 0.1, 1, 0.05, op, 'opacity')}
+       </div>`
+    : `<button class="act-btn" onclick="_hpSetGlowSpec({})">文字を光らせる</button>`;
+  return `<div class="hp-ctl${g ? '' : ' hp-ctl-unset'}">${head}${body}</div>`;
+}
+
+function _hpSetGlowSpec(patch) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const cur = (spec.glow && typeof spec.glow === 'object' && !Array.isArray(spec.glow)) ? spec.glow : null;
+  spec.glow = { color: '#FF3366', em: 0.24, opacity: 0.6, ...(cur || {}), ...patch };
+  _hpWriteSpec(spec);
+}
+
+function _hpGroundNotice(spec) {
+  const set = HP_GROUND_KEYS.filter((k) => k in spec);
+  if (!set.length) return '';
+  return `<div class="hp-grp hp-ground-note">
+    <div class="hp-ctl-hint">この見本は背景も固定しています（<code>${set.map(esc).join(', ')}</code>）。
+    背景は「絵のレシピ」と記事の画像が決めるため、外すことをおすすめします。</div>
+    <button class="act-btn" onclick="_hpClearGround()">背景の指定を外す</button>
+  </div>`;
+}
+
+function _hpClearGround() {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  for (const k of HP_GROUND_KEYS) delete spec[k];
+  _hpWriteSpec(spec);
+  showToast('背景の指定を外しました。保存すると確定します。', 'success');
+}
 
 function _renderStyleForm() {
   const host = document.getElementById('hp-style-form');
@@ -2799,21 +2994,29 @@ function _renderStyleForm() {
 
   // `strokes` gets its own quick control below (`_hpStrokesCoreCtl`) for the common single-layer
   // case; the generic array editor would just duplicate it under the same label.
-  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !HP_CORE_KEYS.includes(k) && k !== 'strokes');
+  const hidden = (k) => HP_CORE_KEYS.includes(k) || HP_GROUND_KEYS.includes(k)
+    || HP_QUICK_KEYS.includes(k) || k === 'strokes' || k === 'glow';
+  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !hidden(k));
   const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
   const groups = _hpVocab.groups
     .map((g) => [g, set.filter((k) => _hpVocab.schema[k].group === g.id)])
     .filter(([, keys]) => keys.length);
 
   const addable = Object.entries(_hpVocab.schema)
-    .filter(([k]) => !(k in spec) && !HP_CORE_KEYS.includes(k))
+    .filter(([k]) => !(k in spec) && !hidden(k))
     .map(([k, d]) => `<option value="${k}">${esc(d.label || k)}（${k}）</option>`).join('');
 
   const core = HP_CORE_KEYS.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null)).join('')
     + _hpStrokesCoreCtl(spec.strokes);
 
+  const quick = HP_QUICK_KEYS.filter((k) => _hpVocab.schema[k])
+    .map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null, !(k in spec))).join('')
+    + _hpGlowCoreCtl(spec.glow);
+
   host.innerHTML = `
     <div class="hp-grp"><div class="hp-grp-hd">基本の色</div>${core}</div>
+    <div class="hp-grp"><div class="hp-grp-hd">よく使う設定</div>${quick}</div>
+    ${_hpGroundNotice(spec)}
     ${unknown.length ? `<div class="hp-ctl-json">⚠ レンダラーが読まないキー: <code>${unknown.map(esc).join(', ')}</code> — 描画時に無視されます</div>` : ''}
     ${groups.map(([g, keys]) => `
       <div class="hp-grp"><div class="hp-grp-hd">${esc(g.label)}</div>
