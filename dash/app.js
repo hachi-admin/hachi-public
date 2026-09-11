@@ -2924,12 +2924,15 @@ function _hpAddStop(path) {
   _hpWriteSpec(spec);
 }
 
-const _hpTypeOf = (v) => {
+// A declaration rather than an arrow const so scripts/smoke-render.js can extract it: that
+// extractor brace-matches functions but reads a const only to the first line ending in `;`, which
+// truncates any multi-statement arrow mid-body.
+function _hpTypeOf(v) {
   if (typeof v === 'boolean') return 'bool';
   if (typeof v === 'number') return 'number';
   if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) return 'colour';
   return 'text';
-};
+}
 
 // A gradient/metal override authored as a stop list — `[["0%","#FFFBE8"],["100%","#C8860B"]]`, the
 // shape `stopsOf`/`addGrad` in hero-title.js resolve directly — reads much better as offset+colour
@@ -3101,7 +3104,11 @@ function _hpControl(key, desc, value, unset = false) {
        Displaying white for that was a lie the control told about the spec it was showing: the
        swatch read #FFFFFF while the renderer saw null and did something else entirely.
        So null is said out loud, and stays null until the swatch is actually used. */
-    const isNull = value === null;
+    /* Absent is not the same as null, and only one of them is a decision.
+       `null` means the preset says "no such treatment" — a `ground: null` is what makes a photo
+       template show the photograph. A よく使う設定 row the preset simply has not set arrives here
+       as null too, and saying 「この扱いをしない」 about it would report a choice nobody made. */
+    const isNull = !unset && value === null;
     const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
     body = `<div class="hp-colour${isNull ? ' is-null' : ''}">`
       + `<input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`

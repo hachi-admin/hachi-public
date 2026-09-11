@@ -65,13 +65,32 @@ const sandbox = {
   _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
   _hpSetLine:()=>{}, _hpOpenLineRow:()=>{}, _hpAddLine:()=>{}, _hpRemoveLine:()=>{}, _hpMoveLine:()=>{}, _hpOpenLine:null,
   _hpTapRegion:()=>{}, _hpRegions:null, _hpSetGlow:()=>{}, _hpSetSample:()=>{}, _hpSampleIdx:1,
-  HP_SAMPLE_TITLES:[['短い','AIの道徳'],['標準','なぜ赤字でも株価が上がるのか'],['長い','映画『インサイド・ヘッド２』が教えてくれる、私たちの「不安」との付き合い方']],
+  /* Mutable editor state. These are `let` bindings in app.js, so the const extractor cannot take
+     them; supplied here as parameters, which is also what lets a check pick the variant or the
+     selected run it wants to exercise. */
+  _hpRunSel:null, _hpVariant:'standard', _hpVariants:{ short:[], standard:[], long:[] },
+  _hpSetGlowSpec:()=>{}, _hpClearGround:()=>{}, _hpSetPath:()=>{}, _hpRemovePath:()=>{},
+  _hpAddObjField:()=>{}, _hpAddArrayItem:()=>{}, _hpAddStop:()=>{}, _hpSwitchVariant:()=>{},
+  _hpApplyRunPalette:()=>{}, _hpTapRunChar:()=>{}, _hpSetStrokeColor:()=>{}, _hpSetStrokeEm:()=>{},
+  _hpShowAddHint:()=>{}, showToast:()=>{},
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
 
 // Pull out just the functions under test plus their module-level dependencies.
-const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB','_hpNum'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs'];
+/* A name the tested functions read has to be listed, or it throws `X is not defined` rather than
+   evaluating to undefined — so the check fails for a reason unrelated to what it guards. That is
+   how this suite went quietly red: the editor grew helpers, these lists did not, and thirteen
+   checks reported a missing name instead of the behaviour they were written to catch. */
+const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB',
+  '_hpNum','_hpIsStopList',
+  'HP_CORE_KEYS','HP_GROUND_KEYS','HP_QUICK_KEYS','HP_DEAD_WITH_LINES','HP_VARIANT_LABEL',
+  'HP_ROLE_LABELS','HP_SPLIT_LABELS','HP_SPLIT_SWATCH','HP_LINE_BLANK_ENUMS',
+  'HP_VARIANT_KEYS','HP_VARIANT_LABELS'];
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs',
+  // Helpers the editor renderers call, listed for the same reason as the consts above.
+  '_hpTypeOf','_hpStrokesCoreCtl','_hpGlowCoreCtl','_hpGroundNotice','_hpPathAttr','_hpUnionCtl','_hpVariantMatches',
+  '_hpObjectFields','_hpObjectAddRow','_hpArrayCtl','_hpStopListCtl',
+  '_hpRunEditor','_hpRunFlatText','_hpRunExistingRange'];
 
 let code = '';
 let missing = 0;
@@ -305,14 +324,29 @@ run('_syncHpSummaries on a brand new preset', () => {
     });
 
     run('a null colour says null, rather than showing white', () => {
-      /* `null` is a value, not an absence: `ground: null` is how a photo template says "show the
-         photograph, do not paint over it". Rendering a white swatch for that made the control
-         disagree with the spec it was displaying. */
-      const h = formHtml('{"ground":null}');
+      /* `null` is a value, not an absence — a template says "no such treatment" with it, and
+         rendering a white swatch made the control disagree with the spec it was showing.
+
+         Asserted on `text`, not on `ground`. Ground is no longer editable here at all: a サムネ
+         タイトル preset describes the lettering, and pinning a background would override the
+         article's own picture everywhere the preset is applied (HP_GROUND_KEYS). Written against
+         ground, this check kept passing for the wrong reason — `text` is unset in those specs, so
+         its own always-present control supplied the `is-null` the assertion was looking for. */
+      const h = formHtml('{"text":null}');
       if (!/is-null/.test(h)) throw new Error('a null colour rendered as an ordinary one');
       if (!/value="null"/.test(h)) throw new Error('the field did not read null');
-      const white = formHtml('{"ground":"#FFFFFF"}');
+      const white = formHtml('{"text":"#FFFFFF"}');
       if (/is-null/.test(white)) throw new Error('an actual white was mistaken for null');
+      return 'ok';
+    });
+
+    run('the background is not this catalogue to set', () => {
+      // Removing the controls is the point; leaving the values readable is the compromise. A preset
+      // that still pins a ground has to say so and offer to drop it, or the setting becomes
+      // invisible *and* still in force — the worst of both.
+      const h = formHtml(JSON.stringify({ face:'sans', ground:'#101014', usesPhoto:true }));
+      if (/_hpSetKey\('ground'/.test(h)) throw new Error('the background is still editable here');
+      if (!/_hpClearGround/.test(h)) throw new Error('a preset pinning a background is not told so');
       return 'ok';
     });
 
@@ -453,18 +487,28 @@ run('_syncHpSummaries on a brand new preset', () => {
     return 'ok';
   });
 
-  run('sample headlines cover a real range of lengths', () => {
+  /* The three authored lengths.
+   *
+   * These were once a fixed list of demo titles (HP_SAMPLE_TITLES); they are now three sets of
+   * lines authored per preset, and the tab shows each one's character count. The count is the part
+   * worth guarding: it is how an operator sees that 短い and 長い are still empty, which is exactly
+   * the state seeded presets were shipped in and nobody could see. */
+  run('sample tabs count each variant, including the empty ones', () => {
     domForHits();
-    const a = make(...Object.values(sandbox));
+    const variants = { short: [], standard: [{ text:'なぜ赤字でも' }, { text:'株価が上がるのか' }], long: [] };
+    const a = make(...Object.keys(sandbox).map((k) =>
+      (k === '_hpVariants' ? variants : (k === '_hpVariant' ? 'short' : sandbox[k]))));
     a._renderSampleTabs();
     const h = _hitHost.innerHTML || '';
     const n = (h.match(/class="hp-sample/g) || []).length;
-    if (n !== 3) throw new Error(`expected 3 samples, got ${n}`);
-    // The point of the samples is the spread; three similar lengths would test nothing.
-    const lens = sandbox.HP_SAMPLE_TITLES.map(([, t]) => t.length);
-    if (Math.max(...lens) < Math.min(...lens) * 3) throw new Error(`lengths too similar: ${lens.join(', ')}`);
+    if (n !== 3) throw new Error(`expected 3 variants, got ${n}`);
+    for (const label of ['短い', '標準', '長い']) {
+      if (!h.includes(label)) throw new Error(`no tab for ${label}`);
+    }
+    if (!/標準<span>14字/.test(h)) throw new Error(`the authored variant did not report its length: ${h}`);
+    if ((h.match(/<span>0字/g) || []).length !== 2) throw new Error('an empty variant did not say it is empty');
     if (/undefined|NaN/.test(h)) throw new Error('leaked a raw value');
-    return lens.join('/') + ' chars';
+    return 'ok';
   });
 }
 

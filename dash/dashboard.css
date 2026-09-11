@@ -26,7 +26,15 @@ body { display:flex; flex-direction:column; height:100% }
 /* ══════════════════════════════════════════════════════════════
    PAGE AREA
 ══════════════════════════════════════════════════════════════ */
-.page-area{flex:1;overflow-y:auto;min-height:0}
+/* `overflow-y:auto` alone leaves the x axis at `visible`, which a scroll container resolves to
+   `auto` — so one child a few pixels too wide made the whole page pannable sideways, and a thumb
+   swiping down at any angle got horizontal movement competing with the scroll. That reads as
+   stuttering rather than as panning, which is why it was reported as scrolling not being smooth
+   rather than as a layout fault.
+
+   Individual causes still get fixed where they are (grid tracks that will not shrink are the usual
+   one — see .acard-map); this stops the next one from costing the whole page its scrolling. */
+.page-area{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
 .page{display:none;padding:16px var(--page-pad);max-width:1200px;margin:0 auto}
 .page.active{display:block;animation:riseIn .22s cubic-bezier(.22,1,.36,1) backwards}
 .page-hd{margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -329,6 +337,11 @@ header{margin:12px;padding:10px 16px}
   border-radius:12px;padding:14px 12px;cursor:pointer;
   transition:box-shadow .2s,transform .15s;
   position:relative;display:flex;flex-direction:column;gap:7px;
+  /* The thumbnail bleeds past the padding with a negative margin (see .acard-thumb). At two tiles
+     across that stayed well inside the page gutter; full-width it reached the viewport edge and
+     spilled. Clipping here keeps the bleed to the card — the card's own box-shadow is unaffected,
+     since an element's shadow is not clipped by its own overflow. */
+  overflow:hidden;
 }
 .acard:hover{box-shadow:var(--sh-lg);transform:translateY(-2px)}
 .acard:active{box-shadow:var(--sh-press);transform:none}
@@ -782,7 +795,7 @@ body:has(.mob-more-sheet.open) .page-area{
 /* One column on a phone. These tiles lead with a 1280×670 thumbnail now, and two of them across a
    390px screen left the headline rendered at a size nothing could be judged at — which is the one
    thing the picture is here for. Wider screens still fit two or three. */
-.cat-tile-grid{display:grid;grid-template-columns:1fr;gap:20px}
+.cat-tile-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
 @media(min-width:560px){.cat-tile-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
 .acard .acard-name{overflow-wrap:anywhere}
@@ -1268,7 +1281,7 @@ body:has(.mob-more-sheet.open) .page-area{
   /* One up, not two. The tile leads with a 1280×670 thumbnail whose whole job is to show whether a
      headline survives its treatment; at two across a phone the type was too small to judge, which
      made the picture decorative. */
-  .cat-tile-grid{grid-template-columns:1fr;gap:16px}
+  .cat-tile-grid{grid-template-columns:minmax(0,1fr);gap:16px}
   .cat-tile-icon{font-size:22px}
   /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
   .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
@@ -2301,7 +2314,11 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-thumb.is-empty{opacity:.4}
 /* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width
    tile; the button takes the last slot on its own. */
-.acard-map{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 8px;align-items:end;margin:2px 0 4px}
+/* minmax(0,1fr), not 1fr. A grid track's automatic minimum is its content's min-content width, and
+   a <select> reports the width of its longest option — 「自動（記事ごとに選ぶ）」 — so the columns
+   grew past the card, past the page, and gave the whole list a horizontal scroll that fought every
+   vertical swipe. `width:100%` on the select cannot help: the track was already too wide. */
+.acard-map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;align-items:end;margin:2px 0 4px}
 .acard-mapf{display:flex;flex-direction:column;gap:2px;min-width:0}
 .acard-mapf>span{font-size:9px;color:var(--m2);font-weight:600}
 .acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
