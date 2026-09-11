@@ -1435,11 +1435,11 @@ async function _autoSampleQueue() {
   const pending = (CATEGORIES || []).filter((c) =>
     c.status === 'active' && !c.visual?.sampleAt && !_autoSampleTried.has(c.id));
   if (!pending.length) return;
+  /* No announcement. It ran once per visit and sat over the cards, and the spend it was warning
+     about is now bounded in a way a toast cannot improve on: each category is generated exactly
+     once and never again (the server returns the stored sample unless `force` is sent), so the
+     warning fires repeatedly for a cost that only happens the first time. */
   _autoSampleRunning = true;
-  /* Said out loud. This is the one thing on this page that spends money without being pressed, and
-     an operator who opens the categories tab and is quietly billed for eight pro-tier images has
-     been given no chance to close the tab first. */
-  showToast(`承認済み ${pending.length} 件の絵を順に作ります（1件ずつ・pro課金）。`, 'info');
   try {
     for (const c of pending) {
       _autoSampleTried.add(c.id);
@@ -3113,24 +3113,24 @@ function _hpControl(key, desc, value, unset = false) {
     body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
       desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   } else if (desc.type === 'colour') {
-    /* `null` is a value here, not an absence. A template says "no such treatment" with it — a
-       `ground: null` is what makes a photo template show the photograph rather than paint over it.
-       Displaying white for that was a lie the control told about the spec it was showing: the
-       swatch read #FFFFFF while the renderer saw null and did something else entirely.
-       So null is said out loud, and stays null until the swatch is actually used. */
-    /* Absent is not the same as null, and only one of them is a decision.
-       `null` means the preset says "no such treatment" — a `ground: null` is what makes a photo
-       template show the photograph. A よく使う設定 row the preset simply has not set arrives here
-       as null too, and saying 「この扱いをしない」 about it would report a choice nobody made. */
-    const isNull = !unset && value === null;
+    /* No null vocabulary here any more.
+     *
+     * It existed for one key: `ground: null` is how a photo template says "show the photograph,
+     * do not paint over it", and rendering white for that was a lie about the spec. `ground` left
+     * this editor with the rest of the background settings (HP_GROUND_KEYS), and with it went the
+     * only colour whose null was a decision worth stating. What remained was every *unset* colour
+     * announcing 「null — この扱いをしない」 — a choice nobody made, printed under half the rows.
+     *
+     * A colour the preset does not set now reads as 未設定 like any other unset control, and the
+     * stored value is left alone until the swatch is used. Nothing writes null from here; `×`
+     * removes the key, which is what "do not set this" means for the keys that are left. */
+    const blank = unset || value === null || value === undefined;
     const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
-    body = `<div class="hp-colour${isNull ? ' is-null' : ''}">`
+    body = `<div class="hp-colour">`
       + `<input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
-      + `<input class="form-input hp-mono" type="text" value="${esc(isNull ? 'null' : v)}"`
-      + ` onchange="_hpSetKey('${key}', this.value.trim().toLowerCase() === 'null' ? null : this.value.toUpperCase())">`
-      + (isNull ? '' : `<button class="act-btn" title="この扱いをしない（null）" onclick="_hpSetKey('${key}',null)">なし</button>`)
-      + '</div>'
-      + (isNull ? '<div class="hp-ctl-hint">null — この扱いをしない（色を選ぶと設定されます）</div>' : '');
+      + `<input class="form-input hp-mono" type="text" value="${esc(blank ? '' : v)}" placeholder="未設定"`
+      + ` onchange="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + '</div>';
   } else if (desc.type === 'range') {
     const v = _hpNum(value, desc);
     // The number is shown as well as the slider: a slider alone cannot be set to an exact value,
@@ -3275,7 +3275,9 @@ function _renderStyleForm() {
     .filter(([k]) => !(k in spec) && !hidden(k))
     .map(([k, d]) => `<option value="${k}">${esc(d.label || k)}（${k}）</option>`).join('');
 
-  const core = HP_CORE_KEYS.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null)).join('')
+  // Always on screen, but a key the preset does not carry still has to say so — otherwise 文字色
+  // reads as a decision this preset made when the template is in fact choosing it.
+  const core = HP_CORE_KEYS.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null, !(k in spec))).join('')
     + _hpStrokesCoreCtl(spec.strokes);
 
   const quick = HP_QUICK_KEYS.filter((k) => _hpVocab.schema[k])

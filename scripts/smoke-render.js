@@ -323,20 +323,23 @@ run('_syncHpSummaries on a brand new preset', () => {
       return 'flagged';
     });
 
-    run('a null colour says null, rather than showing white', () => {
-      /* `null` is a value, not an absence — a template says "no such treatment" with it, and
-         rendering a white swatch made the control disagree with the spec it was showing.
+    run('an unset colour reads as unset, not as a decision', () => {
+      /* This check used to assert the opposite — that a null colour announced itself as null. That
+         was right while `ground` was editable here, because `ground: null` is how a photo template
+         says "show the photograph, do not paint over it". Ground has since left this editor with
+         the rest of the background settings, and what the null vocabulary actually produced
+         afterwards was every unset colour claiming 「この扱いをしない」: a choice nobody made.
 
-         Asserted on `text`, not on `ground`. Ground is no longer editable here at all: a サムネ
-         タイトル preset describes the lettering, and pinning a background would override the
-         article's own picture everywhere the preset is applied (HP_GROUND_KEYS). Written against
-         ground, this check kept passing for the wrong reason — `text` is unset in those specs, so
-         its own always-present control supplied the `is-null` the assertion was looking for. */
-      const h = formHtml('{"text":null}');
-      if (!/is-null/.test(h)) throw new Error('a null colour rendered as an ordinary one');
-      if (!/value="null"/.test(h)) throw new Error('the field did not read null');
-      const white = formHtml('{"text":"#FFFFFF"}');
-      if (/is-null/.test(white)) throw new Error('an actual white was mistaken for null');
+         So the assertion is now that an unset colour is blank and silent, and a set one shows its
+         value. Both directions matter — a blank field that still reported #FFFFFF would be the
+         original lie with the wording removed. */
+      const h = formHtml('{"face":"sans"}');
+      if (/この扱いをしない|>null</.test(h)) throw new Error('an unset colour still talks about null');
+      if (!/placeholder="未設定"/.test(h)) throw new Error('an unset colour did not read as unset');
+      if (/class="form-input hp-mono" type="text" value="#/.test(h)) throw new Error('an unset colour showed a concrete value');
+
+      const set = formHtml('{"text":"#8A2846"}');
+      if (!/value="#8A2846"/.test(set)) throw new Error('a set colour lost its value');
       return 'ok';
     });
 
