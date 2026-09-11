@@ -2332,6 +2332,17 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-grp-fold>summary .hp-grp-hd{margin:0}
 .hp-grp-n{font-size:9px;color:var(--m2);background:color-mix(in srgb,var(--m) 12%,transparent);border-radius:99px;padding:1px 6px}
 
+/* Highlight presets — how the claim inside a headline is marked. Swatch-first, because the choice
+   is "which colour marker", and reading `decorationColor` off a key-value form is not that. */
+.hp-hl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.hp-hl-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:5px 9px}
+.hp-hl-sw{width:11px;height:11px;border-radius:3px;flex:none;box-shadow:var(--sh-sm)}
+.hp-hl-tune{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.hp-hl-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--m)}
+.hp-hl-row>span{min-width:62px;flex:none}
+.hp-hl-row input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+.hp-hl-row input[type=color]{width:34px;height:30px;border:none;background:none;padding:0;border-radius:8px}
+
 /* The four most-changed category settings, above the fold and saving on change. */
 .cat-quickbar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
 .cat-quickf{display:flex;flex-direction:column;gap:3px;min-width:0}

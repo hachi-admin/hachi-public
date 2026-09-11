@@ -3192,6 +3192,73 @@ const HP_QUICK_KEYS = [
   'preferLines', 'maxLines', 'accent', 'metal', 'emphasisScale',
 ];
 
+/* How the claim inside the headline is marked.
+ *
+ * `highlight` is typed as a bare shape, so it landed in the generic key-value editor — which is
+ * the difference between "pick the orange marker" and knowing that `decorationColor` is a field.
+ * In practice nobody reached it, and every thumbnail kept whatever accent the template already
+ * had. The presets come from the server (style-vocabulary.js) so the blocks the dashboard writes
+ * are the same ones the renderer documents.
+ *
+ * Picking replaces the block outright rather than merging into it: two half-applied presets make a
+ * look neither of them describes, and the colour row below is there for tuning one afterwards. */
+function _hpHighlightCtl(value) {
+  const presets = _hpVocab?.highlights || {};
+  const hl = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">強調句の見せ方</span>'
+    + '<code class="hp-ctl-key">highlight</code>'
+    + (hl ? '<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey(\'highlight\')">×</button>' : '')
+    + '</div>';
+
+  // Which preset this is, if any — matched on the fields that distinguish them rather than on a
+  // stored name, so a block that was tuned afterwards still shows which one it started from.
+  const same = (a, b) => (a?.decoration ?? 'none') === (b?.decoration ?? 'none')
+    && (a?.decorationColor ?? '') === (b?.decorationColor ?? '')
+    && (a?.color ?? '') === (b?.color ?? '') && (a?.metal ?? '') === (b?.metal ?? '');
+  const current = hl ? (Object.entries(presets).find(([, p]) => same(hl, p.block))?.[0] ?? '') : '';
+
+  const chips = Object.entries(presets).map(([id, p]) =>
+    `<button class="act-btn hp-hl-chip${id === current ? ' on' : ''}" onclick="_hpSetHighlight('${esc(id)}')">
+       <span class="hp-hl-sw" style="background:${esc(p.block?.decorationColor || p.block?.color || '#9CA3AF')}"></span>${esc(p.label)}
+     </button>`).join('');
+
+  const tune = hl ? `
+    <div class="hp-hl-tune">
+      ${hl.decoration && hl.decoration !== 'none' ? `<label class="hp-hl-row"><span>マーカー色</span>
+        <input type="color" value="${/^#[0-9a-fA-F]{6}$/.test(hl.decorationColor) ? hl.decorationColor : '#E2600B'}"
+          oninput="_hpTuneHighlight({decorationColor:this.value.toUpperCase()})"></label>` : ''}
+      ${hl.metal ? '' : `<label class="hp-hl-row"><span>文字色</span>
+        <input type="color" value="${/^#[0-9a-fA-F]{6}$/.test(hl.color) ? hl.color : '#FFFFFF'}"
+          oninput="_hpTuneHighlight({color:this.value.toUpperCase()})"></label>`}
+      <label class="hp-hl-row"><span>大きさ</span>
+        <input type="range" min="1" max="2.4" step="0.02" value="${Number.isFinite(hl.scale) ? hl.scale : 1.42}"
+          oninput="this.nextElementSibling.value=this.value" onchange="_hpTuneHighlight({scale:Number(this.value)})">
+        <input class="form-input hp-num" type="number" min="1" max="2.4" step="0.02"
+          value="${Number.isFinite(hl.scale) ? hl.scale : 1.42}" onchange="_hpTuneHighlight({scale:Number(this.value)})"></label>
+    </div>` : '';
+
+  const hint = '<div class="hp-ctl-hint">見本の「かぎかっこ」の中が強調句として描かれます。</div>';
+  return `<div class="hp-ctl${hl ? '' : ' hp-ctl-unset'}">${head}<div class="hp-hl-chips">${chips}</div>${tune}${hint}</div>`;
+}
+
+function _hpSetHighlight(id) {
+  const block = _hpVocab?.highlights?.[id]?.block;
+  if (!block) return;
+  const spec = _hpSpec();
+  if (spec === null) return;
+  spec.highlight = { ...block };
+  _hpWriteSpec(spec);
+}
+
+function _hpTuneHighlight(patch) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const cur = (spec.highlight && typeof spec.highlight === 'object' && !Array.isArray(spec.highlight))
+    ? spec.highlight : {};
+  spec.highlight = { ...cur, ...patch };
+  _hpWriteSpec(spec);
+}
+
 /* Glow gets a written control rather than a place in HP_QUICK_KEYS, for the same reason the
    per-line editor gives it one: the vocabulary types it as a bare shape, so the generic object
    editor would offer an empty "add a field" form — technically complete, and useless as the
@@ -3264,7 +3331,7 @@ function _renderStyleForm() {
   // `strokes` gets its own quick control below (`_hpStrokesCoreCtl`) for the common single-layer
   // case; the generic array editor would just duplicate it under the same label.
   const hidden = (k) => HP_CORE_KEYS.includes(k) || HP_GROUND_KEYS.includes(k)
-    || HP_QUICK_KEYS.includes(k) || k === 'strokes' || k === 'glow';
+    || HP_QUICK_KEYS.includes(k) || k === 'strokes' || k === 'glow' || k === 'highlight';
   const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !hidden(k));
   const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
   const groups = _hpVocab.groups
@@ -3282,6 +3349,7 @@ function _renderStyleForm() {
 
   const quick = HP_QUICK_KEYS.filter((k) => _hpVocab.schema[k])
     .map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null, !(k in spec))).join('')
+    + _hpHighlightCtl(spec.highlight)
     + _hpGlowCoreCtl(spec.glow);
 
   host.innerHTML = `

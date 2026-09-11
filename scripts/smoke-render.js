@@ -70,6 +70,7 @@ const sandbox = {
      selected run it wants to exercise. */
   _hpRunSel:null, _hpVariant:'standard', _hpVariants:{ short:[], standard:[], long:[] },
   _hpSetGlowSpec:()=>{}, _hpClearGround:()=>{}, _hpSetPath:()=>{}, _hpRemovePath:()=>{},
+  _hpSetHighlight:()=>{}, _hpTuneHighlight:()=>{},
   _hpAddObjField:()=>{}, _hpAddArrayItem:()=>{}, _hpAddStop:()=>{}, _hpSwitchVariant:()=>{},
   _hpApplyRunPalette:()=>{}, _hpTapRunChar:()=>{}, _hpSetStrokeColor:()=>{}, _hpSetStrokeEm:()=>{},
   _hpShowAddHint:()=>{}, showToast:()=>{},
@@ -88,7 +89,7 @@ const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip
   'HP_VARIANT_KEYS','HP_VARIANT_LABELS'];
 const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs',
   // Helpers the editor renderers call, listed for the same reason as the consts above.
-  '_hpTypeOf','_hpStrokesCoreCtl','_hpGlowCoreCtl','_hpGroundNotice','_hpPathAttr','_hpUnionCtl','_hpVariantMatches',
+  '_hpTypeOf','_hpStrokesCoreCtl','_hpGlowCoreCtl','_hpGroundNotice','_hpHighlightCtl','_hpPathAttr','_hpUnionCtl','_hpVariantMatches',
   '_hpObjectFields','_hpObjectAddRow','_hpArrayCtl','_hpStopListCtl',
   '_hpRunEditor','_hpRunFlatText','_hpRunExistingRange'];
 
@@ -340,6 +341,33 @@ run('_syncHpSummaries on a brand new preset', () => {
 
       const set = formHtml('{"text":"#8A2846"}');
       if (!/value="#8A2846"/.test(set)) throw new Error('a set colour lost its value');
+      return 'ok';
+    });
+
+    run('the highlight is picked, not typed', () => {
+      /* `highlight` is a bare shape, so the generic branch offered a key-value form — the
+         difference between "pick the orange marker" and knowing that `decorationColor` exists.
+         Nobody reached it, so every thumbnail kept whatever accent its template already had. The
+         presets come from the server; with none loaded the control must still render. */
+      const api3 = make(...Object.keys(sandbox).map((k) => (k === '_hpVocab'
+        ? { ...vocab, highlights: { marker_orange: { label:'オレンジのマーカー',
+            block:{ scale:1.42, color:'#FFFFFF', decoration:'marker', decorationColor:'#E2600B' } } } }
+        : sandbox[k])));
+      domFor(JSON.stringify({ highlight: { scale:1.42, color:'#FFFFFF', decoration:'marker', decorationColor:'#E2600B' } }));
+      api3._renderStyleForm();
+      const h = _formHost.innerHTML || '';
+      if (/下の JSON/.test(h)) throw new Error('highlight fell through to the JSON');
+      if (!/_hpSetHighlight\('marker_orange'\)/.test(h)) throw new Error('no way to pick a preset');
+      if (!/hp-hl-chip on/.test(h)) throw new Error('the preset in force is not shown as chosen');
+      if (!/_hpTuneHighlight\(\{decorationColor/.test(h)) throw new Error('no way to tune the marker colour');
+      if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error('leaked a raw value');
+      return 'ok';
+    });
+
+    run('the highlight control survives a vocabulary that has not loaded', () => {
+      // _hpVocab arrives asynchronously and older servers do not send `highlights` at all.
+      const h = formHtml(JSON.stringify({ highlight: { decoration:'underline' } }));
+      if (/undefined|\[object Object\]/.test(h)) throw new Error('leaked with no presets available');
       return 'ok';
     });
 
