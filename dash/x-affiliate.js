@@ -10,7 +10,7 @@
   if (pendingCode) history.replaceState({}, '', location.pathname + location.search + '#xentry');
   let xJwt = '';
   let browserProof = '';
-  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, settings: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, settings: null, importResult: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -58,6 +58,7 @@
     state.linkStatusPending = false;
     state.linkFinalizePending = false;
     state.settings = null;
+    state.importResult = null;
     retryState = new WeakMap();
     pendingWrites = new WeakSet();
     xJwt = '';
@@ -65,7 +66,7 @@
     sessionStorage.removeItem(VERIFIER_KEY);
     sessionStorage.removeItem(PROOF_KEY);
     document.querySelectorAll('#page-x-affiliate input[type="password"]').forEach(input => { input.value = ''; });
-    ['#x-accounts', '#x-members', '#x-tags', '#x-link', '#x-settings'].forEach(selector => {
+    ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-link', '#x-settings'].forEach(selector => {
       document.querySelector(selector)?.replaceChildren();
     });
     const root = document.getElementById('page-x-affiliate');
@@ -103,13 +104,14 @@
     document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
     root.classList.add('active'); root.hidden = false;
     root.replaceChildren();
-    root.append(el('div', { className: 'page-hd' }, [el('div', {}, [el('div', { className: 'page-title', text: 'X投稿BOT 管理' }), el('div', { className: 'page-sub', text: 'アカウント・メンバー・タグ・投稿設定' })]) ]));
-    if (!FEATURE_ENABLED) { root.append(card('利用停止中', el('p', { className: 'x-muted', text: 'X投稿BOT管理APIは現在無効です。商品登録、Skill、生成、レビュー、通知送信も未実装です。' }))); return; }
+    root.append(el('div', { className: 'page-hd' }, [el('div', {}, [el('div', { className: 'page-title', text: 'X投稿BOT 管理' }), el('div', { className: 'page-sub', text: 'アカウント・商品・メンバー・タグ・投稿設定' })]) ]));
+    if (!FEATURE_ENABLED) { root.append(card('利用停止中', el('p', { className: 'x-muted', text: 'X投稿BOT管理APIは現在無効です。商品登録はローカル検証段階で、実商品取得、Skill、生成、レビュー、通知送信は有効化されていません。' }))); return; }
     if (!xJwt) { root.append(card('ログイン', el('div', {}, [el('p', { className: 'x-muted', text: 'GitHubでX BOT管理へログインしてください。' }), button('GitHubでログイン', login)]))); return; }
     const toolbar = el('div', { className: 'x-toolbar' }, [button('再読み込み', load), button('サインアウト', logout)]); root.append(toolbar);
     root.append(card('アカウント', el('div', { id: 'x-accounts' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('メンバー', el('div', { id: 'x-members' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
+    root.append(card('商品（実取得は未接続）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
     root.append(card('プロフィール・テンプレート・通知先', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     renderLinkCard();
@@ -122,6 +124,7 @@
     box.replaceChildren();
     (data.accounts || []).forEach(a => {
       const b = button(`${a.label} (${a.accountId})`, () => {
+        if (state.accountId !== a.accountId) state.importResult = null;
         state.accountId = a.accountId;
         loadSettings();
       });
@@ -299,6 +302,139 @@
       }),
     ]);
     box.append(f);
+  }
+  function importResult(result, accountId, generation) {
+    const list = el('div', { className: 'x-import-results' });
+    (result.rows || []).forEach(row => list.append(el('div', { className: 'x-row' }, [
+      el('span', { text: `${row.row}行目 · ${row.status}` }),
+      el('span', { className: 'x-muted', text: row.productId || row.errorCode || '結果なし' }),
+    ])));
+    const retryable = (result.rows || []).filter(row => row.status === 'failed' || row.status === 'needs_completion').map(row => row.row);
+    if (retryable.length) list.append(button('失敗・不足行を再試行', async () => {
+      if (!isCurrentScope(accountId, generation)) return;
+      try {
+        await api(`/api/x-affiliate/imports/${encodeURIComponent(result.importId)}/retry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rowIds: retryable, expectedRevision: result.revision }) });
+        const refreshed = await api(`/api/x-affiliate/imports/${encodeURIComponent(result.importId)}`);
+        if (!isCurrentScope(accountId, generation)) return;
+        state.importResult = { accountId, result: refreshed };
+        await loadProducts(accountId, generation);
+      } catch (error) {
+        if (isCurrentScope(accountId, generation)) message(list, error.message + (error.code === 409 ? ' 最新の受付結果を再確認してください。' : ''), 'error');
+      }
+    }));
+    return list;
+  }
+  function renderProducts(data, accountId, generation) {
+    const box = document.getElementById('x-products');
+    if (!box || !isCurrentScope(accountId, generation)) return;
+    box.replaceChildren();
+    const importForm = el('form', { className: 'x-form x-product-import' }, [
+      field('Amazon商品URL（1行1件・最大20件）', 'textarea', 'urls', null, 'https://www.amazon.co.jp/dp/...'),
+      button('商品URLを登録', async event => {
+        event.preventDefault();
+        if (!importForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(importForm)) return;
+        const urls = String(formData(importForm).urls || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+        if (!urls.length || urls.length > 20) { endWrite(importForm); message(importForm, 'URLは1〜20件で入力してください', 'error'); return; }
+        let clientRequestId;
+        try { clientRequestId = await keyFor(importForm, { operation: 'product-import', accountId, urls }); }
+        catch (error) { endWrite(importForm); if (isCurrentScope(accountId, generation)) message(importForm, error.message, 'error'); return; }
+        if (!importForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(importForm); return; }
+        try {
+          const result = await api('/api/x-affiliate/imports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, urls, clientRequestId }) });
+          clearRetry(importForm); endWrite(importForm);
+          if (!isCurrentScope(accountId, generation)) return;
+          importForm.querySelector('textarea').value = '';
+          state.importResult = { accountId, result };
+          await loadProducts(accountId, generation);
+        } catch (error) {
+          endWrite(importForm);
+          if (importForm.isConnected && isCurrentScope(accountId, generation)) message(importForm, error.message + (error.code === 409 ? ' 同じ受付IDの入力が変わっています。入力は保持しています。' : ''), 'error');
+        }
+      }),
+    ]);
+    box.append(importForm);
+    if (state.importResult?.accountId === accountId) box.append(importResult(state.importResult.result, accountId, generation));
+    const filter = el('form', { className: 'x-inline-form x-product-filter' }, [
+      field('商品名・ASIN検索', 'search', 'q'),
+      selectField('状態', 'status', '', ['', 'available', 'input_pending', 'paused', 'archived', 'invalid']),
+      button('絞り込む', async event => {
+        event.preventDefault();
+        if (!isCurrentScope(accountId, generation)) return;
+        const values = formData(filter);
+        await loadProducts(accountId, generation, values);
+      }),
+    ]);
+    box.append(filter);
+    const items = el('div', { className: 'x-product-list' });
+    (data.products || []).forEach(item => {
+      const product = item.product || {};
+      const accountProduct = item.accountProduct || {};
+      const missing = (item.readiness?.missing || []).join(', ') || 'なし';
+      const overridden = (product.overriddenFields || []).join(', ') || 'なし';
+      const article = el('article', { className: 'x-product' }, [
+        el('div', { className: 'x-product-head' }, [
+          el('strong', { text: product.name || '商品名未入力' }),
+          el('span', { className: 'x-muted', text: `${product.asin || 'ASIN不明'} · ${product.catalogStatus || '不明'} · 不足: ${missing} · 手修正: ${overridden}` }),
+        ]),
+      ]);
+      const edit = el('form', { className: 'x-form' }, [
+        field('商品名', 'text', 'name', product.name || ''),
+        field('特徴（1行1件）', 'textarea', 'features', (product.features || []).join('\n')),
+        field('運用メモ', 'text', 'operatorNote', accountProduct.operatorNote || ''),
+        checkbox('このaccountで利用', 'enabled', accountProduct.enabled !== false),
+        field('手修正の確認元・理由', 'text', 'sourceNote', null, '自分で確認した資料など'),
+        button('保存', async event => {
+          event.preventDefault();
+          if (!edit.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(edit)) return;
+          const values = formData(edit);
+          const features = String(values.features || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+          const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on' };
+          if ((values.name || '') !== (product.name || '')) fields.name = values.name || null;
+          if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
+          try {
+            await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: product.revision, expectedAccountRevision: accountProduct.revision, fields, sourceNote: values.sourceNote }) });
+            clearRetry(edit); endWrite(edit);
+            if (isCurrentScope(accountId, generation)) await loadProducts(accountId, generation);
+          } catch (error) {
+            endWrite(edit);
+            if (edit.isConnected && isCurrentScope(accountId, generation)) message(edit, error.message + (error.code === 409 ? ' 最新状態を再確認してください。入力は保持しています。' : ''), 'error');
+          }
+        }),
+      ]);
+      article.append(edit);
+      const actions = el('div', { className: 'x-inline-form' }, [
+        button('取得を再試行', async () => {
+          if (!isCurrentScope(accountId, generation)) return;
+          try { await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: product.revision }) }); await loadProducts(accountId, generation); }
+          catch (error) { if (isCurrentScope(accountId, generation)) message(article, error.body?.error?.code === 'PRODUCT_ADAPTER_NOT_CONFIGURED' ? '実商品取得adapterはまだ未接続です' : error.message, 'error'); }
+        }),
+      ]);
+      if (isAdmin() && ['archived', 'paused', 'invalid'].includes(product.catalogStatus)) actions.append(button('復元して再確認', async () => {
+        try { await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: product.revision, expectedAccountRevision: accountProduct.revision }) }); if (isCurrentScope(accountId, generation)) await loadProducts(accountId, generation); }
+        catch (error) { if (isCurrentScope(accountId, generation)) message(article, error.message, 'error'); }
+      }));
+      if (isAdmin() && product.catalogStatus !== 'archived') actions.append(button('アーカイブ', async () => {
+        if (!window.confirm('この商品をアーカイブしますか？')) return;
+        try { await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: product.revision, fields: { catalogStatus: 'archived' } }) }); if (isCurrentScope(accountId, generation)) await loadProducts(accountId, generation); }
+        catch (error) { if (isCurrentScope(accountId, generation)) message(article, error.message, 'error'); }
+      }));
+      article.append(actions); items.append(article);
+    });
+    if (!(data.products || []).length) items.append(el('p', { className: 'x-muted', text: '登録済み商品はありません' }));
+    box.append(items);
+  }
+  async function loadProducts(accountId, generation, filter = {}) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const query = new URLSearchParams({ accountId });
+    if (filter.q) query.set('q', filter.q);
+    if (filter.status) query.set('status', filter.status);
+    try {
+      const result = await api(`/api/x-affiliate/products?${query}`);
+      if (isCurrentScope(accountId, generation)) renderProducts(result, accountId, generation);
+    } catch (error) {
+      const box = document.getElementById('x-products');
+      if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
+    }
   }
   function isCurrentScope(accountId, generation) {
     return Boolean(xJwt) && state.accountId === accountId && state.generation === generation;
@@ -679,12 +815,14 @@
     const generation = ++state.generation;
     document.getElementById('x-settings')?.replaceChildren();
     document.getElementById('x-tags')?.replaceChildren();
+    document.getElementById('x-products')?.replaceChildren();
     try {
       const result = await api(`/api/x-affiliate/settings?accountId=${encodeURIComponent(accountId)}`);
       if (!isCurrentScope(accountId, generation)) return;
       renderSettings(result, accountId, generation);
       enforceMemberUI();
       await loadTags(accountId, generation);
+      await loadProducts(accountId, generation);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');

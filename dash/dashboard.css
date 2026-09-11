@@ -2142,4 +2142,11 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-status[data-kind="error"]{color:var(--error)}
 .x-status[data-kind="warn"]{color:var(--yel)}
 .x-toolbar{display:flex;gap:8px;justify-content:flex-end}
+.x-product-import .x-field:first-child{grid-column:1/-1}
+.x-product-filter{margin:16px 0}
+.x-product-list{display:grid;gap:12px;margin-top:14px}
+.x-product{padding:13px;background:var(--bg);border-radius:12px;box-shadow:var(--sh-press)}
+.x-product-head{display:flex;flex-direction:column;gap:3px}
+.x-product-head strong{font-size:13px;color:var(--txt)}
+.x-import-results{grid-column:1/-1}
 @media(max-width:600px){.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}}

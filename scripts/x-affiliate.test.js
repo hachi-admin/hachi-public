@@ -1033,6 +1033,96 @@ test('dirty settings keeps form revision and tag settingsRevision snapshot', asy
   assert.equal(settings.querySelector('[name="tone"]').value, 'local');
 });
 
+test('product import sends at most the entered rows, shows partial results, and retries only failed rows', async () => {
+  const requests = [];
+  const importResult = { importId: 'import-1', revision: 0, status: 'partial_success', rows: [
+    { row: 1, status: 'needs_completion', productId: 'JP-B012345678', errorCode: 'PRODUCT_ADAPTER_NOT_CONFIGURED' },
+    { row: 2, status: 'failed', productId: null, errorCode: 'URL_HOST_NOT_ALLOWED' },
+  ] };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.endsWith('/imports') && options.method === 'POST') return json(importResult);
+    if (path.endsWith('/imports/import-1/retry')) return json({ importId: 'import-1', acceptedRows: [1], skippedRows: [2] });
+    if (path.endsWith('/imports/import-1')) return json({ ...importResult, revision: 1 });
+    return json({});
+  };
+  const dom = page('#x_code=products-import', true, router, { verifier: 'products-import-v' });
+  await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-products .x-product-import');
+  assert.ok(form);
+  form.querySelector('textarea').value = 'https://www.amazon.co.jp/dp/B012345678\nhttps://evil.example/item';
+  form.querySelector('button').click(); await flush(); await flush();
+  const create = requests.find(request => request.path.endsWith('/imports') && request.options.method === 'POST');
+  const body = JSON.parse(create.options.body);
+  assert.equal(body.accountId, 'A');
+  assert.equal(body.urls.length, 2);
+  assert.match(body.clientRequestId, /^[a-f0-9]{64}$/);
+  assert.match(dom.window.document.querySelector('#x-products').textContent, /1行目 · needs_completion/);
+  const retry = [...dom.window.document.querySelectorAll('#x-products button')].find(button => button.textContent === '失敗・不足行を再試行');
+  assert.ok(retry); retry.click(); await flush();
+  const retryRequest = requests.find(request => request.path.endsWith('/imports/import-1/retry'));
+  assert.deepEqual(JSON.parse(retryRequest.options.body), { rowIds: [1, 2], expectedRevision: 0 });
+});
+
+test('product editor binds both revisions, sends only changed manual fields, and preserves input on conflict', async () => {
+  const requests = [];
+  const item = { product: { productId: 'JP-B012345678', asin: 'B012345678', name: '取得名', features: ['特徴A'], catalogStatus: 'available', revision: 4 }, accountProduct: { accountId: 'A', productId: 'JP-B012345678', enabled: true, operatorNote: '旧メモ', revision: 7 }, readiness: { missing: [], ready: true } };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [item] });
+    if (path.includes('/products/JP-B012345678') && options.method === 'PATCH') return json({ error: { message: 'conflict' } }, 409);
+    return json({});
+  };
+  const dom = page('#x_code=products-edit', true, router, { verifier: 'products-edit-v' });
+  await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-products .x-product form');
+  form.querySelector('[name="name"]').value = '手修正名';
+  form.querySelector('[name="features"]').value = '特徴A\n特徴B';
+  form.querySelector('[name="operatorNote"]').value = '新メモ';
+  form.querySelector('[name="sourceNote"]').value = '独自資料で確認';
+  form.querySelector('button').click(); await flush();
+  const patch = requests.find(request => request.path.includes('/products/JP-B012345678') && request.options.method === 'PATCH');
+  const body = JSON.parse(patch.options.body);
+  assert.equal(body.expectedRevision, 4);
+  assert.equal(body.expectedAccountRevision, 7);
+  assert.deepEqual(body.fields.features, ['特徴A', '特徴B']);
+  assert.equal(body.fields.name, '手修正名');
+  assert.equal(body.sourceNote, '独自資料で確認');
+  assert.equal(form.querySelector('[name="name"]').value, '手修正名');
+  assert.match(form.textContent, /最新状態を再確認/);
+  assert.equal([...dom.window.document.querySelectorAll('#x-products button')].some(button => button.textContent === 'アーカイブ'), false);
+});
+
+test('adapter-disabled refresh stays visibly unavailable and does not masquerade as success', async () => {
+  const item = { product: { productId: 'JP-B012345678', asin: 'B012345678', catalogStatus: 'input_pending', revision: 0 }, accountProduct: { accountId: 'A', productId: 'JP-B012345678', enabled: true, revision: 0 }, readiness: { missing: ['name', 'features', 'source'], ready: false } };
+  const router = (url, options = {}) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [item] });
+    if (path.endsWith('/refresh') && options.method === 'POST') return json({ error: { code: 'PRODUCT_ADAPTER_NOT_CONFIGURED', message: 'Request failed' } }, 503);
+    return json({});
+  };
+  const dom = page('#x_code=products-refresh', true, router, { verifier: 'products-refresh-v' });
+  await flush(); await selectFirstAccount(dom);
+  const refresh = [...dom.window.document.querySelectorAll('#x-products button')].find(button => button.textContent === '取得を再試行');
+  assert.ok(refresh); refresh.click(); await flush();
+  assert.match(dom.window.document.querySelector('#x-products').textContent, /実商品取得adapterはまだ未接続/);
+});
+
 test('full app history back from X redraws the same legacy page and reloads once', async () => {
   const pending = deferred(); const requests = [];
   const dom = fullAppPage('#tasks', (url, options = {}) => {
