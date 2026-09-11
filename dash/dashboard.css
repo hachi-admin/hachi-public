@@ -779,7 +779,11 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* Category tiles carry Japanese names, which need more width than the agent grid's 158px.
    Sized so two fit a phone and four-to-six a desktop, without a lone orphan on the last row. */
-.cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}
+/* One column on a phone. These tiles lead with a 1280×670 thumbnail now, and two of them across a
+   390px screen left the headline rendered at a size nothing could be judged at — which is the one
+   thing the picture is here for. Wider screens still fit two or three. */
+.cat-tile-grid{display:grid;grid-template-columns:1fr;gap:20px}
+@media(min-width:560px){.cat-tile-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
 .acard .acard-name{overflow-wrap:anywhere}
 /* Chips line up with the name above them; centring them under a left-aligned title read as an
@@ -1261,7 +1265,10 @@ body:has(.mob-more-sheet.open) .page-area{
   }
   .p-actions{margin:14px -16px -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-radius:0}
   .p-close{top:10px;right:10px;width:40px;height:40px}
-  .cat-tile-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  /* One up, not two. The tile leads with a 1280×670 thumbnail whose whole job is to show whether a
+     headline survives its treatment; at two across a phone the type was too small to judge, which
+     made the picture decorative. */
+  .cat-tile-grid{grid-template-columns:1fr;gap:16px}
   .cat-tile-icon{font-size:22px}
   /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
   .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
@@ -2292,12 +2299,13 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-thumb.is-sample{background:none}
 /* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
 .acard-thumb.is-empty{opacity:.4}
-/* Two columns of tiles on a phone leaves ~170px, so these wrap rather than crushing the select
-   down to an unreadable stub beside the button. */
-.acard-map{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 4px}
-.acard-map-sel{flex:1 1 100%;min-width:0;font-size:10.5px;padding:4px 6px}
-.acard-map .cat-quick{flex:0 0 auto;white-space:nowrap}
-@media(min-width:900px){.acard-map-sel{flex:1 1 auto}}
+/* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width
+   tile; the button takes the last slot on its own. */
+.acard-map{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 8px;align-items:end;margin:2px 0 4px}
+.acard-mapf{display:flex;flex-direction:column;gap:2px;min-width:0}
+.acard-mapf>span{font-size:9px;color:var(--m2);font-weight:600}
+.acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
+.acard-map .cat-quick{justify-self:start;white-space:nowrap}
 
 /* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
 .hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}

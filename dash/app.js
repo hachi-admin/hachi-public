@@ -1173,7 +1173,7 @@ function _renderTopics() {
                                 _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
   if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
-  if (_catView === 'categories') { _observeCatThumbs(); _fillCatTilePresetOptions(); }
+  if (_catView === 'categories') { _observeCatThumbs(); _fillCatTilePresetOptions(); _autoSampleQueue(); }
 }
 
 // ─── #approvals, without leaving the dashboard ────────────────────────────────
@@ -1286,15 +1286,44 @@ const _CAT_QUICK = {
  * 変える re-renders type over the picture already generated for this category, which is free and
  * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
 function _catTileMapBar(c, v) {
+  /* All three mappings, where their result is. They are independent decisions about the same
+     category — the lettering, the cover picture, the pictures inside the article — and only the
+     first had a control here, so the other two still meant opening the detail panel.
+
+     Only the lettering re-renders the tile: it is a draw over a picture already in hand. Changing a
+     recipe changes what would be *generated*, which is not free, so those two save the pin and
+     leave the visible sample alone until 絵を作り直す is pressed. */
+  const row = (key, label, kind, cur, handler) => `
+    <label class="acard-mapf">
+      <span>${label}</span>
+      <select class="cat-in acard-map-sel" data-selected="${esc(cur || '')}" data-kind="${kind}"
+        id="cat-tile${key}-${esc(c.id)}" onchange="${handler}"
+        aria-label="${esc(c.name)} の${label}">
+        <option value="">自動</option>
+      </select>
+    </label>`;
+  // Auto-filled for approved categories, so the button would only ever duplicate what already
+  // happened — see _autoSampleQueue.
+  const manual = c.status !== 'active';
   return `<div class="acard-map" onclick="event.stopPropagation()">
-    <select class="cat-in acard-map-sel" data-selected="${esc(v.heroPreset || '')}"
-      id="cat-tilepreset-${esc(c.id)}" onchange="restyleCategorySample('${esc(c.id)}',this.value)"
-      aria-label="${esc(c.name)} のサムネタイトル">
-      <option value="">自動（記事ごとに選ぶ）</option>
-    </select>
-    <button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
-      onclick="regenCategorySample('${esc(c.id)}')">${v.samplePhotoUrl ? '絵を作り直す' : '絵をつける'}</button>
+    ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
+    ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
+    ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
+    ${manual || v.samplePhotoUrl
+      ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
+          onclick="regenCategorySample('${esc(c.id)}')">${v.samplePhotoUrl ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
+}
+
+async function setCategoryRecipe(id, field, value) {
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visual: { [field]: value } }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  if (c?.visual) c.visual[field] = value;
+  showToast(value ? '固定しました。次に絵を作るときから使われます。' : '自動に戻しました。', 'success');
 }
 
 function _categoryTile(c) {
@@ -1360,9 +1389,63 @@ const _catThumbDone = new Set();
    the grid is useful before the pickers are, and blocking it on a catalogue fetch would leave the
    whole list blank while one select's options load. */
 function _fillCatTilePresetOptions() {
-  const sels = document.querySelectorAll('#page-articles .acard-map-sel');
+  const sels = [...document.querySelectorAll('#page-articles .acard-map-sel')];
   if (!sels.length) return;
-  _ensureHeroPresets().then(() => sels.forEach(_fillPresetSelect));
+  const presets = sels.filter((s) => s.dataset.kind === 'preset');
+  const recipes = sels.filter((s) => s.dataset.kind !== 'preset');
+  if (presets.length) _ensureHeroPresets().then(() => presets.forEach(_fillPresetSelect));
+  // Two catalogues, two fetches, neither waiting on the other — a tile's lettering picker should
+  // not sit empty because the recipe catalogue is slow.
+  if (recipes.length) {
+    _ensureImagePrompts().then(() => recipes.forEach((s) => _fillCatImagePromptOptionsFor(s.id, s.dataset.kind)));
+  }
+}
+
+/* Approved categories get their picture without being asked twice.
+ *
+ * Approving a topic is the moment its look starts to matter — it is about to publish on a cadence —
+ * and making the operator then hunt for 絵をつける on each tile was a second approval for something
+ * already approved. Unapproved ones keep the button: spending a pro-tier image call on a topic that
+ * may be rejected is the opposite trade.
+ *
+ * Strictly one at a time, and each id is attempted once per page load. This spends money, so the
+ * two failure modes that matter are a burst of parallel calls and a retry loop on a category that
+ * cannot render — a shared queue prevents the first, `_autoSampleTried` the second.
+ */
+const _autoSampleTried = new Set();
+let _autoSampleRunning = false;
+
+async function _autoSampleQueue() {
+  if (_autoSampleRunning) return;
+  const pending = (CATEGORIES || []).filter((c) =>
+    c.status === 'active' && !c.visual?.samplePhotoUrl && !_autoSampleTried.has(c.id));
+  if (!pending.length) return;
+  _autoSampleRunning = true;
+  /* Said out loud. This is the one thing on this page that spends money without being pressed, and
+     an operator who opens the categories tab and is quietly billed for eight pro-tier images has
+     been given no chance to close the tab first. */
+  showToast(`承認済み ${pending.length} 件の絵を順に作ります（1件ずつ・pro課金）。`, 'info');
+  try {
+    for (const c of pending) {
+      _autoSampleTried.add(c.id);
+      const res = await fetch(apiUrl(`/api/article-categories/${c.id}/sample`), {
+        method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+      }).catch(() => null);
+      if (!res?.ok) continue;
+      const data = await res.json().catch(() => null);
+      if (!data?.url) continue;
+      if (c.visual) Object.assign(c.visual, { sampleUrl: data.url, samplePhotoUrl: data.photoUrl, sampleTitle: data.title });
+      // Swapped in place rather than re-rendering the grid: a full re-render mid-scroll would move
+      // the ground under whoever is reading it, once per category.
+      const host = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-thumb`);
+      if (host) {
+        host.classList.remove('is-empty');
+        host.classList.add('is-sample');
+        host.innerHTML = `<img src="${esc(data.url)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+          onclick="event.stopPropagation();_openLightbox('${esc(data.url)}','${esc(c.name)}')">`;
+      }
+    }
+  } finally { _autoSampleRunning = false; }
 }
 
 function _observeCatThumbs() {
