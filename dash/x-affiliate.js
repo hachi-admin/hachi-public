@@ -69,7 +69,7 @@
     sessionStorage.removeItem(VERIFIER_KEY);
     sessionStorage.removeItem(PROOF_KEY);
     document.querySelectorAll('#page-x-affiliate input[type="password"]').forEach(input => { input.value = ''; });
-    ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-skills', '#x-link', '#x-settings'].forEach(selector => {
+    ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-skills', '#x-drafts', '#x-link', '#x-settings'].forEach(selector => {
       document.querySelector(selector)?.replaceChildren();
     });
     const root = document.getElementById('page-x-affiliate');
@@ -117,6 +117,7 @@
     root.append(card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('商品（実取得は未接続）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Skill（合成検証のみ）', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('候補文の生成・比較レビュー（ローカル境界）', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
     root.append(card('プロフィール・テンプレート・通知先', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     renderLinkCard();
@@ -681,6 +682,75 @@
       if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
     }
   }
+  function renderDrafts(data, accountId, generation) {
+    const box = document.getElementById('x-drafts');
+    if (!box || !isCurrentScope(accountId, generation)) return;
+    box.replaceChildren(el('p', { className: 'x-muted', text: '実モデル・課金・X投稿・Discord送信は未接続です。生成adapterが明示設定された検証環境だけで候補を作成します。' }));
+    const generateForm = el('form', { className: 'x-form x-generation-form' }, [
+      field('商品ID（カンマ区切り・1〜3件）', 'text', 'productIds'),
+      selectField('候補数', 'requestedVariantCount', '3', ['1', '2', '3']),
+      button('候補を生成', async event => {
+        event.preventDefault();
+        if (!generateForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(generateForm)) return;
+        const values = formData(generateForm); const productIds = String(values.productIds || '').split(',').map(value => value.trim()).filter(Boolean);
+        if (productIds.length < 1 || productIds.length > 3) { endWrite(generateForm); message(generateForm, '商品IDは1〜3件で入力してください', 'error'); return; }
+        const payload = { accountId, productIds, requestedVariantCount: Number(values.requestedVariantCount) };
+        try {
+          const idempotencyKey = await keyFor(generateForm, { operation: 'generation', ...payload });
+          const result = await api('/api/x-affiliate/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+          clearRetry(generateForm); endWrite(generateForm);
+          if (isCurrentScope(accountId, generation)) { message(generateForm, `受付 ${result.job.status} · ${result.draftIds.length}案`, result.job.status === 'completed' ? 'success' : 'warn'); await loadDrafts(accountId, generation); }
+        } catch (error) {
+          endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, error.body?.error?.code || error.message, 'error');
+        }
+      }),
+    ]);
+    box.append(generateForm);
+    const groups = new Map();
+    (data.drafts || []).forEach(draft => { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); });
+    for (const [groupId, drafts] of groups) {
+      const group = el('section', { className: 'x-draft-group' }, [el('strong', { text: `生成グループ ${groupId} · ${drafts.length}案` })]);
+      const comparison = el('div', { className: 'x-form x-draft-grid' });
+      drafts.forEach(draft => {
+        const edit = field('本文', 'textarea', 'body', draft.body); const textarea = edit.querySelector('textarea');
+        const article = el('article', { className: 'x-product x-draft' }, [
+          el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId} · ${draft.state}` }), el('span', { className: 'x-muted', text: `${draft.skillId}@${draft.skillVersion} · 切り口 ${draft.angleId}` })]),
+          el('p', { className: draft.validation?.ok ? 'x-muted' : 'x-status', text: draft.validation?.ok ? '検証OK' : `検証NG: ${(draft.validation?.errors || []).join(', ')}` }),
+          edit,
+        ]);
+        const actions = el('div', { className: 'x-inline-form' });
+        actions.append(button('編集を保存', async () => {
+          try { const idempotencyKey = random(); await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: draft.revision, body: textarea.value, idempotencyKey }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
+          catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' 入力を残したまま最新状態を確認してください。' : ''), 'error'); }
+        }));
+        if (draft.state === 'needs_review') {
+          actions.append(button('採用', async () => reviewDraft(draft, 'approve', null, article, accountId, generation), !draft.validation?.ok));
+          actions.append(button('見送り', async () => reviewDraft(draft, 'reject', 'not_this_time', article, accountId, generation)));
+          if (drafts.length > 1) actions.append(button('この案を採用し残りを見送り', async () => {
+            if (!draft.validation?.ok || !window.confirm(`この案を採用し、同じグループの残り${drafts.length - 1}案を見送りますか？`)) return;
+            try { await api(`/api/x-affiliate/draft-groups/${encodeURIComponent(groupId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, approvedDraftId: draft.draftId, expectedRevisions: drafts.map(item => ({ draftId: item.draftId, revision: item.revision })), entrypoint: 'public', idempotencyKey: random() }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
+            catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' グループ内の状態が変わりました。再確認してください。' : ''), 'error'); }
+          }));
+        } else if (draft.state === 'approved') actions.append(button('採用を解除', async () => reviewDraft(draft, 'unapprove', null, article, accountId, generation)));
+        else if (draft.state === 'rejected') actions.append(button('再検討', async () => reviewDraft(draft, 'reopen', null, article, accountId, generation)));
+        article.append(actions); comparison.append(article);
+      });
+      group.append(comparison); box.append(group);
+    }
+    if (!(data.drafts || []).length) box.append(el('p', { className: 'x-muted', text: '候補文はまだありません' }));
+  }
+  async function reviewDraft(draft, action, reason, root, accountId, generation) {
+    try {
+      const payload = { expectedRevision: draft.revision, action, entrypoint: 'public', idempotencyKey: random() }; if (reason) payload.reason = reason;
+      await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation);
+    } catch (error) { if (root.isConnected) message(root, error.message + (error.code === 409 ? ' 最新状態を再確認してください。' : ''), 'error'); }
+  }
+  async function loadDrafts(accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    try { const result = await api(`/api/x-affiliate/drafts?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) renderDrafts(result, accountId, generation); }
+    catch (error) { const box = document.getElementById('x-drafts'); if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error'); }
+  }
   function isCurrentScope(accountId, generation) {
     return Boolean(xJwt) && state.accountId === accountId && state.generation === generation;
   }
@@ -1063,6 +1133,7 @@
     document.getElementById('x-tags')?.replaceChildren();
     document.getElementById('x-products')?.replaceChildren();
     document.getElementById('x-skills')?.replaceChildren();
+    document.getElementById('x-drafts')?.replaceChildren();
     try {
       const result = await api(`/api/x-affiliate/settings?accountId=${encodeURIComponent(accountId)}`);
       if (!isCurrentScope(accountId, generation)) return;
@@ -1071,6 +1142,7 @@
       await loadTags(accountId, generation);
       await loadProducts(accountId, generation);
       await loadSkills(accountId, generation);
+      await loadDrafts(accountId, generation);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');
