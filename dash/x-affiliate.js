@@ -10,7 +10,7 @@
   if (pendingCode) history.replaceState({}, '', location.pathname + location.search + '#xentry');
   let xJwt = '';
   let browserProof = '';
-  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, settings: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), settings: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -53,6 +53,7 @@
     state.context = null;
     state.accountId = '';
     state.linkGeneration += 1;
+    state.previewGeneration += 1;
     state.link = null;
     state.linkStartPending = false;
     state.linkStatusPending = false;
@@ -60,6 +61,7 @@
     state.settings = null;
     state.importResult = null;
     state.skillPreview = null;
+    state.skillDrafts.clear();
     retryState = new WeakMap();
     pendingWrites = new WeakSet();
     xJwt = '';
@@ -121,6 +123,44 @@
     load();
   }
   const formData = form => Object.fromEntries(new FormData(form).entries());
+  function invalidateSkillPreview() {
+    state.previewGeneration += 1;
+    state.skillPreview = null;
+    document.querySelector('#x-skills .x-skill-preview')?.remove();
+  }
+  function draftValues(form) {
+    const values = formData(form);
+    form.querySelectorAll('input[type="checkbox"][name]').forEach(input => { values[input.name] = input.checked ? 'on' : 'off'; });
+    return values;
+  }
+  function trackDraft(form, key, revision) {
+    form.dataset.draftKey = key;
+    form.dataset.revision = String(revision ?? '');
+    const mark = () => {
+      form.dataset.dirty = 'true';
+      state.skillDrafts.set(key, { values: draftValues(form), revision: form.dataset.revision || String(revision ?? '') });
+    };
+    form.addEventListener('input', mark);
+    form.addEventListener('change', mark);
+  }
+  function captureSkillDrafts() {
+    document.querySelectorAll('#x-skills form[data-draft-key]').forEach(form => {
+      if (form.dataset.dirty !== 'true') return;
+      state.skillDrafts.set(form.dataset.draftKey, { values: draftValues(form), revision: form.dataset.revision || '' });
+    });
+  }
+  function restoreDraft(form, key) {
+    const draft = state.skillDrafts.get(key);
+    if (!draft) return;
+    form.dataset.revision = draft.revision;
+    Object.entries(draft.values).forEach(([name, value]) => {
+      const input = form.elements.namedItem(name);
+      if (!input) return;
+      if (input.type === 'checkbox') input.checked = value === 'on';
+      else input.value = value;
+    });
+    form.dataset.dirty = 'true';
+  }
   function renderAccounts(data, loadGeneration) {
     const box = document.getElementById('x-accounts');
     if (!box) return;
@@ -330,6 +370,7 @@
   function renderProducts(data, accountId, generation) {
     const box = document.getElementById('x-products');
     if (!box || !isCurrentScope(accountId, generation)) return;
+    invalidateSkillPreview();
     box.replaceChildren();
     const importForm = el('form', { className: 'x-form x-product-import' }, [
       field('Amazon商品URL（1行1件・最大20件）', 'textarea', 'urls', null, 'https://www.amazon.co.jp/dp/...'),
@@ -383,6 +424,7 @@
       const edit = el('form', { className: 'x-form' }, [
         field('商品名', 'text', 'name', product.name || ''),
         field('特徴（1行1件）', 'textarea', 'features', (product.features || []).join('\n')),
+        field('追加の確認済み事実（種類 | 内容、1行1件。name=商品名、category/classification=分類、feature=特徴、size=サイズ、audience=対象、comparison=比較軸、placement=設置場所、object=対象物、brand=ブランド、price=価格、availability=在庫、sale=セール）', 'textarea', 'facts', (product.facts || []).map(fact => `${fact.type} | ${fact.value}`).join('\n'), 'audience | 狭い机で使いたい人\ncomparison | 同じ条件でAは100g、参照Bは150g\nplacement | 卓上'),
         field('運用メモ', 'text', 'operatorNote', accountProduct.operatorNote || ''),
         checkbox('このaccountで利用', 'enabled', accountProduct.enabled !== false),
         field('手修正の確認元・理由', 'text', 'sourceNote', null, '自分で確認した資料など'),
@@ -391,9 +433,21 @@
           if (!edit.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(edit)) return;
           const values = formData(edit);
           const features = String(values.features || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+          const facts = [];
+          const usedFactIds = new Set();
+          for (const line of String(values.facts || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean)) {
+            const separator = line.indexOf('|');
+            if (separator < 1 || separator === line.length - 1) { endWrite(edit); message(edit, '事実は「種類 | 内容」で1行ずつ入力してください', 'error'); return; }
+            const type = line.slice(0, separator).trim(); const value = line.slice(separator + 1).trim();
+            const prior = (product.facts || []).find(fact => !usedFactIds.has(fact.factId) && fact.type === type && fact.value === value);
+            if (prior) usedFactIds.add(prior.factId);
+            facts.push(prior ? { factId: prior.factId, type, value } : { type, value });
+          }
           const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on' };
           if ((values.name || '') !== (product.name || '')) fields.name = values.name || null;
           if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
+          const currentFacts = (product.facts || []).map(({ factId, ...fact }) => fact);
+          if (JSON.stringify(facts.map(({ factId, ...fact }) => fact)) !== JSON.stringify(currentFacts)) fields.facts = facts.length ? facts : null;
           try {
             await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: product.revision, expectedAccountRevision: accountProduct.revision, fields, sourceNote: values.sourceNote }) });
             clearRetry(edit); endWrite(edit);
@@ -404,6 +458,8 @@
           }
         }),
       ]);
+      edit.addEventListener('input', invalidateSkillPreview);
+      edit.addEventListener('change', invalidateSkillPreview);
       article.append(edit);
       const actions = el('div', { className: 'x-inline-form' }, [
         button('取得を再試行', async () => {
@@ -459,6 +515,9 @@
     if (!isCurrentScope(accountId, generation)) return;
     const box = document.getElementById('x-skills');
     if (!box) return;
+    captureSkillDrafts();
+    state.previewGeneration += 1;
+    state.skillPreview = null;
     box.replaceChildren();
     box.append(el('p', { className: 'x-muted', text: `参照元 ${data.source?.repository || 'hachi-aff'} @ ${data.source?.commit || '未確認'}。候補11件のうち合成構造検証対象5件だけを取り込み、実生成は停止しています。` }));
     const decisions = el('details', { className: 'x-skill-decisions' }, [el('summary', { text: '候補11件の採用・保留理由' })]);
@@ -494,7 +553,7 @@
       const article = el('article', { className: 'x-product x-skill' }, [
         el('div', { className: 'x-product-head' }, [
           el('strong', { text: `${skill.id} @ ${skill.version}` }),
-          el('span', { className: 'x-muted', text: `${skill.status} · 共通優先度 ${skill.priority} · 構成見本 ${skill.exampleValidation?.valid ? 'OK' : 'NG'} · ${skill.validationScope}` }),
+          el('span', { className: 'x-muted', text: `${skill.status} · 共通優先度 ${skill.priority} · 構成見本 ${skill.exampleValidation?.valid ? 'OK' : 'NG'} · 本文${skill.bodyValidation?.verified ? '検証済み' : '未検証（既知hashなし）'} · ${skill.validationScope}` }),
         ]),
       ]);
       const assignment = el('form', { className: 'x-inline-form' }, [
@@ -505,12 +564,12 @@
           if (!assignment.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(assignment)) return;
           const values = formData(assignment);
           const fields = { enabled: values.enabled === 'on', priority: values.priority === '' ? null : Number(values.priority) };
-          const payload = { accountId, expectedRevision: skill.assignment?.revision || 0, fields };
+          const payload = { accountId, expectedRevision: Number(assignment.dataset.revision || skill.assignment?.revision || 0), fields };
           try {
             const idempotencyKey = await keyFor(assignment, { operation: 'skill-assignment', skillId: skill.id, ...payload });
             if (!assignment.isConnected || !isCurrentScope(accountId, generation)) { endWrite(assignment); return; }
             await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}/assignment`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
-            clearRetry(assignment); endWrite(assignment);
+            clearRetry(assignment); state.skillDrafts.delete(`${accountId}:${skill.id}:assignment`); assignment.dataset.dirty = 'false'; invalidateSkillPreview(); endWrite(assignment);
             if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
           } catch (error) {
             endWrite(assignment);
@@ -518,6 +577,8 @@
           }
         }),
       ]);
+      trackDraft(assignment, `${accountId}:${skill.id}:assignment`, skill.assignment?.revision ?? 0);
+      restoreDraft(assignment, `${accountId}:${skill.id}:assignment`);
       article.append(assignment);
       const details = el('details', {}, [
         el('summary', { text: '本文・切り口・構成見本を確認' }),
@@ -535,12 +596,12 @@
             event.preventDefault();
             if (!metaForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(metaForm)) return;
             const values = formData(metaForm); const fields = { status: values.status, priority: Number(values.priority) };
-            const payload = { expectedRevision: skill.revision, fields };
+            const payload = { expectedRevision: Number(metaForm.dataset.revision || skill.revision), fields };
             try {
               const idempotencyKey = await keyFor(metaForm, { operation: 'skill-meta', skillId: skill.id, ...payload });
               if (!metaForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(metaForm); return; }
               await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
-              clearRetry(metaForm); endWrite(metaForm);
+              clearRetry(metaForm); state.skillDrafts.delete(`${accountId}:${skill.id}:meta`); metaForm.dataset.dirty = 'false'; invalidateSkillPreview(); endWrite(metaForm);
               if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
             } catch (error) {
               endWrite(metaForm);
@@ -559,12 +620,12 @@
             try { example = JSON.parse(values.example); }
             catch { endWrite(versionForm); message(versionForm, '構成見本はJSONで入力してください', 'error'); return; }
             const fields = { version: values.version, body: values.body, example };
-            const payload = { expectedRevision: skill.revision, fields };
+            const payload = { expectedRevision: Number(versionForm.dataset.revision || skill.revision), fields };
             try {
               const idempotencyKey = await keyFor(versionForm, { operation: 'skill-version', skillId: skill.id, ...payload });
               if (!versionForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(versionForm); return; }
               await api(`/api/x-affiliate/skills/${encodeURIComponent(skill.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
-              clearRetry(versionForm); endWrite(versionForm);
+              clearRetry(versionForm); state.skillDrafts.delete(`${accountId}:${skill.id}:version`); versionForm.dataset.dirty = 'false'; invalidateSkillPreview(); endWrite(versionForm);
               if (isCurrentScope(accountId, generation)) await loadSkills(accountId, generation);
             } catch (error) {
               endWrite(versionForm);
@@ -572,6 +633,10 @@
             }
           }),
         ]);
+        trackDraft(metaForm, `${accountId}:${skill.id}:meta`, skill.revision);
+        trackDraft(versionForm, `${accountId}:${skill.id}:version`, skill.revision);
+        restoreDraft(metaForm, `${accountId}:${skill.id}:meta`);
+        restoreDraft(versionForm, `${accountId}:${skill.id}:version`);
         article.append(metaForm, versionForm);
       }
       list.append(article);
@@ -587,18 +652,21 @@
         const productIds = String(values.productIds || '').split(',').map(value => value.trim()).filter(Boolean);
         if (productIds.length < 1 || productIds.length > 3) { endWrite(previewForm); message(previewForm, '商品IDは1〜3件で入力してください', 'error'); return; }
         const payload = { accountId, productIds, requestedVariantCount: Number(values.requestedVariantCount) };
+        const previewGeneration = state.previewGeneration;
         try {
           const idempotencyKey = await keyFor(previewForm, { operation: 'skill-allocation-preview', ...payload });
           if (!previewForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(previewForm); return; }
           const result = await api('/api/x-affiliate/skill-allocation-previews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
           clearRetry(previewForm); endWrite(previewForm);
-          if (isCurrentScope(accountId, generation)) { state.skillPreview = { accountId, result }; renderSkillPreview(result, previewForm); }
+          if (isCurrentScope(accountId, generation) && state.previewGeneration === previewGeneration) { state.skillPreview = { accountId, result }; renderSkillPreview(result, previewForm); }
         } catch (error) {
           endWrite(previewForm);
           if (previewForm.isConnected && isCurrentScope(accountId, generation)) message(previewForm, error.message + (error.code === 409 ? ' Skillまたは割当設定が変わりました。再確認してください。' : ''), 'error');
         }
       }),
     ]);
+    previewForm.addEventListener('input', invalidateSkillPreview);
+    previewForm.addEventListener('change', invalidateSkillPreview);
     box.append(previewForm);
     if (state.skillPreview?.accountId === accountId) renderSkillPreview(state.skillPreview.result, previewForm);
     enforceMemberUI();
@@ -990,6 +1058,7 @@
     const accountId = state.accountId;
     if (!accountId) return;
     const generation = ++state.generation;
+    invalidateSkillPreview();
     document.getElementById('x-settings')?.replaceChildren();
     document.getElementById('x-tags')?.replaceChildren();
     document.getElementById('x-products')?.replaceChildren();

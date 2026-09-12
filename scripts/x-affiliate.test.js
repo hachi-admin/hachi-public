@@ -1231,6 +1231,65 @@ test('member can change only the account Skill assignment and conflict keeps inp
   assert.equal(form.querySelector('[name="priority"]').value, '72'); assert.match(form.textContent, /最新状態を再確認/);
 });
 
+test('Skill assignment reload preserves another dirty editor and its original revision', async () => {
+  const requests = []; let skillReads = 0;
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.includes('/assignment')) return json({ assignment: { enabled: true, priority: null, revision: 1 } });
+    if (path.includes('/skills/text-amazon-hook-fixed') && options.method === 'PATCH') return json({ error: { message: 'revision conflict' } }, 409);
+    if (path.includes('/skills?')) { skillReads += 1; return json({ imported: true, source: {}, candidates: [], skills: [{ ...skillFixture(), revision: skillReads > 1 ? 1 : 0 }] }); }
+    return json({});
+  };
+  const dom = page('#x_code=skill-draft', true, router, { verifier: 'skill-draft-v' });
+  await flush(); await selectFirstAccount(dom);
+  const skill = dom.window.document.querySelector('#x-skills .x-skill');
+  const forms = skill.querySelectorAll('form[data-admin-only]');
+  const versionForm = forms[1]; const assignment = skill.querySelector('form:not([data-admin-only])');
+  versionForm.querySelector('[name="body"]').value = '編集中の本文';
+  versionForm.querySelector('[name="body"]').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assignment.querySelector('[name="enabled"]').checked = true;
+  assignment.querySelector('button').click(); await flush();
+  const nextVersionForm = dom.window.document.querySelectorAll('#x-skills .x-skill form[data-admin-only]')[1];
+  assert.equal(nextVersionForm.querySelector('[name="body"]').value, '編集中の本文');
+  const body = JSON.parse(requests.find(item => item.path.includes('/assignment')).options.body);
+  assert.equal(body.expectedRevision, 0);
+  nextVersionForm.querySelector('[name="version"]').value = '1.1.0';
+  nextVersionForm.querySelector('button').click(); await flush();
+  const versionRequest = requests.find(item => item.path.includes('/skills/text-amazon-hook-fixed') && item.options.method === 'PATCH');
+  assert.equal(JSON.parse(versionRequest.options.body).expectedRevision, 0);
+  assert.equal(nextVersionForm.querySelector('[name="body"]').value, '編集中の本文');
+});
+
+test('late preview response is discarded after preview input changes', async () => {
+  const gate = deferred();
+  const router = (url, options = {}) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/products?')) return json({ products: [] });
+    if (path.includes('/skills?')) return json({ imported: true, source: {}, candidates: [], skills: [skillFixture()] });
+    if (path.endsWith('/skill-allocation-previews')) return gate.promise;
+    return json({});
+  };
+  const dom = page('#x_code=skill-preview-late', true, router, { verifier: 'skill-preview-late-v' });
+  await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-skills .x-skill-preview-form');
+  form.querySelector('[name="productIds"]').value = 'p1'; form.querySelector('[name="requestedVariantCount"]').value = '1';
+  form.querySelector('button').click(); await flush();
+  form.querySelector('[name="productIds"]').value = 'p2';
+  form.querySelector('[name="productIds"]').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  gate.resolve(json({ status: 'ready', productionReady: false, allocations: [] })); await flush();
+  assert.equal(dom.window.document.querySelector('#x-skills .x-skill-preview'), null);
+});
+
 test('admin Skill body edit always creates a named version with its matching structure example', async () => {
   const requests = [];
   const router = (url, options = {}) => {
