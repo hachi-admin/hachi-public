@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '17';
+const DASH_BUILD = '24';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -391,7 +391,7 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','ヒーロー画像'] ] },
+  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','サムネタイトル'], ['image-prompts','絵のレシピ'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
@@ -405,11 +405,20 @@ let _activeDest = 'today';
 const _destOf = (pageId) =>
   Object.keys(DESTINATIONS).find(d => DESTINATIONS[d].pages.some(([id]) => id === pageId));
 
-/** Accepts either a destination key or a page id — deep links and old call sites both work. */
-function navTo(target) {
+/**
+ * Accepts either a destination key or a page id — deep links and old call sites both work.
+ *
+ * `asPage` resolves the one collision in the table above: `articles` is both a destination key and
+ * the id of that destination's first page. Resolving destinations first (which is right for a nav
+ * pill) meant the カテゴリ sub-tab asked for the *destination*, which restores `_lastPage` — and
+ * once サムネタイトル had been visited, `_lastPage.articles` was `hero-presets`. So the tab returned
+ * you to the page you were trying to leave, and カテゴリ became unreachable for the rest of the
+ * session. Callers that know they mean a page say so.
+ */
+function navTo(target, asPage = false) {
   const returningFromX = window.HachiXAffiliate?.isActive();
   let dest, pageId;
-  if (DESTINATIONS[target]) {
+  if (!asPage && DESTINATIONS[target]) {
     dest = target;
     pageId = _lastPage[dest] ?? DESTINATIONS[dest].pages[0][0];
   } else {
@@ -453,7 +462,7 @@ function _renderDestSub(dest, pageId) {
   if (pages.length < 2) { bar.innerHTML = ''; bar.classList.remove('show'); return; }
   bar.classList.add('show');
   bar.innerHTML = pages.map(([id, label]) =>
-    `<button class="dest-sub-btn${id === pageId ? ' active' : ''}" role="tab" aria-selected="${id === pageId}" onclick="navTo('${id}')">${label}</button>`
+    `<button class="dest-sub-btn${id === pageId ? ' active' : ''}" role="tab" aria-selected="${id === pageId}" onclick="navTo('${id}',true)">${label}</button>`
   ).join('');
 }
 
@@ -465,6 +474,7 @@ function _initPage(pageId) {
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
   if (pageId === 'hero-presets') _loadHeroPresets();
+  if (pageId === 'image-prompts') _loadImagePrompts();
   // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
   // only fires when a nav button is clicked.
   if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
@@ -493,7 +503,8 @@ window.addEventListener('hashchange', () => {
   if (id && (_xRouteActive || id !== _activePage)) {
     const leavingX = _xRouteActive;
     _xRouteActive = false;
-    navTo(id);
+    // Hashes name pages. This matters for `#articles`, which is also a destination key.
+    navTo(id, true);
     if (leavingX) loadDashboard();
   }
 });
@@ -1210,6 +1221,7 @@ function _renderTopics() {
                                 _buildCategoryCards());
   if (_catView === 'reception' && !NOTE_STATS) _loadNoteStats();
   if (_catView === 'experiment' && !EXPERIMENTS) _loadExperiments();
+  if (_catView === 'categories') { _observeCatThumbs(); _fillCatTilePresetOptions(); _autoSampleQueue(); }
 }
 
 // ─── #approvals, without leaving the dashboard ────────────────────────────────
@@ -1299,32 +1311,269 @@ const _CAT_FMT = {
   tutorial: 'tutorial', listicle: 'listicle', review: 'review',
 };
 
+/* The one action a tile offers inline.
+ *
+ * Every status has exactly one obvious next move, and it took two taps to reach — open the detail
+ * overlay, find the button, tap again — for something as routine as approving a scouted topic.
+ * That one is here; 却下 deliberately stays in the detail only, because it is the single
+ * irreversible action on this screen ("do not re-suggest") and it should keep costing a deliberate
+ * trip rather than sitting one stray thumb away from 承認. */
+const _CAT_QUICK = {
+  suggested: { action: 'approve', label: '承認' },
+  active:    { action: 'pause',   label: '停止' },
+  paused:    { action: 'resume',  label: '再開' },
+  blocked:   { action: 'resume',  label: '復帰' },
+};
+
+/* The mapping, changeable where the result of it is being looked at.
+ *
+ * Picking a title style and seeing what it does to this category's thumbnails were two screens
+ * apart — open the detail, change a select, save, wait, go back. Judging a look is iterative, so
+ * that round trip was the whole cost of the feature. Both controls sit under the picture instead.
+ *
+ * 変える re-renders type over the picture already generated for this category, which is free and
+ * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
+function _catTileMapBar(c, v) {
+  /* All three mappings, where their result is. They are independent decisions about the same
+     category — the lettering, the cover picture, the pictures inside the article — and only the
+     first had a control here, so the other two still meant opening the detail panel.
+
+     Only the lettering re-renders the tile: it is a draw over a picture already in hand. Changing a
+     recipe changes what would be *generated*, which is not free, so those two save the pin and
+     leave the visible sample alone until 絵を作り直す is pressed. */
+  const row = (key, label, kind, cur, handler) => `
+    <label class="acard-mapf">
+      <span>${label}</span>
+      <select class="cat-in acard-map-sel" data-selected="${esc(cur || '')}" data-kind="${kind}"
+        id="cat-tile${key}-${esc(c.id)}" onchange="${handler}"
+        aria-label="${esc(c.name)} の${label}">
+        <option value="">自動</option>
+      </select>
+    </label>`;
+  // Auto-filled for approved categories, so the button would only ever duplicate what already
+  // happened — see _autoSampleQueue.
+  const manual = c.status !== 'active';
+  return `<div class="acard-map" onclick="event.stopPropagation()">
+    ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
+    ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
+    ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
+    ${manual || v.sampleAt
+      ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
+          onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
+  </div>`;
+}
+
+async function setCategoryRecipe(id, field, value) {
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visual: { [field]: value } }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  if (c?.visual) c.visual[field] = value;
+  showToast(value ? '固定しました。次に絵を作るときから使われます。' : '自動に戻しました。', 'success');
+}
+
 function _categoryTile(c) {
   const st = _CAT_STATUS[c.status] ?? { label: c.status, color: 'var(--m)' };
   const r = c.rating || {};
   const style = c.style || {};
+  const v = c.visual || {};
   const fmt = _CAT_FMT[style.format] || 'analysis';
   const earns = ((c.monetization || {}).mode || 'none') !== 'none';
   const freq = (CAT_META?.frequencies || []).find(f => f.id === c.frequency)?.label || c.frequency;
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
+  const quick = _CAT_QUICK[c.status];
+  /* Whether a mapping exists is visualised two ways: the thumbnail itself (rendered lazily below,
+     for the common "サムネタイトルのスタイル固定" case), and a small marker for pins harder to see
+     at a glance — an icon rather than text, since a category grid is scanned, not read, and
+     spelling out 見出しの絵/本文の絵 would be the longest text on the card for something most
+     categories leave on 自動. */
+  const pins = [v.heroPreset && 'サムネの型', v.imagePrompt && '見出しの絵', v.figurePrompt && '本文の絵'].filter(Boolean);
   return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
-    <i class="ni ni-lg ni-fmt-${fmt}" aria-hidden="true"></i>
+    ${/* Every tile carries a picture, not only the ones with something pinned.
+          Drawing the type is a render, not a generation — it costs no image call — so there was
+          never a reason to make a category earn its thumbnail by first having a preset pinned or a
+          paid sample made. Gating it that way is why this list showed format icons and nothing
+          else. What it draws is what this category would actually get: its pinned style if it has
+          one, the template's own treatment if it does not. */ ''}
+    ${v.sampleUrl
+      ? `<div class="acard-thumb is-sample">
+           <img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+             onclick="event.stopPropagation();_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
+         </div>`
+      : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
+    ${_catTileMapBar(c, v)}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
-        <span class="chip">${st.label}</span>
+        <!-- _CAT_STATUS has always carried a colour per status and the chip never used it, so
+             未承認 and 稼働中 read identically at a glance — the one thing you scan this grid for. -->
+        <span class="chip cat-status" style="background:color-mix(in srgb,${st.color} 18%,transparent);color:${st.color}">${st.label}</span>
         <span class="cat-chip">${esc(freq)}</span>
+        ${quick ? `<button class="cat-quick" title="${esc(quick.label)}"
+          onclick="event.stopPropagation();catAction('${c.id}','${quick.action}')">${quick.label}</button>` : ''}
       </div>
       <div class="acard-foot">
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
+        ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
       </div>
     </div>
   </div>`;
+}
+
+/* Same lazy-on-scroll pattern as the preset catalogue's own cards (see `_observeHeroPreviews`):
+   a full render costs a real image generation, and a category grid can run to dozens of tiles, so
+   only the ones actually scrolled into view ever ask for one. */
+let _catThumbObserver = null;
+const _catThumbDone = new Set();
+
+/* Fills every tile's style picker once the catalogue is in. Deliberately not awaited by the render:
+   the grid is useful before the pickers are, and blocking it on a catalogue fetch would leave the
+   whole list blank while one select's options load. */
+function _fillCatTilePresetOptions() {
+  const sels = [...document.querySelectorAll('#page-articles .acard-map-sel')];
+  if (!sels.length) return;
+  const presets = sels.filter((s) => s.dataset.kind === 'preset');
+  const recipes = sels.filter((s) => s.dataset.kind !== 'preset');
+  if (presets.length) _ensureHeroPresets().then(() => presets.forEach(_fillPresetSelect));
+  // Two catalogues, two fetches, neither waiting on the other — a tile's lettering picker should
+  // not sit empty because the recipe catalogue is slow.
+  if (recipes.length) {
+    _ensureImagePrompts().then(() => recipes.forEach((s) => _fillCatImagePromptOptionsFor(s.id, s.dataset.kind)));
+  }
+}
+
+/* Approved categories get their picture without being asked twice.
+ *
+ * Approving a topic is the moment its look starts to matter — it is about to publish on a cadence —
+ * and making the operator then hunt for 絵をつける on each tile was a second approval for something
+ * already approved. Unapproved ones keep the button: spending a pro-tier image call on a topic that
+ * may be rejected is the opposite trade.
+ *
+ * Strictly one at a time, and each id is attempted once per page load. This spends money, so the
+ * two failure modes that matter are a burst of parallel calls and a retry loop on a category that
+ * cannot render — a shared queue prevents the first, `_autoSampleTried` the second.
+ */
+const _autoSampleTried = new Set();
+let _autoSampleRunning = false;
+
+async function _autoSampleQueue() {
+  if (_autoSampleRunning) return;
+  /* `sampleAt`, not `samplePhotoUrl`. A category whose composite uploaded but whose bare picture
+     did not has an empty samplePhotoUrl and a perfectly good sample — keyed off that, those
+     categories generated a new picture on every single page load. `sampleAt` is written whenever a
+     sample was produced, so it is the one field that answers "has this been done". */
+  const pending = (CATEGORIES || []).filter((c) =>
+    c.status === 'active' && !c.visual?.sampleAt && !_autoSampleTried.has(c.id));
+  if (!pending.length) return;
+  /* No announcement. It ran once per visit and sat over the cards, and the spend it was warning
+     about is now bounded in a way a toast cannot improve on: each category is generated exactly
+     once and never again (the server returns the stored sample unless `force` is sent), so the
+     warning fires repeatedly for a cost that only happens the first time. */
+  _autoSampleRunning = true;
+  try {
+    for (const c of pending) {
+      _autoSampleTried.add(c.id);
+      const res = await fetch(apiUrl(`/api/article-categories/${c.id}/sample`), {
+        method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+      }).catch(() => null);
+      if (!res?.ok) continue;
+      const data = await res.json().catch(() => null);
+      if (!data?.url) continue;
+      if (c.visual) {
+        Object.assign(c.visual, {
+          sampleUrl: data.url, samplePhotoUrl: data.photoUrl || '', sampleTitle: data.title,
+          // Mirrors what the server just stored, so a second pass in this session sees it as done
+          // even before the next _loadTopics refreshes CATEGORIES from the server.
+          sampleAt: new Date().toISOString(),
+        });
+      }
+      // Swapped in place rather than re-rendering the grid: a full re-render mid-scroll would move
+      // the ground under whoever is reading it, once per category.
+      const host = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-thumb`);
+      if (host) {
+        host.classList.remove('is-empty');
+        host.classList.add('is-sample');
+        host.innerHTML = `<img src="${esc(data.url)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+          onclick="event.stopPropagation();_openLightbox('${esc(data.url)}','${esc(c.name)}')">`;
+      }
+    }
+  } finally { _autoSampleRunning = false; }
+}
+
+function _observeCatThumbs() {
+  _catThumbObserver?.disconnect();
+  _catThumbDone.clear();
+  _catThumbObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      _catThumbObserver.unobserve(e.target);
+      const id = e.target.dataset.catThumb;
+      if (id && !_catThumbDone.has(id)) { _catThumbDone.add(id); _loadCatThumbInto(id); }
+    }
+  }, { rootMargin: '250px' });
+  document.querySelectorAll('#page-articles [data-cat-thumb]').forEach((el) => _catThumbObserver.observe(el));
+}
+
+async function _loadCatThumbInto(id) {
+  const c = CATEGORIES.find((x) => x.id === id);
+  const host = document.querySelector(`#page-articles [data-cat-thumb="${CSS.escape(id)}"]`);
+  if (!c || !host) return;
+
+  /* A merged sample, if one has been made: the mapped 絵のレシピ's picture with the mapped
+     サムネタイトル drawn over it — what a thumbnail from this category will actually look like.
+     Shown in preference to the title-only preview below, which renders the lettering against a
+     synthetic placeholder and so cannot show the one thing worth checking (whether the type
+     survives the picture). Not generated here: it costs a pro-tier image call, so it is made by
+     the 見本を作り直す button in the detail panel and served from cache afterwards. */
+  if (c.visual?.sampleUrl) {
+    const u = c.visual.sampleUrl;
+    host.innerHTML = `<img src="${esc(u)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+      onclick="event.stopPropagation();_openLightbox('${esc(u)}','${esc(c.name)}')">`;
+    return;
+  }
+
+  await _ensureHeroPresets();
+  /* No pinned preset is not a reason to show nothing — it means "whatever the template does on its
+     own", which is a real answer and the one most of these categories are living with. Rendering it
+     is what makes 自動 visible instead of theoretical. */
+  const preset = _heroPresets.find((p) => p.id === c.visual?.heroPreset) || null;
+
+  /* A title this category actually published, not its name. The articles list is already loaded for
+     this page, so this costs nothing — and the category name set in 48pt previews a thumbnail that
+     will never exist, which is the whole failure this preview is meant to catch. */
+  const title = String(c.visual?.sampleTitle || '').trim()
+    || CAT_ARTICLES.filter((a) => a.categoryId === id).map((a) => String(a.title ?? '').trim()).find(Boolean)
+    || c.name || 'サンプル';
+
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({
+        // Uses the sample's own picture when one has been generated, so the list shows type over a
+        // real photograph rather than the synthetic stand-in wherever that is possible.
+        photoUrl: c.visual?.samplePhotoUrl || '',
+        templateId: c.visual?.template || preset?.templateId || 'photo_scrim',
+        styleSpec: preset?.styleSpec || {},
+        categoryId: id,
+        visual: { accent: c.visual?.accent || '', align: c.visual?.align || '', eyebrow: c.visual?.eyebrow || '' },
+        article: title,
+      }),
+    });
+    if (!res.ok) throw new Error();
+    const url = URL.createObjectURL(await res.blob());
+    host.innerHTML = `<img src="${url}" alt="${esc(c.name)} のサムネ見本" onclick="event.stopPropagation();_openLightbox('${url}','${esc(c.name)}')">`;
+  } catch {
+    // Leave the reserved box rather than removing it: collapsing one tile out of a grid mid-scroll
+    // reflows every tile after it, and an empty frame reads as "no picture" correctly enough.
+    host.classList.add('is-empty');
+  }
 }
 
 // The full editor, opened in the shared detail overlay.
@@ -1339,7 +1588,58 @@ function openCategoryDetail(id) {
   // continuing to tab through the page behind.
   document.getElementById('detail-panel')?.focus();
   _moneyChanged(c.id);
-  refreshCatPreview(c.id);
+  /* The style picker needs the catalogue and the preview needs the picker, so both wait on the
+     same fetch — and the preview is rendered once from inside it rather than also being fired
+     here, which would have drawn the un-pinned version first and replaced it a moment later. */
+  _ensureHeroPresets().then(() => { _fillCatPresetOptions(c.id); refreshCatPreview(c.id); });
+  // Independent of the hero catalogue — it only fills a picker, and nothing waits on it.
+  _ensureImagePrompts().then(() => _fillCatImagePromptOptions(c.id));
+}
+
+/* The four settings that actually get changed, above the fold and saving on change.
+ *
+ * They existed already — 頻度 under 読者と頻度, the other three under 記事のかたち — but reaching
+ * one meant opening the right fold, changing a select, scrolling to 保存 and pressing it, then
+ * waiting for the panel to close and the list to reload. Four interactions and a full round trip
+ * to answer "make this weekly instead of daily", which is the most common edit on this screen.
+ *
+ * Ids are prefixed `catq-` so they do not collide with the section controls below, which
+ * `saveCategory` reads by id; each writes through immediately and re-renders the panel so the two
+ * copies of a setting can never disagree about what is stored.
+ */
+function _catQuickBar(c, style) {
+  const opts = (list, cur) => (list || [])
+    .map((o) => `<option value="${esc(o.id)}"${o.id === cur ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+  const field = (key, label, list, cur, path) => `
+    <label class="cat-quickf"><span>${label}</span>
+      <select class="cat-in" id="catq-${key}-${c.id}"
+        onchange="quickSetCategory('${c.id}','${path}',this.value)">${opts(list, cur)}</select>
+    </label>`;
+  return `<div class="cat-quickbar neu-well">
+    ${field('freq', '頻度', CAT_META?.frequencies, c.frequency, 'frequency')}
+    ${field('format', '形式', CAT_META?.formats, style.format, 'style.format')}
+    ${field('voice', '語り口', CAT_META?.voices, style.voice, 'style.voice')}
+    ${field('depth', '情報量', CAT_META?.depths, style.depth, 'style.depth')}
+  </div>`;
+}
+
+async function quickSetCategory(id, path, value) {
+  const [head, tail] = path.split('.');
+  const body = tail ? { [head]: { [tail]: value } } : { [head]: value };
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  const data = await res.json().catch(() => null);
+  // Re-render from what the server stored, not from what was clicked — normalizeStyle can reject a
+  // value, and a panel that kept showing the rejected one would be lying about the category.
+  if (data?.category) {
+    const i = CATEGORIES.findIndex((x) => x.id === id);
+    if (i >= 0) CATEGORIES[i] = data.category;
+    openCategoryDetail(id);
+  }
+  showToast('変更しました。', 'success');
 }
 
 function _categoryEditor(c) {
@@ -1360,13 +1660,33 @@ function _categoryEditor(c) {
   const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
     `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
 
-  const statusActions = c.status === 'suggested'
-    ? `<button class="act-btn resume" onclick="catAction('${c.id}','approve')">承認</button>
-       <button class="act-btn cancel" onclick="catAction('${c.id}','reject')">却下</button>`
-    : c.status === 'paused'
-      ? `<button class="act-btn resume" onclick="catAction('${c.id}','resume')">再開</button>`
-      : c.status === 'active'
-        ? `<button class="act-btn" onclick="catAction('${c.id}','pause')">停止</button>` : '';
+  /* What this category can actually do from where it is.
+   *
+   * The bar used to show all five buttons at every status, which was wrong in two directions.
+   * 「却下」 was a dead end — there was no way back from it, even though the resume endpoint maps
+   * blocked → active perfectly well. And 「今すぐ1本」 was offered on categories that were never
+   * approved, or were explicitly rejected; the endpoint has no status guard, so pressing it really
+   * did write and publish an article for a topic the operator had turned down.
+   *
+   * So the rule is: an action appears only where it means something. A button that is present but
+   * wrong is worse than one that is absent, because the operator reasonably assumes the interface
+   * would not offer an action it intends to refuse. */
+  const _act = (action, label, kind = '') =>
+    `<button class="act-btn${kind ? ` ${kind}` : ''}" onclick="catAction('${c.id}','${action}')">${label}</button>`;
+
+  const statusActions = {
+    suggested: `${_act('approve', '承認', 'resume')}${_act('reject', '却下', 'cancel')}`,
+    paused:    _act('resume', '再開', 'resume'),
+    active:    _act('pause', '停止', 'stop'),
+    // Rejected is a decision, not a deletion — it has to be reversible without going through
+    // delete-and-recreate, which would lose the editorial prompt and every article written under it.
+    blocked:   _act('resume', '復帰', 'resume'),
+  }[c.status] ?? '';
+
+  /* Writing one now only makes sense once the topic has been approved. `paused` still qualifies:
+     it means "nothing on the schedule", not "nothing at all", and an off-cadence one-off is a
+     legitimate reason to be on this screen. */
+  const canGenerate = c.status === 'active' || c.status === 'paused';
 
   // Only the editorial prompt is open by default — it is the lever that matters and the one thing
   // you come here to change. Everything else states its current value on the closed row, so the
@@ -1388,13 +1708,24 @@ function _categoryEditor(c) {
 
     <div class="neu-well" style="font-size:11.5px;color:var(--m);line-height:1.65">${esc(c.definition || '')}</div>
 
-    ${section('編集方針', '', `
-      <textarea class="cat-prompt" id="cat-prompt-${c.id}" rows="9">${esc(c.prompt || '')}</textarea>
-      <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
-        毎回の記事ブリーフにそのまま渡されます。事実の正確性や構成ルールより優先されることはありません。
+    ${_catQuickBar(c, style)}
+
+    ${/* Read-only on purpose. This text goes into every writing brief this category ever produces,
+          so changing it is not a per-article edit — it redirects the whole stream. It now changes
+          the way an image recipe changes: drafted into a couple of concrete alternatives, shown
+          next to what is in force, and chosen with a button in Discord. */ ''}
+    ${/* The policy text itself is not shown. It is long, it is written for an agent rather than for
+          a person, and it is not edited here any more — so printing it only pushed everything that
+          *is* actionable below the fold. What stays is the way to change it. */ ''}
+    ${section('編集方針', 'Discordで変更', `
+      <div class="cat-hint">毎回の記事ブリーフにそのまま渡され、以後すべての記事に効きます。変更は Discord の承認カードで決めます。</div>
+      <div class="cat-prompt-acts">
+        <input class="form-input" id="cat-promptnote-${c.id}" type="text"
+          placeholder="どう変えたいか（例: もう少し軽く／事例を必ず1つ）— 空でも可">
+        <button class="act-btn" onclick="proposeCategoryPrompt('${c.id}')">Discordで変更を相談</button>
       </div>
-      ${c.promptSuggested && c.promptSuggested !== c.prompt
-        ? `<button class="act-btn" style="margin-top:10px" onclick="resetCategoryPrompt('${c.id}')">提案に戻す</button>` : ''}`, true)}
+      ${c.promptPrevious && c.promptPrevious !== c.prompt
+        ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}`)}
 
     ${section('記事のかたち',
       `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
@@ -1443,8 +1774,11 @@ function _categoryEditor(c) {
     <div class="p-actions">
       <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
       ${statusActions}
-      <button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>
-      <button class="act-btn cancel" onclick="deleteCategory('${c.id}')">削除</button>
+      ${canGenerate ? `<button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>` : ''}
+      <!-- Deleting is the only action here that cannot be undone — 却下 is a status the category
+           comes back from. That difference is what the danger tier marks, and it has to be visible
+           without hovering, because the device this is mostly read on has no hover. -->
+      <button class="act-btn danger" onclick="deleteCategory('${c.id}')">削除</button>
     </div>`;
 }
 
@@ -1779,16 +2113,68 @@ function _visualSection(c, section) {
     </label>`;
 
   const summary = v.eyebrow || v.template || v.accent || v.align ? (v.eyebrow || '指定あり') : '自動';
+  /* The two halves shown together, on a real picture.
+   *
+   * The preview below this one draws the lettering over a synthetic placeholder, which is fine for
+   * judging the type and useless for judging the pair — pale type reads cleanly on flat grey and
+   * vanishes on the recipe's actual photograph. This runs the real pipeline once and keeps the
+   * result, because a generation costs a pro-tier image call and must be asked for rather than
+   * happening whenever the panel opens. */
+  const sample = v.sampleUrl
+    ? `<img src="${esc(v.sampleUrl)}" class="cat-sample-img" alt="${esc(c.name)} のサムネ見本" loading="lazy"
+         onclick="_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
+       <div class="cat-hint">絵のレシピ＋サムネタイトルを合成した実物です${v.sampleAt ? `（${relTime(v.sampleAt)}）` : ''}</div>`
+    : '<div class="cat-hint">まだ合成見本がありません。下で絵のレシピとサムネタイトルを選んでから作成してください。</div>';
+
   return section('見た目', summary, `
+    <div class="cat-sample-wrap neu-well">
+      <div class="cat-sample-hd">合成見本</div>
+      ${sample}
+      <button class="act-btn" id="cat-sample-btn-${c.id}" onclick="regenCategorySample('${c.id}')"
+        title="画像を1枚生成します（pro課金）">${v.sampleUrl ? '見本を作り直す' : '見本を作る'}</button>
+    </div>
     <div class="cat-preview-wrap neu-well">
       <img id="cat-preview-${c.id}" class="cat-preview-img" alt="見出し画像プレビュー" loading="lazy">
       <div id="cat-preview-status-${c.id}" class="cat-hint" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="cat-grid neu-well">
       <label class="cat-field">
-        <span class="cat-label">ヒーローの型</span>
+        <span class="cat-label">サムネの型</span>
         <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
+      </label>
+      <!-- visual.heroPreset has existed on the category document and been honoured by the article
+           pipeline (_heroStyleFor short-circuits to it) since before this control did — so the
+           only thing missing was a way for a person to set it. Options are filled in by
+           _fillCatPresetOptions once the catalogue has loaded; data-selected carries the saved
+           value across that gap. -->
+      <label class="cat-field">
+        <span class="cat-label">サムネタイトルのスタイル</span>
+        <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
+          onchange="queueCatPreview('${c.id}')">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
+      </label>
+      <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
+           visual.imagePrompt/figurePrompt have been on the category document and honoured by
+           resolveRecipe (hero) / _generateImage (figure) — the figure side only as of the same
+           change that added this second field, since _generateImage never passed a pinned id
+           before. Independent choices: a category can fix its cover, its in-body pictures, both,
+           or neither. -->
+      <label class="cat-field">
+        <span class="cat-label">見出し画像の絵のレシピ</span>
+        <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">サムネタイトル（表紙）の写真・挿絵の作風を固定します</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">本文中の絵のレシピ</span>
+        <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
+          <option value="">自動（記事ごとに選ぶ）</option>
+        </select>
+        <span class="cat-hint">記事本文に入る図版・挿絵の作風を固定します。見出し画像とは別に選べます</span>
       </label>
       ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
       <label class="cat-field">
@@ -1836,13 +2222,68 @@ function queueCatPreview(id) {
   _catPreviewTimers[id] = setTimeout(() => refreshCatPreview(id), 350);
 }
 
+/* The catalogue belongs to the ヒーロー画像 tab, but the picker above lives on カテゴリ — on a
+   session that opened a category first, `_heroPresets` would still be empty and the picker would
+   render with nothing in it. Fetches once; every later call is free. */
+async function _ensureHeroPresets() {
+  if (_heroPresets.length) return _heroPresets;
+  const res = await fetch(apiUrl('/api/hero-presets'), { headers: _authHeaders() }).catch(() => null);
+  if (res?.ok) _heroPresets = (await res.json().catch(() => ({})))?.presets || [];
+  return _heroPresets;
+}
+
+// Also used for the per-tile picker in the category list, which is the same control in a smaller
+// place — hence the element rather than an id derived from the category.
+function _fillCatPresetOptions(catId) { _fillPresetSelect(document.getElementById(`cat-preset-${catId}`)); }
+
+function _fillPresetSelect(sel) {
+  if (!sel) return;
+  const want = sel.dataset.selected || '';
+  const usable = _heroPresets.filter((p) => p.enabled !== false);
+  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
+    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}（${esc(p.templateId)}）</option>`).join('');
+  /* A preset that was pinned and has since been disabled or deleted would otherwise vanish from
+     the list and leave the control reading 「自動」 — which is a lie about what is saved, and the
+     kind that only surfaces once someone saves the category and silently drops the pin. */
+  if (want && !usable.some((p) => p.id === want)) {
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
+  }
+}
+
+// One picker each for kind:'hero' (the cover) and kind:'figure' (in-body diagrams) — a recipe
+// meant for one would be the wrong shape drawn into the other.
+function _fillCatImagePromptOptionsFor(selId, kind) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  const want = sel.dataset.selected || '';
+  const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === kind);
+  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
+    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}</option>`).join('');
+  if (want && !usable.some((r) => r.id === want)) {
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
+  }
+}
+
+function _fillCatImagePromptOptions(catId) {
+  _fillCatImagePromptOptionsFor(`cat-imgprompt-${catId}`, 'hero');
+  _fillCatImagePromptOptionsFor(`cat-figprompt-${catId}`, 'figure');
+}
+
 async function refreshCatPreview(id) {
   const img = document.getElementById(`cat-preview-${id}`);
   const status = document.getElementById(`cat-preview-status-${id}`);
   if (!img) return;
   const c = CATEGORIES.find((x) => x.id === id);
+  /* A pinned preset is what the article pipeline would actually draw with, so the preview has to
+     carry its styleSpec too — showing only the template would claim the decoration was 「自動」
+     when it is not. The category's own accent/align/eyebrow still layer over it, which is exactly
+     what _heroStyleFor and the visual block do together at publish time. */
+  const preset = _heroPresets.find((p) => p.id === _catVal(`cat-preset-${id}`));
   const body = {
-    templateId: _catVal(`cat-tpl-${id}`) || undefined,
+    templateId: _catVal(`cat-tpl-${id}`) || preset?.templateId || undefined,
+    styleSpec: preset?.styleSpec || undefined,
     categoryId: id,
     visual: {
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -1872,10 +2313,15 @@ async function refreshCatPreview(id) {
   if (status) status.textContent = '';
 }
 
-async function saveCategory(id) {
+/* `silent` is for callers that save as a step rather than as the point — regenCategorySample
+   commits the pickers before rendering against them. Those must not close the panel the operator
+   is still working in, nor claim "保存しました" for an action that has not finished yet. */
+async function saveCategory(id, { silent = false } = {}) {
   const chk = (k) => !!document.getElementById(`cat-${k}-${id}`)?.checked;
   const body = {
-    prompt: _catVal(`cat-prompt-${id}`),
+    // `prompt` deliberately absent: it is changed by approving a rewrite in Discord, not by 保存.
+    // Sending it from here would write back whatever the panel happened to be showing and quietly
+    // undo a change approved while this panel was open.
     frequency: _catVal(`cat-freq-${id}`),
     approvalMode: _catVal(`cat-approval-${id}`),
     style: {
@@ -1893,6 +2339,9 @@ async function saveCategory(id) {
     },
     visual: {
       template: _catVal(`cat-tpl-${id}`),
+      heroPreset: _catVal(`cat-preset-${id}`),
+      imagePrompt: _catVal(`cat-imgprompt-${id}`),
+      figurePrompt: _catVal(`cat-figprompt-${id}`),
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
       accent: _catVal(`cat-accenthex-${id}`).trim(),
@@ -1911,6 +2360,7 @@ async function saveCategory(id) {
     method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }).catch(() => null);
   if (!res?.ok) { showToast('保存に失敗しました', 'error'); return; }
+  if (silent) return;
   showToast('保存しました。次回以降の記事に反映されます。', 'success');
   closeDetail(); _loadTopics();
 }
@@ -1921,6 +2371,118 @@ function resetCategoryPrompt(id) {
     showToast('提案内容に戻しました。', 'success');
     _loadTopics();
   }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+}
+
+/* Ask for a rewrite. Drafting runs a Pro-tier agent and posts a card, so the button reports what
+   it is doing and stays disabled until it has — pressing it twice posts two cards for the same
+   question, and the second one is answered by whoever reads it first. */
+async function proposeCategoryPrompt(id) {
+  const note = document.getElementById(`cat-promptnote-${id}`)?.value?.trim() || '';
+  const btn = document.querySelector(`#cat-promptnote-${CSS.escape(id)} + .act-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = '案を作成中…'; }
+  const res = await fetch(apiUrl(`/api/article-categories/${id}/propose-prompt`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  }).catch(() => null);
+  if (btn) { btn.disabled = false; btn.textContent = 'Discordで変更を相談'; }
+  if (!res?.ok) {
+    const msg = await res?.json().catch(() => null);
+    showToast(msg?.error ? `案を作れませんでした: ${msg.error}` : '案を作れませんでした', 'error');
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  showToast(`Discord に ${data.options?.length ?? 0} 件の案を送りました。選ぶと反映されます。`, 'success');
+}
+
+function revertCategoryPrompt(id) {
+  showConfirm('編集方針を直前の内容に戻しますか？', async () => {
+    const cat = (CATEGORIES || []).find((c) => c.id === id);
+    await fetch(apiUrl(`/api/article-categories/${id}`), {
+      method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: cat?.promptPrevious ?? '', promptPrevious: cat?.prompt ?? '' }),
+    }).catch(() => {});
+    showToast('直前の方針に戻しました。', 'success');
+    _loadTopics();
+  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+}
+
+/* Change the lettering without buying another picture.
+ *
+ * The expensive half of a thumbnail is the photograph; the title style is a render. Because the
+ * sample's bare picture is kept (visual.samplePhotoUrl), trying a different preset is one call to
+ * the preview renderer with that picture underneath — no image generation, no wait, and the result
+ * is the real pair rather than type over a grey stand-in.
+ *
+ * The rendered bytes are shown immediately and saved as the category's sample, so the list keeps
+ * what was just chosen rather than reverting to the old composite on the next load. */
+async function restyleCategorySample(id, presetId) {
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  const host = document.querySelector(`.acard[data-id="${CSS.escape(id)}"] .acard-thumb img`);
+  if (!c) return;
+  await _ensureHeroPresets();
+  const preset = _heroPresets.find((p) => p.id === presetId);
+  const v = c.visual || {};
+  if (host) host.style.opacity = '.4';
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        photoUrl: v.samplePhotoUrl || '',
+        templateId: v.template || preset?.templateId || 'photo_scrim',
+        styleSpec: preset?.styleSpec || {},
+        categoryId: id,
+        visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
+        article: v.sampleTitle || c.name,
+      }),
+    }).catch(() => null);
+    if (!res?.ok) { showToast('描き直せませんでした', 'error'); return; }
+    const url = URL.createObjectURL(await res.blob());
+    if (host) host.src = url;
+    // The pin itself is the durable part; the picture follows from it on the next full render.
+    await fetch(apiUrl(`/api/article-categories/${id}`), {
+      method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visual: { heroPreset: presetId } }),
+    }).catch(() => {});
+    if (c.visual) c.visual.heroPreset = presetId;
+    showToast(presetId ? 'このスタイルに変えました。' : '自動に戻しました。', 'success');
+  } finally {
+    if (host) host.style.opacity = '';
+  }
+}
+
+/* Saves first when the editor is open, deliberately: the pickers above the button are unsaved form
+   state, so regenerating without committing them would render the mapping that is *stored* rather
+   than the one being looked at, and the resulting picture would be read as evidence about a choice
+   it never used.
+
+   Only when it is open. This is also called from the category list, where none of those fields
+   exist — and `_catVal` returns '' for a missing element, so saving from there would PATCH every
+   setting to empty and quietly wipe the category. The form's own presence is the test. */
+async function regenCategorySample(id) {
+  const inEditor = !!document.getElementById(`cat-freq-${id}`);
+  const btn = document.getElementById(`cat-sample-btn-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
+  try {
+    if (inEditor) await saveCategory(id, { silent: true });
+    // Pressing 絵を作り直す is the one place a *new* picture is asked for, so it is the one place
+    // that forces past the server's "return what is stored" guard.
+    const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const msg = await res?.json().catch(() => null);
+      showToast(msg?.error ? `見本を作れませんでした: ${msg.error}` : '見本を作れませんでした', 'error');
+      return;
+    }
+    showToast('合成見本を作りました。', 'success');
+    await _loadTopics();
+    // Reopening is a refresh of a panel already on screen. Called from a tile there is no panel,
+    // and opening one would be the button doing something nobody asked it to.
+    if (inEditor) openCategoryDetail(id);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '見本を作り直す'; }
+  }
 }
 
 async function catAction(id, action) {
@@ -2024,10 +2586,65 @@ function _renderHeroPresets() {
   const listEl = document.getElementById('hero-presets-list');
   if (!listEl) return;
   if (!_heroPresets.length) {
+    listEl.className = '';
     listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
     return;
   }
-  listEl.innerHTML = _heroPresets.map(_heroPresetRow).join('');
+  listEl.className = 'hp-card-grid';
+  listEl.innerHTML = _heroPresets.map(_heroPresetCard).join('');
+  _observeHeroPreviews();
+}
+
+/* Previews are rendered server-side — one request and one JPEG per preset — so loading the whole
+ * catalogue eagerly would be two dozen renders every time this tab is opened, on a phone, for
+ * cards mostly below the fold. Each card asks for its own picture as it scrolls into view, once.
+ *
+ * The JSON dumps this replaced were exact and unreadable: `styleSpec を表示` told you the preset
+ * set `metal` and `glows` without telling you what that looks like, which is the only question
+ * anyone opens this screen with. */
+let _hpPreviewObserver = null;
+const _hpPreviewDone = new Set();
+
+function _observeHeroPreviews() {
+  _hpPreviewObserver?.disconnect();
+  _hpPreviewDone.clear();
+  _hpPreviewObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      _hpPreviewObserver.unobserve(e.target);
+      const id = e.target.dataset.presetId;
+      if (id && !_hpPreviewDone.has(id)) { _hpPreviewDone.add(id); _loadHeroPreviewInto(id); }
+    }
+  }, { rootMargin: '250px' });
+  document.querySelectorAll('#hero-presets-list .hp-card-shot').forEach((el) => _hpPreviewObserver.observe(el));
+}
+
+async function _loadHeroPreviewInto(id) {
+  const p = _heroPresets.find((x) => x.id === id);
+  const host = document.querySelector(`#hero-presets-list .hp-card-shot[data-preset-id="${CSS.escape(id)}"]`);
+  if (!p || !host) return;
+  // 標準 is the representative one; fall back only so a preset that has authored just 短い or 長い
+  // still shows something rather than the renderer's own 「サンプル」 placeholder.
+  const v = _hpNormalizeVariants(p.exampleLines);
+  const lines = v.standard.length ? v.standard : (v.short.length ? v.short : v.long);
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({
+        templateId: p.templateId,
+        styleSpec: p.styleSpec || {},
+        lines,
+        badge: p.exampleBadge || undefined,
+        article: p.name || 'サンプル見出し',
+      }),
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー" onclick="_openLightbox('${url}','${esc(p.name)} のプレビュー')">`;
+  } catch {
+    host.innerHTML = '<div class="hp-card-shot-fail">プレビューを生成できませんでした</div>';
+  }
 }
 
 /* What the agent may choose from, and on whose authority.
@@ -2049,49 +2666,58 @@ function _presetApproval(p) {
     : { label: '手動追加', color: '#94A3B8', bg: '#94A3B822' };
 }
 
-function _heroPresetRow(p) {
-  const tags = (p.mood || []).map(t => `<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(t)}</span>`).join(' ');
+/* A generic full-size image viewer, built once and reused — the preview thumbnails across both the
+   preset cards and the recipe cards are deliberately small (a grid of them is the point), so seeing
+   one at real size needs a way out of the grid that doesn't navigate anywhere. */
+function _openLightbox(url, alt = '') {
+  let ov = document.getElementById('img-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'img-lightbox';
+    ov.className = 'lightbox-ov';
+    ov.onclick = (e) => { if (e.target === ov) _closeLightbox(); };
+    ov.innerHTML = '<img id="img-lightbox-img" alt=""><button class="lightbox-close" onclick="_closeLightbox()" aria-label="閉じる">×</button>';
+    document.body.appendChild(ov);
+  }
+  document.getElementById('img-lightbox-img').src = url;
+  document.getElementById('img-lightbox-img').alt = alt;
+  ov.classList.add('open');
+}
+function _closeLightbox() { document.getElementById('img-lightbox')?.classList.remove('open'); }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLightbox(); });
+
+function _heroPresetCard(p) {
+  const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
   const sysLabel = p.isSystem
-    ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--div);color:var(--m)">system</span>'
-    : '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#34D39933;color:#34D399">custom</span>';
+    ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>'
+    : '<span class="chip" style="background:#34D39933;color:#34D399">custom</span>';
   const ap = _presetApproval(p);
   const apTitle = p.approval?.decidedBy ? `決定: ${p.approval.decidedBy}` : '承認台帳に記録なし（既存項目として扱われています）';
-  const apLabel = `<span title="${esc(apTitle)}" style="font-size:9px;padding:1px 5px;border-radius:3px;background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
+  const apLabel = `<span class="chip" title="${esc(apTitle)}" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
   const off = p.enabled === false;
-  const offLabel = off ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#F8717122;color:#F87171">無効</span>' : '';
+  const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
   const faceVal = p.styleSpec?.face || '—';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
-  return `<div class="src-row" style="gap:10px;align-items:flex-start${off ? ';opacity:.55' : ''}">
-    <div class="src-body" style="flex:1;min-width:0">
-      <div class="src-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-family:monospace;font-size:11px;color:var(--acc)">${esc(p.id)}</span>
-        ${sysLabel}${apLabel}${offLabel}
-        <span style="font-size:12px;font-weight:700;color:var(--txt)">${esc(p.name)}</span>
-      </div>
-      <div class="src-meta" style="margin-top:4px">${esc(p.description || '')}</div>
-      <div class="src-meta" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:10px;color:var(--m2)">${esc(p.templateId)}</span>
-        <span style="font-size:10px;color:var(--m2)">face: ${esc(faceVal)}</span>
-        ${tags}
-      </div>
-      <!-- Collapsed spec preview -->
-      <details style="margin-top:8px">
-        <summary style="font-size:10px;color:var(--m);cursor:pointer">styleSpec を表示</summary>
-        <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.styleSpec, null, 2))}</pre>
-      </details>
-      ${(p.exampleLines||[]).length ? `
-        <details style="margin-top:4px">
-          <summary style="font-size:10px;color:var(--m);cursor:pointer">exampleLines を表示</summary>
-          <pre style="margin:6px 0 0;font-size:10px;color:var(--m);background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(p.exampleLines, null, 2))}</pre>
-        </details>` : ''}
-      <div style="font-size:10px;color:var(--m2);margin-top:6px">更新: ${updAt}</div>
+  return `<div class="hp-card${off ? ' is-off' : ''}">
+    <div class="hp-card-shot" data-preset-id="${esc(p.id)}"></div>
+    <div class="hp-card-body">
+      <div class="hp-card-name">${esc(p.name)}</div>
+      <div class="hp-card-id">${esc(p.id)}</div>
+      <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}</div>
+      ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
+      <div class="hp-card-meta">${esc(p.templateId)} · face: ${esc(faceVal)}</div>
+      ${tags ? `<div class="hp-card-chips">${tags}</div>` : ''}
+      <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')" style="font-size:10px">編集</button>
-      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})" style="font-size:10px"
+    <div class="hp-card-acts">
+      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
+      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${!p.isSystem ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="font-size:10px;color:var(--red)">削除</button>` : ''}
+      ${off && !p.isSystem
+        ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
+    ${off && p.isSystem
+      ? '<div class="hp-card-note">既定のスタイルは削除できません（次のデプロイで再生成されます）。無効のままにしておけば選ばれません。</div>' : ''}
   </div>`;
 }
 
@@ -2111,6 +2737,18 @@ async function _toggleHeroPreset(id, currentlyOff) {
   _loadHeroPresets();
 }
 
+/* `exampleLines` holds one authored set per length rather than one demo — mirrors
+   `_normalizeExampleLines` in src/routes/hero-presets.js so a preset saved before this existed (a
+   flat array) still loads: it becomes the 標準 variant, and 短い/長い start empty rather than the
+   editor guessing content that was never authored. */
+function _hpNormalizeVariants(v) {
+  if (Array.isArray(v)) return { short: [], standard: v, long: [] };
+  if (v && typeof v === 'object') {
+    return { short: v.short || [], standard: v.standard || [], long: v.long || [] };
+  }
+  return { short: [], standard: [], long: [] };
+}
+
 function _showNewPresetForm() {
   _hpEditingId = null;
   document.getElementById('hp-editor-title').textContent = '新規テンプレートを作成';
@@ -2121,7 +2759,13 @@ function _showNewPresetForm() {
   document.getElementById('hp-description').value = '';
   document.getElementById('hp-template-id').value = 'photo_scrim';
   document.getElementById('hp-style-spec').value = JSON.stringify({ face: 'sans', strokes: [], glow: { color: '#000000', em: 0.16, opacity: 0.40 } }, null, 2);
-  document.getElementById('hp-example-lines').value = JSON.stringify([{ text: 'メインコピー', scale: 1.2, indent: 0 }, { text: 'サブコピー', scale: 0.48, indent: 0.1 }], null, 2);
+  _hpVariants = {
+    short: [{ text: 'コピー', scale: 1.2, indent: 0 }],
+    standard: [{ text: 'メインコピー', scale: 1.2, indent: 0 }, { text: 'サブコピー', scale: 0.48, indent: 0.1 }],
+    long: [{ text: 'もう少し長いメインコピー', scale: 1.0, indent: 0 }, { text: 'もう少し長いサブコピー', scale: 0.48, indent: 0.1 }],
+  };
+  _hpVariant = 'standard';
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants.standard, null, 2);
   document.getElementById('hp-example-badge').value = '';
   document.getElementById('hp-editor-error').style.display = 'none';
   // Reset preview pane
@@ -2129,6 +2773,9 @@ function _showNewPresetForm() {
   if (img) { img.src = ''; img.style.display = 'none'; }
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
+  _syncHpSummaries();
+  _renderSampleTabs();
+  _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2145,7 +2792,9 @@ function _editHeroPreset(id) {
   document.getElementById('hp-description').value = p.description || '';
   document.getElementById('hp-template-id').value = p.templateId || 'photo_scrim';
   document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
-  document.getElementById('hp-example-lines').value = JSON.stringify(p.exampleLines || [], null, 2);
+  _hpVariants = _hpNormalizeVariants(p.exampleLines);
+  _hpVariant = 'standard';
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants.standard, null, 2);
   document.getElementById('hp-example-badge').value = p.exampleBadge ? JSON.stringify(p.exampleBadge, null, 2) : '';
   document.getElementById('hp-editor-error').style.display = 'none';
   // Reset preview pane then trigger first render
@@ -2153,6 +2802,9 @@ function _editHeroPreset(id) {
   if (img2) { img2.src = ''; img2.style.display = 'none'; }
   document.getElementById('hp-preview-placeholder').style.display = 'flex';
   document.getElementById('hp-preview-error').style.display = 'none';
+  _syncHpSummaries();
+  _renderSampleTabs();
+  _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
   document.getElementById('hero-preset-editor').style.display = '';
   document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
   _refreshPreview();
@@ -2163,10 +2815,1128 @@ function _closeHeroPresetEditor() {
   _hpEditingId = null;
 }
 
+/* ── styleSpec: controls instead of hand-written JSON ─────────────────────────
+ *
+ * This form was a textarea holding raw JSON, which on a phone meant authoring
+ * `{"face":"sans","strokes":[{"color":"#050810","em":0.038}]}` with a thumb. The vocabulary that
+ * describes every key already exists in the renderer — it is what rejects a misspelt key before
+ * anything draws — so the controls are generated from it rather than written out again here.
+ * Duplicating it would drift, and the drift shows up as a control that sets a value the renderer
+ * then silently discards.
+ *
+ * The textarea stays, below, as the escape hatch: the vocabulary has 56 keys and some are shapes no
+ * small control expresses well (`metal`, `typography`). Both edit the same object, so neither can
+ * hold a value the other cannot see.
+ *
+ * Only keys the spec *has* get a control, plus a picker to add one. Rendering all 56 would replace
+ * a scrolling wall of JSON with a scrolling wall of sliders.
+ */
+let _hpVocab = null;
+
+async function _loadStyleVocab() {
+  if (_hpVocab) return _hpVocab;
+  try {
+    const res = await fetch(apiUrl('/api/hero-presets/vocabulary'), { headers: _authHeaders() });
+    if (!res.ok) return null;
+    _hpVocab = await res.json();
+  } catch { return null; }
+  return _hpVocab;
+}
+
+/** The spec as an object, taken from the textarea — the one place the value actually lives. */
+function _hpSpec() {
+  const raw = document.getElementById('hp-style-spec')?.value?.trim();
+  if (!raw) return {};
+  try { const v = JSON.parse(raw); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
+  catch { return null; }              // null means "unparseable", which the form must not overwrite
+}
+
+function _hpWriteSpec(spec) {
+  const el = document.getElementById('hp-style-spec');
+  if (!el) return;
+  el.value = JSON.stringify(spec, null, 2);
+  _renderStyleForm();
+  _syncHpSummaries();
+  _debouncedPreview();
+}
+
+function _hpSetKey(key, value) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  spec[key] = value;
+  _hpWriteSpec(spec);
+}
+
+function _hpRemoveKey(key) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  delete spec[key];
+  _hpWriteSpec(spec);
+}
+
+function _hpAddKey(key) {
+  if (!key) return;
+  const d = _hpVocab?.schema?.[key];
+  const spec = _hpSpec();
+  if (spec === null || !d) return;
+  // Start from something the renderer would accept, so adding a key never leaves the spec invalid.
+  spec[key] = d.type === 'enum' ? d.options[0]
+    : d.type === 'colour' ? '#FFFFFF'
+      : d.type === 'range' ? Number(((d.min + d.max) / 2).toFixed(2))
+        : d.type === 'bool' ? true
+          : d.type === 'array' ? []
+            : d.type === 'string' ? '' : {};
+  _hpWriteSpec(spec);
+}
+
+const _hpNum = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(d.max, Math.max(d.min, n)) : d.min; };
+
+/* Generic, JSON-free controls for the styleSpec keys whose value is a plain object, a union of
+ * shapes, or a list of them (bevel, metal, gradient, band, typography, strokes, ...). These used
+ * to fall straight to "下の JSON で編集" — the operator's only way to set an outline colour, a
+ * bevel, or a named gradient was to hand-write the object on a phone.
+ *
+ * Rather than one bespoke editor per key (fifteen-odd distinct shapes, several nested), this reads
+ * the *current value's own keys* and renders a field per key, guessing the right input from its
+ * runtime type — a number gets a number input, a `#RRGGBB` string gets a colour swatch, anything
+ * else gets text. It cannot describe what a field named `em` means (the JSON, still reachable
+ * below, is the place for that), but it never needs to know the shape in advance, which is what
+ * makes one implementation cover all of them.
+ *
+ * Every mutation is addressed by `path` — an array of keys/indices from the spec's root down to
+ * the field being changed — because these shapes nest (typography.eyebrow.sizeEm) and a flat
+ * `_hpSetKey(key, value)` has no way to reach inside one.
+ */
+function _hpPathAttr(path) { return esc(JSON.stringify(path)); }
+
+function _hpSetPath(path, value) {
+  const spec = _hpSpec();
+  if (spec === null || !path.length) return;
+  let cur = spec;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i];
+    if (cur[k] == null || typeof cur[k] !== 'object') cur[k] = typeof path[i + 1] === 'number' ? [] : {};
+    cur = cur[k];
+  }
+  cur[path[path.length - 1]] = value;
+  _hpWriteSpec(spec);
+}
+
+function _hpRemovePath(path) {
+  const spec = _hpSpec();
+  if (spec === null || !path.length) return;
+  let cur = spec;
+  for (let i = 0; i < path.length - 1; i++) { if (cur == null) return; cur = cur[path[i]]; }
+  if (cur == null) return;
+  const last = path[path.length - 1];
+  // A hole left by `delete` on an array (strokes[1] gone, strokes[2] still there) would round-trip
+  // through JSON as `null`, which is a value here, not an absence — splice instead.
+  if (Array.isArray(cur)) cur.splice(last, 1); else delete cur[last];
+  _hpWriteSpec(spec);
+}
+
+// A value typed into the "add field" boxes has no declared type to fall back on, unlike a schema
+// key — guessed from what it looks like, the same reading anyone would give it.
+function _hpGuessValue(raw) {
+  const s = String(raw ?? '').trim();
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  return s; // covers #RRGGBB and plain text alike — _hpTypeOf sorts the colour case out on redraw
+}
+
+function _hpAddObjField(path, keyElId, valElId) {
+  const keyEl = document.getElementById(keyElId);
+  const valEl = document.getElementById(valElId);
+  const k = keyEl?.value.trim();
+  if (!k) return;
+  _hpSetPath([...path, k], _hpGuessValue(valEl?.value));
+  keyEl.value = '';
+  valEl.value = '';
+}
+
+function _hpAddArrayItem(path) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  let cur = spec;
+  for (const k of path) { if (cur[k] == null) cur[k] = []; cur = cur[k]; }
+  if (!Array.isArray(cur)) return;
+  cur.push({});
+  _hpWriteSpec(spec);
+}
+
+function _hpAddStop(path) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  let cur = spec;
+  for (const k of path) { if (cur[k] == null) cur[k] = []; cur = cur[k]; }
+  if (!Array.isArray(cur)) return;
+  cur.push(['100%', '#FFFFFF']);
+  _hpWriteSpec(spec);
+}
+
+// A declaration rather than an arrow const so scripts/smoke-render.js can extract it: that
+// extractor brace-matches functions but reads a const only to the first line ending in `;`, which
+// truncates any multi-statement arrow mid-body.
+function _hpTypeOf(v) {
+  if (typeof v === 'boolean') return 'bool';
+  if (typeof v === 'number') return 'number';
+  if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) return 'colour';
+  return 'text';
+}
+
+// A gradient/metal override authored as a stop list — `[["0%","#FFFBE8"],["100%","#C8860B"]]`, the
+// shape `stopsOf`/`addGrad` in hero-title.js resolve directly — reads much better as offset+colour
+// rows than as N generic objects, so it gets its own small editor rather than falling into the
+// object-list branch below.
+const _hpIsStopList = (arr) => Array.isArray(arr) && arr.length > 0
+  && arr.every((s) => Array.isArray(s) && s.length === 2 && typeof s[0] === 'string' && typeof s[1] === 'string');
+
+function _hpStopListCtl(path, stops) {
+  const rows = stops.map((s, idx) => {
+    const offPath = [...path, idx, 0];
+    const colPath = [...path, idx, 1];
+    const col = /^#[0-9a-fA-F]{6}$/.test(s[1]) ? s[1] : '#FFFFFF';
+    return `<div class="hp-stop-row">
+      <input class="form-input hp-mono hp-stop-off" type="text" value="${esc(s[0])}" onchange="_hpSetPath(${_hpPathAttr(offPath)},this.value)">
+      <input type="color" value="${col}" oninput="_hpSetPath(${_hpPathAttr(colPath)},this.value.toUpperCase())">
+      <input class="form-input hp-mono" type="text" value="${esc(s[1])}" onchange="_hpSetPath(${_hpPathAttr(colPath)},this.value.toUpperCase())">
+      <button class="act-btn danger hp-rm" onclick="_hpRemovePath(${_hpPathAttr([...path, idx])})">×</button>
+    </div>`;
+  }).join('');
+  return `<div class="hp-stops">${rows}
+    <button class="act-btn" onclick="_hpAddStop(${_hpPathAttr(path)})">＋ 色の段を追加</button>
+  </div>`;
+}
+
+// Renders one row per existing key in `obj` — no wrapper, so this composes both as a top-level
+// shape's whole body and as one item inside a list. Recurses into nested objects/arrays (e.g.
+// `typography.eyebrow`) one indent level at a time.
+function _hpObjectFields(path, obj) {
+  const entries = Object.entries(obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {});
+  return entries.map(([k, v]) => {
+    const fieldPath = [...path, k];
+    const rm = `<button class="act-btn danger hp-rm" onclick="_hpRemovePath(${_hpPathAttr(fieldPath)})">×</button>`;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return `<div class="hp-obj-row hp-obj-nested">
+        <div class="hp-obj-key">${esc(k)}${rm}</div>
+        <div class="hp-obj-sub">${_hpObjectFields(fieldPath, v)}${_hpObjectAddRow(fieldPath)}</div>
+      </div>`;
+    }
+    if (Array.isArray(v)) {
+      return `<div class="hp-obj-row hp-obj-nested">
+        <div class="hp-obj-key">${esc(k)}${rm}</div>
+        <div class="hp-obj-sub">${_hpIsStopList(v) ? _hpStopListCtl(fieldPath, v) : _hpArrayCtl(fieldPath, v)}</div>
+      </div>`;
+    }
+    const t = _hpTypeOf(v);
+    const input = t === 'bool'
+      ? `<input type="checkbox"${v ? ' checked' : ''} onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.checked)">`
+      : t === 'number'
+        ? `<input class="form-input hp-num" type="number" step="any" value="${v}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},Number(this.value))">`
+        : t === 'colour'
+          ? `<input type="color" value="${v}" oninput="_hpSetPath(${_hpPathAttr(fieldPath)},this.value.toUpperCase())">`
+            + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.value.toUpperCase())">`
+          : `<input class="form-input" type="text" value="${esc(String(v ?? ''))}" onchange="_hpSetPath(${_hpPathAttr(fieldPath)},this.value)">`;
+    return `<div class="hp-obj-row"><span class="hp-obj-key">${esc(k)}</span>${input}${rm}</div>`;
+  }).join('');
+}
+
+function _hpObjectAddRow(path) {
+  const id = path.map(String).join('_').replace(/[^a-zA-Z0-9_]/g, '') || 'root';
+  return `<div class="hp-obj-add">
+    <input class="form-input" type="text" id="hp-oak-${id}" placeholder="キー名（例: em）">
+    <input class="form-input" type="text" id="hp-oav-${id}" placeholder="値（例: 0.05 / #FFFFFF / テキスト）">
+    <button class="act-btn" onclick="_hpAddObjField(${_hpPathAttr(path)},'hp-oak-${id}','hp-oav-${id}')">＋</button>
+  </div>`;
+}
+
+// A list of shape objects — strokes, glows. Each item is its own removable sub-panel of fields,
+// since a `strokes` array with two layers is two genuinely separate things to edit, not one object
+// with numbered keys.
+function _hpArrayCtl(path, arr) {
+  const rows = arr.map((item, idx) => {
+    const itemPath = [...path, idx];
+    const body = (item && typeof item === 'object' && !Array.isArray(item))
+      ? `${_hpObjectFields(itemPath, item)}${_hpObjectAddRow(itemPath)}`
+      : `<input class="form-input" type="text" value="${esc(String(item ?? ''))}" onchange="_hpSetPath(${_hpPathAttr(itemPath)},this.value)">`;
+    return `<div class="hp-arr-item">${body}
+      <button class="act-btn danger" onclick="_hpRemovePath(${_hpPathAttr(itemPath)})">この項目を削除</button></div>`;
+  }).join('');
+  return `<div class="hp-arr">${rows}
+    <button class="act-btn" onclick="_hpAddArrayItem(${_hpPathAttr(path)})">＋ 項目を追加</button>
+  </div>`;
+}
+
+// `either(...)` — a key that may hold one of several shapes (tintOutline: on/off or a colour;
+// metal: a named preset, a custom {hi,mid,lo}, or a stop list). Segmented buttons pick which shape
+// is in play; switching resets the value to that shape's own default so the control underneath is
+// never asked to render a value of the wrong kind.
+const HP_VARIANT_LABEL = { enum: '名前で指定', colour: '色', range: '数値', bool: 'オン/オフ', object: '詳細設定', array: 'リスト', string: '文字' };
+
+function _hpVariantMatches(v, variant) {
+  switch (variant.type) {
+    case 'enum':   return typeof v === 'string' && variant.options.includes(v);
+    case 'colour': return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+    case 'range':  return typeof v === 'number';
+    case 'bool':   return typeof v === 'boolean';
+    case 'object': return v != null && typeof v === 'object' && !Array.isArray(v);
+    case 'array':  return Array.isArray(v);
+    case 'string': return typeof v === 'string';
+    default:       return false;
+  }
+}
+
+function _hpSwitchVariant(key, variantType) {
+  const variant = _hpVocab?.schema?.[key]?.variants?.find((v) => v.type === variantType);
+  if (!variant) return;
+  const def = variant.type === 'enum' ? variant.options[0]
+    : variant.type === 'colour' ? '#FFFFFF'
+      : variant.type === 'range' ? Number(((variant.min + variant.max) / 2).toFixed(2))
+        : variant.type === 'bool' ? true
+          : variant.type === 'array' ? []
+            : variant.type === 'string' ? '' : {};
+  _hpSetPath([key], def);
+}
+
+function _hpUnionCtl(key, desc, value) {
+  const active = desc.variants.find((vr) => _hpVariantMatches(value, vr)) ?? desc.variants[0];
+  const toggle = desc.variants.map((vr) =>
+    `<button class="act-btn${vr.type === active.type ? ' on' : ''}" onclick="_hpSwitchVariant('${key}','${vr.type}')">${HP_VARIANT_LABEL[vr.type] || vr.type}</button>`).join('');
+  let inner;
+  if (active.type === 'enum') {
+    inner = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
+      active.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  } else if (active.type === 'colour') {
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    inner = `<div class="hp-colour"><input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="_hpSetKey('${key}',this.value.toUpperCase())"></div>`;
+  } else if (active.type === 'range') {
+    const v = _hpNum(value, active);
+    inner = `<div class="hp-range"><input type="range" min="${active.min}" max="${active.max}" step="${active.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="_hpSetKey('${key}',Number(this.value))">`
+      + `<input class="form-input hp-num" type="number" min="${active.min}" max="${active.max}" step="${active.step}" value="${v}"`
+      + ` onchange="_hpSetKey('${key}',Number(this.value))"></div>`;
+  } else if (active.type === 'bool') {
+    inner = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="_hpSetKey('${key}',this.checked)"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (active.type === 'object') {
+    const obj = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    inner = _hpObjectFields([key], obj) + _hpObjectAddRow([key]);
+  } else if (active.type === 'array') {
+    const arr = Array.isArray(value) ? value : [];
+    inner = _hpIsStopList(arr) ? _hpStopListCtl([key], arr) : _hpArrayCtl([key], arr);
+  } else {
+    inner = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="_hpSetKey('${key}',this.value)">`;
+  }
+  return `<div class="hp-union-toggle">${toggle}</div>${inner}`;
+}
+
+/* These four keys only ever reach the renderer's "highlighted phrase" path (`isHot` in
+   buildOverlaySvg's draw loop), which is forced entirely off whenever a preset carries authored
+   exampleLines — the normal case for every seeded preset. Set on such a preset, they parse, they
+   save, and they draw nothing: the silent-no-op class of bug the sample-length buttons were also
+   in. Line-level equivalents exist instead — `scale`/`color`/`face`/`glow` per line in 見本. */
+const HP_DEAD_WITH_LINES = new Set(['emphasisScale', 'highlight', 'accentMetal', 'accentGradient']);
+
+function _hpControl(key, desc, value, unset = false) {
+  const lbl = esc(desc.label || key);
+  // Nothing to remove when the key is not in the spec — the × would read as "undo", which it isn't.
+  const rm = unset ? '' : `<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey('${key}')">×</button>`;
+  const head = `<div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code>${rm}</div>`;
+  const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
+  let body;
+
+  if (desc.type === 'enum') {
+    body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
+      desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  } else if (desc.type === 'colour') {
+    /* No null vocabulary here any more.
+     *
+     * It existed for one key: `ground: null` is how a photo template says "show the photograph,
+     * do not paint over it", and rendering white for that was a lie about the spec. `ground` left
+     * this editor with the rest of the background settings (HP_GROUND_KEYS), and with it went the
+     * only colour whose null was a decision worth stating. What remained was every *unset* colour
+     * announcing 「null — この扱いをしない」 — a choice nobody made, printed under half the rows.
+     *
+     * A colour the preset does not set now reads as 未設定 like any other unset control, and the
+     * stored value is left alone until the swatch is used. Nothing writes null from here; `×`
+     * removes the key, which is what "do not set this" means for the keys that are left. */
+    const blank = unset || value === null || value === undefined;
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    body = `<div class="hp-colour">`
+      + `<input type="color" value="${v}" oninput="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(blank ? '' : v)}" placeholder="未設定"`
+      + ` onchange="_hpSetKey('${key}',this.value.toUpperCase())">`
+      + '</div>';
+  } else if (desc.type === 'range') {
+    const v = _hpNum(value, desc);
+    // The number is shown as well as the slider: a slider alone cannot be set to an exact value,
+    // and these are design decisions people copy between presets.
+    body = `<div class="hp-range"><input type="range" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="_hpSetKey('${key}',Number(this.value))">`
+      + `<input class="form-input hp-num" type="number" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` onchange="_hpSetKey('${key}',Number(this.value))"></div>`;
+  } else if (desc.type === 'bool') {
+    body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="_hpSetKey('${key}',this.checked)"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (desc.type === 'string') {
+    body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="_hpSetKey('${key}',this.value)">`;
+  } else if (desc.type === 'union') {
+    body = _hpUnionCtl(key, desc, value);
+  } else if (desc.type === 'object') {
+    const obj = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    body = _hpObjectFields([key], obj) + _hpObjectAddRow([key]);
+  } else if (desc.type === 'array') {
+    const arr = Array.isArray(value) ? value : [];
+    body = _hpIsStopList(arr) ? _hpStopListCtl([key], arr) : _hpArrayCtl([key], arr);
+  } else {
+    body = `<div class="hp-ctl-json">⚠ 未知の型（${esc(desc.type)}）<span class="hp-ctl-hint">下の JSON で編集</span></div>`;
+  }
+  const deadHint = deadWithLines
+    ? '<div class="hp-ctl-hint">⚠ この見本は固定行（exampleLines）を使っているため、この項目は描画に反映されません。見本の行ごとの設定（大きさ・色・書体・発光）を使ってください。</div>'
+    : '';
+  const unsetHint = unset ? '<div class="hp-ctl-hint">未設定 — 触ると設定されます（テンプレートの値のまま）</div>' : '';
+  return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}${unset ? ' hp-ctl-unset' : ''}">${head}${body}${unsetHint}${deadHint}</div>`;
+}
+
+// Always on screen regardless of whether the spec currently sets them — "what colour is the text"
+// and "what colour is the outline" are the questions asked before any other, and requiring
+// 項目を追加 first for exactly those read as though the control didn't exist at all.
+const HP_CORE_KEYS = ['text'];
+
+/* The background is not this catalogue's to fix.
+ *
+ * A サムネタイトル preset describes the *lettering*; what sits behind it comes from 絵のレシピ and
+ * from the article's own picture, and differs article to article. A preset that pins `ground` or
+ * `usesPhoto` overrides that choice for every article it is ever applied to — so these are taken
+ * out of the editor rather than left as a control that quietly outranks the picture.
+ *
+ * `accentFrom` stays: it groups under 地・写真 in the vocabulary but decides where the *accent
+ * colour* comes from, which is a lettering decision. Presets that already set the background keep
+ * their values until the operator clears them — see the notice `_hpGroundNotice` renders. */
+const HP_GROUND_KEYS = ['ground', 'usesPhoto', 'scrimMax'];
+
+/* The settings worth reaching for, on screen without being asked for.
+ *
+ * Everything outside 基本の色 used to require picking the key out of 項目を追加 first, which is a
+ * dropdown of forty entries — so the dozen decisions actually made when designing a title (which
+ * face, how tight, how many lines, what colour the emphasis is) cost the same effort as the ones
+ * nobody touches. These are rendered whether or not the preset sets them; an unset one is dimmed
+ * and says so, and setting it is one interaction with the control itself rather than three.
+ *
+ * Ordered by how often the question comes up, not by group. */
+const HP_QUICK_KEYS = [
+  'face', 'align', 'anchor', 'leading', 'letterSpacing', 'condense',
+  'preferLines', 'maxLines', 'accent', 'metal', 'emphasisScale',
+];
+
+/* How the claim inside the headline is marked.
+ *
+ * `highlight` is typed as a bare shape, so it landed in the generic key-value editor — which is
+ * the difference between "pick the orange marker" and knowing that `decorationColor` is a field.
+ * In practice nobody reached it, and every thumbnail kept whatever accent the template already
+ * had. The presets come from the server (style-vocabulary.js) so the blocks the dashboard writes
+ * are the same ones the renderer documents.
+ *
+ * Picking replaces the block outright rather than merging into it: two half-applied presets make a
+ * look neither of them describes, and the colour row below is there for tuning one afterwards. */
+function _hpHighlightCtl(value) {
+  const presets = _hpVocab?.highlights || {};
+  const hl = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">強調句の見せ方</span>'
+    + '<code class="hp-ctl-key">highlight</code>'
+    + (hl ? '<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey(\'highlight\')">×</button>' : '')
+    + '</div>';
+
+  // Which preset this is, if any — matched on the fields that distinguish them rather than on a
+  // stored name, so a block that was tuned afterwards still shows which one it started from.
+  const same = (a, b) => (a?.decoration ?? 'none') === (b?.decoration ?? 'none')
+    && (a?.decorationColor ?? '') === (b?.decorationColor ?? '')
+    && (a?.color ?? '') === (b?.color ?? '') && (a?.metal ?? '') === (b?.metal ?? '');
+  const current = hl ? (Object.entries(presets).find(([, p]) => same(hl, p.block))?.[0] ?? '') : '';
+
+  const chips = Object.entries(presets).map(([id, p]) =>
+    `<button class="act-btn hp-hl-chip${id === current ? ' on' : ''}" onclick="_hpSetHighlight('${esc(id)}')">
+       <span class="hp-hl-sw" style="background:${esc(p.block?.decorationColor || p.block?.color || '#9CA3AF')}"></span>${esc(p.label)}
+     </button>`).join('');
+
+  const tune = hl ? `
+    <div class="hp-hl-tune">
+      ${hl.decoration && hl.decoration !== 'none' ? `<label class="hp-hl-row"><span>マーカー色</span>
+        <input type="color" value="${/^#[0-9a-fA-F]{6}$/.test(hl.decorationColor) ? hl.decorationColor : '#E2600B'}"
+          oninput="_hpTuneHighlight({decorationColor:this.value.toUpperCase()})"></label>` : ''}
+      ${hl.metal ? '' : `<label class="hp-hl-row"><span>文字色</span>
+        <input type="color" value="${/^#[0-9a-fA-F]{6}$/.test(hl.color) ? hl.color : '#FFFFFF'}"
+          oninput="_hpTuneHighlight({color:this.value.toUpperCase()})"></label>`}
+      <label class="hp-hl-row"><span>大きさ</span>
+        <input type="range" min="1" max="2.4" step="0.02" value="${Number.isFinite(hl.scale) ? hl.scale : 1.42}"
+          oninput="this.nextElementSibling.value=this.value" onchange="_hpTuneHighlight({scale:Number(this.value)})">
+        <input class="form-input hp-num" type="number" min="1" max="2.4" step="0.02"
+          value="${Number.isFinite(hl.scale) ? hl.scale : 1.42}" onchange="_hpTuneHighlight({scale:Number(this.value)})"></label>
+    </div>` : '';
+
+  const hint = '<div class="hp-ctl-hint">見本の「かぎかっこ」の中が強調句として描かれます。</div>';
+  return `<div class="hp-ctl${hl ? '' : ' hp-ctl-unset'}">${head}<div class="hp-hl-chips">${chips}</div>${tune}${hint}</div>`;
+}
+
+function _hpSetHighlight(id) {
+  const block = _hpVocab?.highlights?.[id]?.block;
+  if (!block) return;
+  const spec = _hpSpec();
+  if (spec === null) return;
+  spec.highlight = { ...block };
+  _hpWriteSpec(spec);
+}
+
+function _hpTuneHighlight(patch) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const cur = (spec.highlight && typeof spec.highlight === 'object' && !Array.isArray(spec.highlight))
+    ? spec.highlight : {};
+  spec.highlight = { ...cur, ...patch };
+  _hpWriteSpec(spec);
+}
+
+/* Glow gets a written control rather than a place in HP_QUICK_KEYS, for the same reason the
+   per-line editor gives it one: the vocabulary types it as a bare shape, so the generic object
+   editor would offer an empty "add a field" form — technically complete, and useless as the
+   two-tap answer to "make the lettering glow". */
+function _hpGlowCoreCtl(value) {
+  const g = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+  const col = /^#[0-9a-fA-F]{6}$/.test(g?.color) ? g.color : '#FF3366';
+  const em = Number.isFinite(g?.em) ? g.em : 0.24;
+  const op = Number.isFinite(g?.opacity) ? g.opacity : 0.6;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">発光</span><code class="hp-ctl-key">glow</code>'
+    + (g ? '<button class="act-btn danger hp-rm" title="この項目を外す" onclick="_hpRemoveKey(\'glow\')">×</button>' : '')
+    + '</div>';
+  const row = (label, min, max, step, v, field) => `<label class="hp-glow-row"><span>${label}</span>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${v}"
+      oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlowSpec({${field}:Number(this.value)})">
+    <input class="form-input hp-num" type="number" min="${min}" max="${max}" step="${step}" value="${v}"
+      onchange="_hpSetGlowSpec({${field}:Number(this.value)})"></label>`;
+  const body = g
+    ? `<div class="hp-glow">
+         <div class="hp-colour">
+           <input type="color" value="${col}" oninput="_hpSetGlowSpec({color:this.value.toUpperCase()})">
+           <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetGlowSpec({color:this.value.toUpperCase()})">
+         </div>
+         ${row('広がり', 0.05, 0.6, 0.01, em, 'em')}
+         ${row('強さ', 0.1, 1, 0.05, op, 'opacity')}
+       </div>`
+    : `<button class="act-btn" onclick="_hpSetGlowSpec({})">文字を光らせる</button>`;
+  return `<div class="hp-ctl${g ? '' : ' hp-ctl-unset'}">${head}${body}</div>`;
+}
+
+function _hpSetGlowSpec(patch) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const cur = (spec.glow && typeof spec.glow === 'object' && !Array.isArray(spec.glow)) ? spec.glow : null;
+  spec.glow = { color: '#FF3366', em: 0.24, opacity: 0.6, ...(cur || {}), ...patch };
+  _hpWriteSpec(spec);
+}
+
+function _hpGroundNotice(spec) {
+  const set = HP_GROUND_KEYS.filter((k) => k in spec);
+  if (!set.length) return '';
+  return `<div class="hp-grp hp-ground-note">
+    <div class="hp-ctl-hint">この見本は背景も固定しています（<code>${set.map(esc).join(', ')}</code>）。
+    背景は「絵のレシピ」と記事の画像が決めるため、外すことをおすすめします。</div>
+    <button class="act-btn" onclick="_hpClearGround()">背景の指定を外す</button>
+  </div>`;
+}
+
+function _hpClearGround() {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  for (const k of HP_GROUND_KEYS) delete spec[k];
+  _hpWriteSpec(spec);
+  showToast('背景の指定を外しました。保存すると確定します。', 'success');
+}
+
+function _renderStyleForm() {
+  const host = document.getElementById('hp-style-form');
+  if (!host) return;
+  if (!_hpVocab) { host.innerHTML = ''; return; }
+
+  const spec = _hpSpec();
+  if (spec === null) {
+    // Unparseable JSON: show nothing rather than a form built from a guess, and do not touch the
+    // textarea — the operator is mid-edit and overwriting it would lose their work.
+    host.innerHTML = `<div class="hp-ctl-json">⚠ JSON が不正なため項目を表示できません。下の JSON を直すと戻ります。</div>`;
+    return;
+  }
+
+  // `strokes` gets its own quick control below (`_hpStrokesCoreCtl`) for the common single-layer
+  // case; the generic array editor would just duplicate it under the same label.
+  const hidden = (k) => HP_CORE_KEYS.includes(k) || HP_GROUND_KEYS.includes(k)
+    || HP_QUICK_KEYS.includes(k) || k === 'strokes' || k === 'glow' || k === 'highlight';
+  const set = Object.keys(spec).filter((k) => _hpVocab.schema[k] && !hidden(k));
+  const unknown = Object.keys(spec).filter((k) => !_hpVocab.schema[k]);
+  const groups = _hpVocab.groups
+    .map((g) => [g, set.filter((k) => _hpVocab.schema[k].group === g.id)])
+    .filter(([, keys]) => keys.length);
+
+  const addable = Object.entries(_hpVocab.schema)
+    .filter(([k]) => !(k in spec) && !hidden(k))
+    .map(([k, d]) => `<option value="${k}">${esc(d.label || k)}（${k}）</option>`).join('');
+
+  // Always on screen, but a key the preset does not carry still has to say so — otherwise 文字色
+  // reads as a decision this preset made when the template is in fact choosing it.
+  const core = HP_CORE_KEYS.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null, !(k in spec))).join('')
+    + _hpStrokesCoreCtl(spec.strokes);
+
+  const quick = HP_QUICK_KEYS.filter((k) => _hpVocab.schema[k])
+    .map((k) => _hpControl(k, _hpVocab.schema[k], spec[k] ?? null, !(k in spec))).join('')
+    + _hpHighlightCtl(spec.highlight)
+    + _hpGlowCoreCtl(spec.glow);
+
+  host.innerHTML = `
+    <div class="hp-grp"><div class="hp-grp-hd">基本の色</div>${core}</div>
+    <div class="hp-grp"><div class="hp-grp-hd">よく使う設定</div>${quick}</div>
+    ${_hpGroundNotice(spec)}
+    ${unknown.length ? `<div class="hp-ctl-json">⚠ レンダラーが読まないキー: <code>${unknown.map(esc).join(', ')}</code> — 描画時に無視されます</div>` : ''}
+    ${/* Everything past よく使う設定 is folded away by default. These groups hold the settings a
+          preset is fine-tuned with once and then left alone, and open they ran to several screens
+          of scrolling above the controls actually being reached for. The heading says how many are
+          set, so a folded group still answers "is there anything in here". */ ''}
+    ${groups.map(([g, keys]) => `
+      <details class="hp-grp hp-grp-fold">
+        <summary><span class="hp-grp-hd">${esc(g.label)}</span><span class="hp-grp-n">${keys.length}</span></summary>
+        ${keys.map((k) => _hpControl(k, _hpVocab.schema[k], spec[k])).join('')}
+      </details>`).join('')}
+    <div class="hp-add">
+      <select class="form-select" id="hp-add-key" onchange="_hpShowAddHint(this.value)"><option value="">項目を追加…</option>${addable}</select>
+      <button class="act-btn" onclick="_hpAddKey(document.getElementById('hp-add-key').value)">追加</button>
+      <div class="hp-ctl-hint" id="hp-add-hint" style="display:none"></div>
+    </div>`;
+}
+
+/* `strokes` is an array of layered outlines. This gives one-click editing of the first (and, for
+   every seeded preset, only) layer's colour and width — the control the operator asked for by
+   name ("font outline colour"). Rarer additional layers fall through to the generic array editor
+   (`_hpArrayCtl`) rather than JSON, so nothing here still requires opening the JSON fallback. */
+function _hpStrokesCoreCtl(value) {
+  const list = Array.isArray(value) ? value : [];
+  const first = list[0] || null;
+  const head = '<div class="hp-ctl-head"><span class="hp-ctl-name">縁取り</span><code class="hp-ctl-key">strokes</code></div>';
+  let body;
+  if (!first) {
+    body = '<button class="act-btn" onclick="_hpSetStrokeColor(\'#000000\')">縁取りを追加</button>';
+  } else {
+    const col = /^#[0-9a-fA-F]{6}$/.test(first.color) ? first.color : '#000000';
+    const em = Number.isFinite(first.em) ? first.em : 0.05;
+    body = `<div class="hp-colour">
+        <input type="color" value="${col}" oninput="_hpSetStrokeColor(this.value.toUpperCase())">
+        <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetStrokeColor(this.value.toUpperCase())">
+        <button class="act-btn" title="縁取りをやめる" onclick="_hpRemoveKey('strokes')">なし</button>
+      </div>
+      <div class="hp-range" style="margin-top:8px">
+        <input type="range" min="0.01" max="0.2" step="0.005" value="${em}"
+          oninput="this.nextElementSibling.value=this.value" onchange="_hpSetStrokeEm(Number(this.value))">
+        <input class="form-input hp-num" type="number" min="0.01" max="0.2" step="0.005" value="${em}"
+          onchange="_hpSetStrokeEm(Number(this.value))">
+      </div>
+      ${list.length > 1 ? `<div class="hp-ctl-hint">他 ${list.length - 1} 層:</div>${_hpArrayCtl(['strokes'], list)}` : ''}`;
+  }
+  return `<div class="hp-ctl">${head}${body}</div>`;
+}
+
+function _hpSetStrokeColor(color) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const list = Array.isArray(spec.strokes) ? [...spec.strokes] : [];
+  list[0] = { ...(list[0] || { em: 0.05 }), color };
+  spec.strokes = list;
+  _hpWriteSpec(spec);
+}
+
+function _hpSetStrokeEm(em) {
+  const spec = _hpSpec();
+  if (spec === null) return;
+  const list = Array.isArray(spec.strokes) ? [...spec.strokes] : [];
+  list[0] = { ...(list[0] || { color: '#000000' }), em };
+  spec.strokes = list;
+  _hpWriteSpec(spec);
+}
+
+/* The native <select> for "項目を追加…" cannot show a description per option (no reliable hover
+   text on <option>), so the description for whichever key is currently chosen is shown underneath
+   instead, updating on selection. */
+function _hpShowAddHint(key) {
+  const hint = document.getElementById('hp-add-hint');
+  if (!hint) return;
+  const d = key && _hpVocab?.schema?.[key];
+  const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
+  if (!d?.desc && !deadWithLines) { hint.style.display = 'none'; hint.textContent = ''; return; }
+  hint.style.display = '';
+  hint.textContent = [d?.desc, deadWithLines ? '⚠ この見本は固定行を使っているため、この項目は描画に反映されません。' : ''].filter(Boolean).join(' ');
+}
+
+/* ── The lines, editable one at a time ───────────────────────────────────────
+ *
+ * exampleLines was a JSON array in a textarea, so changing how 「月5万円」 is set meant finding it
+ * inside `[{"text":"月5万円","scale":1.6,...}]` and editing around it with a thumb. Each line now
+ * gets a row showing its own text; tapping one opens the controls for that line only.
+ *
+ * The vocabulary comes from the renderer (`lineSchema`), same as the styleSpec controls, and for
+ * the same reason. It is why there is no glow control here: the renderer takes glow from the
+ * template, not the line, so offering one would set a key nothing reads.
+ */
+let _hpOpenLine = null;
+
+function _hpLines() {
+  const raw = document.getElementById('hp-example-lines')?.value?.trim();
+  if (!raw) return [];
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : null; } catch { return null; }
+}
+
+function _hpWriteLines(lines) {
+  const el = document.getElementById('hp-example-lines');
+  if (!el) return;
+  el.value = JSON.stringify(lines, null, 2);
+  _renderLineForm();
+  _renderSampleTabs();
+  _renderStyleForm();
+  _syncHpSummaries();
+  _debouncedPreview();
+}
+
+function _hpSetLine(i, key, value) {
+  const lines = _hpLines();
+  if (!lines?.[i]) return;
+  if (value === '' || value === null) delete lines[i][key]; else lines[i][key] = value;
+  _hpWriteLines(lines);
+}
+
+/* Merge one field into a line's glow.
+ *
+ * The handlers used to inline the whole object and let a duplicate key shadow the earlier one —
+ * valid JavaScript, and completely opaque to whoever reads the markup next. This says what it does.
+ * Defaults are supplied here so the first tap produces something visible rather than a glow with no
+ * colour, which draws nothing and reads as the control being broken. */
+function _hpSetGlow(i, patch) {
+  const cur = _hpLines()?.[i]?.glow;
+  const base = (cur && typeof cur === 'object' && !Array.isArray(cur))
+    ? cur
+    : { color: '#FF3366', em: 0.24, opacity: 0.6 };
+  _hpSetLine(i, 'glow', { ...base, ...patch });
+}
+
+function _hpOpenLineRow(i) {
+  _hpOpenLine = _hpOpenLine === i ? null : i;
+  // Reopening shows whatever's currently decorated, selected — so tapping back in reveals the
+  // existing choice instead of looking like it was forgotten.
+  _hpRunSel = _hpOpenLine === null ? null : _hpRunExistingRange(_hpLines()?.[_hpOpenLine]);
+  _renderLineForm();
+  _renderPreviewHits();
+}
+function _hpAddLine() { const l = _hpLines(); if (!l) return; l.push({ text: '新しい行', scale: 1 }); _hpOpenLine = l.length - 1; _hpWriteLines(l); }
+function _hpRemoveLine(i) { const l = _hpLines(); if (!l) return; l.splice(i, 1); _hpOpenLine = null; _hpWriteLines(l); }
+function _hpMoveLine(i, d) {
+  const l = _hpLines();
+  const j = i + d;
+  if (!l || j < 0 || j >= l.length) return;
+  [l[i], l[j]] = [l[j], l[i]];
+  _hpOpenLine = j;
+  _hpWriteLines(l);
+}
+
+// Mirrors LINE_SCHEMA's role enum (src/integrations/style-vocabulary.js) — purely a display label,
+// never read by the renderer.
+const HP_ROLE_LABELS = { title: 'タイトル', subtitle: 'サブタイトル', date: '日付', label: 'ラベル' };
+
+/* Highlighting a phrase within a line, rather than only the whole line.
+ *
+ * `palette`（LINE_SCHEMA, style-vocabulary.js）already let a whole line pick a named two-tone fill
+ * (SPLITS in hero-templates.js). The renderer's `runs` field has always been able to carry a
+ * different palette per phrase — 「本当に」不安 with 不安 alone lit — but nothing wrote to it: it
+ * was excluded from the per-line control list on purpose (`.filter(([k]) => k !== 'runs')`) because
+ * a raw run array is not something to hand-author as JSON on a phone. This is the control for it —
+ * tap characters to select a range, tap a swatch to light just that range.
+ *
+ * Scope, deliberately: one decorated span per line. Rebuilding `runs` from the line's own flattened
+ * text on every apply is simple and correct for that case; a line that wants two independently
+ * coloured phrases still needs the JSON. That covers what "highlight a word" actually asks for
+ * without building a full multi-span rich-text model for a phone-sized control. */
+let _hpRunSel = null; // { start, end } — character indices into the line's flattened text, inclusive
+
+const HP_SPLIT_LABELS = { ice: '氷', cyan: 'シアン', ember: '炎', blood: '血', violet: '紫', gold: '金', steel: '鋼', toxic: '毒' };
+// Representative swatch colours for the chip UI — not the real (multi-stop) gradient, just enough
+// to tell the eight apart at a glance. Mirrors SPLITS in hero-templates.js.
+const HP_SPLIT_SWATCH = { ice: '#1D6FC4', cyan: '#0B3F8F', ember: '#D2400C', blood: '#B3140A', violet: '#5B2BA8', gold: '#C8860B', steel: '#586B84', toxic: '#2E8B14' };
+
+// The text a line actually draws, whether it's plain `text` or already split into `runs`.
+function _hpRunFlatText(line) {
+  if (Array.isArray(line?.runs) && line.runs.length) return line.runs.map((r) => String(r?.text ?? '')).join('');
+  return String(line?.text ?? '');
+}
+
+// The span of the first styled run, so reopening a line restores what's already there instead of
+// starting blank. A line with more than one styled run (only reachable via the JSON) shows the
+// first — consistent with "one decorated span" being what this control edits.
+function _hpRunExistingRange(line) {
+  if (!Array.isArray(line?.runs) || !line.runs.length) return null;
+  let pos = 0;
+  for (const r of line.runs) {
+    const len = String(r?.text ?? '').length;
+    if (r?.emph || r?.palette || r?.metal || r?.gradient) return { start: pos, end: pos + len - 1 };
+    pos += len;
+  }
+  return null;
+}
+
+function _hpRunEditor(i, line) {
+  const text = _hpRunFlatText(line);
+  if (!text.trim()) return '';
+  const sel = _hpRunSel;
+  const lo = sel ? Math.min(sel.start, sel.end ?? sel.start) : -1;
+  const hi = sel ? Math.max(sel.start, sel.end ?? sel.start) : -1;
+  const chars = [...text].map((ch, k) =>
+    `<button class="hp-run-ch${k >= lo && k <= hi ? ' sel' : ''}" onclick="_hpTapRunChar(${i},${k})">${esc(ch)}</button>`).join('');
+  const hasSel = sel && sel.end != null;
+  const opts = _hpVocab?.lineSchema?.palette?.options || [];
+  const marked = (line?.runs || []).some((r) => r?.emph);
+
+  /* Two different things you can do to the words you selected, and the order matters.
+   *
+   * 「強調にする」 records *which* words carry the claim and leaves the look to the styleSpec's
+   * highlight — so changing the highlight preset restyles every sample at once, and the marking
+   * means the same thing here as the writer's per-article emphasis does in a published hero. That
+   * is the one that transfers, so it leads.
+   *
+   * A palette fixes one specific colour into this sample and travels nowhere; it stays because a
+   * two-tone line is a composition the highlight block cannot express, but it is the exception. */
+  const acts = hasSel
+    ? `<div class="hp-run-emph">
+         <button class="act-btn hp-run-mark" onclick="_hpMarkRunEmph(${i},true)">強調にする</button>
+         ${marked ? `<button class="act-btn" onclick="_hpMarkRunEmph(${i},false)">強調をやめる</button>` : ''}
+       </div>
+       <div class="hp-ctl-hint">この行だけの色を固定したいとき:</div>
+       <div class="hp-run-chips">${
+         opts.map((o) => `<button class="hp-run-chip" style="background:${HP_SPLIT_SWATCH[o] || '#888'}"
+           title="${esc(HP_SPLIT_LABELS[o] || o)}" onclick="_hpApplyRunPalette(${i},'${o}')"></button>`).join('')
+       }<button class="act-btn" onclick="_hpApplyRunPalette(${i},null)">色を外す</button></div>`
+    : `<div class="hp-ctl-hint">文字をタップ→タップで範囲を選びます。${
+        marked ? '' : 'どこも強調しない行にするなら、何も選ばないままで構いません。'}</div>`;
+
+  return `<div class="hp-ctl hp-run-editor">
+    <div class="hp-ctl-head"><span class="hp-ctl-name">強調する言葉</span>
+      ${marked ? '<span class="hp-run-badge">強調あり</span>' : '<span class="hp-run-badge off">強調なし</span>'}</div>
+    <div class="hp-run-text">${chars}</div>
+    ${acts}
+  </div>`;
+}
+
+function _hpTapRunChar(i, k) {
+  if (!_hpRunSel || _hpRunSel.end != null) {
+    _hpRunSel = { start: k, end: null };
+  } else {
+    _hpRunSel = { start: Math.min(_hpRunSel.start, k), end: Math.max(_hpRunSel.start, k) };
+  }
+  _renderLineForm();
+}
+
+/* Mark the selected words as the line's claim — or clear every marking on the line.
+ *
+ * Splitting is the same operation as applying a palette (prefix / middle / suffix), so the two
+ * share `_hpSplitRun`; what differs is what the middle run is told to carry. `emph: true` carries
+ * no appearance at all, which is the point: the styleSpec decides that. */
+function _hpMarkRunEmph(i, on) {
+  const lines = _hpLines();
+  const line = lines?.[i];
+  if (!line) return;
+  if (!on) {
+    // Clearing does not un-split the line — the breaks may be carrying sizes — it only drops the
+    // marking. A line left with one plain run collapses back to bare text.
+    for (const r of line.runs || []) delete r.emph;
+    if ((line.runs || []).length === 1 && Object.keys(line.runs[0]).join() === 'text') {
+      line.text = line.runs[0].text; delete line.runs;
+    }
+    _hpRunSel = null;
+    _hpWriteLines(lines);
+    return;
+  }
+  if (!_hpSplitRun(line, (mid) => ({ text: mid, emph: true }))) return;
+  _hpRunSel = null;
+  _hpWriteLines(lines);
+}
+
+/* Rewrite a line as prefix / selection / suffix, with the caller deciding what the selection
+   carries. Returns false when there is no selection to act on. */
+function _hpSplitRun(line, makeMid) {
+  if (!_hpRunSel || _hpRunSel.end == null) return false;
+  const text = _hpRunFlatText(line);
+  const s = Math.min(_hpRunSel.start, _hpRunSel.end);
+  const e = Math.max(_hpRunSel.start, _hpRunSel.end);
+  const runs = [];
+  if (text.slice(0, s)) runs.push({ text: text.slice(0, s) });
+  const mid = text.slice(s, e + 1);
+  if (mid) runs.push(makeMid(mid));
+  if (text.slice(e + 1)) runs.push({ text: text.slice(e + 1) });
+  if (runs.length > 1 || runs.some((r) => Object.keys(r).length > 1)) {
+    line.runs = runs;
+    delete line.text;
+  } else {
+    delete line.runs;
+  }
+  return true;
+}
+
+function _hpApplyRunPalette(i, palette) {
+  const lines = _hpLines();
+  const line = lines?.[i];
+  if (!line) return;
+  if (!_hpSplitRun(line, (mid) => (palette ? { text: mid, palette } : { text: mid }))) return;
+  _hpRunSel = null;
+  _hpWriteLines(lines);
+}
+
+// Line-level enums whose absence means "inherit the template's", not "the first option" — unlike
+// the global styleSpec editor's `_hpAddKey`, which defaults a newly-added enum key to `options[0]`
+// because a styleSpec key with no value would not otherwise exist. A blank line field is meaningful
+// here: most lines carry no role, and most inherit the template's face rather than naming their own.
+const HP_LINE_BLANK_ENUMS = { role: '未設定', face: 'テンプレートの書体', palette: 'なし（metal/gradient か地の色のまま）' };
+
+function _hpLineControl(i, key, desc, value) {
+  const lbl = esc(desc.label || key);
+  const setter = (expr) => `_hpSetLine(${i},'${key}',${expr})`;
+  let body;
+  if (desc.type === 'enum' && key in HP_LINE_BLANK_ENUMS) {
+    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">${esc(HP_LINE_BLANK_ENUMS[key])}</option>`
+      + desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(HP_ROLE_LABELS[o] || o)}</option>`).join('')
+      + `</select>`;
+  } else if (desc.type === 'range') {
+    const v = _hpNum(value ?? (key === 'scale' ? 1 : 0), desc);
+    body = `<div class="hp-range"><input type="range" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}"`
+      + ` oninput="this.nextElementSibling.value=this.value" onchange="${setter('Number(this.value)')}">`
+      + `<input class="form-input hp-num" type="number" min="${desc.min}" max="${desc.max}" step="${desc.step}" value="${v}" onchange="${setter('Number(this.value)')}"></div>`;
+  } else if (desc.type === 'colour') {
+    const v = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#FFFFFF';
+    body = `<div class="hp-colour"><input type="color" value="${v}" oninput="${setter('this.value.toUpperCase()')}">`
+      + `<input class="form-input hp-mono" type="text" value="${esc(v)}" onchange="${setter('this.value.toUpperCase()')}">`
+      + `<button class="act-btn" title="色を外す" onclick="${setter("''")}">既定</button></div>`;
+  } else if (desc.type === 'bool') {
+    body = `<label class="hp-switch"><input type="checkbox"${value ? ' checked' : ''} onchange="${setter('this.checked')}"> <span>${value ? 'する' : 'しない'}</span></label>`;
+  } else if (desc.type === 'string') {
+    body = `<input class="form-input" type="text" value="${esc(value ?? '')}" onchange="${setter('this.value')}">`;
+  } else if (key === 'glow') {
+    /* Glow is an object — colour, radius, opacity — so the generic object branch would send it to
+       the JSON. It is also the thing most worth reaching for per line (lighting 「月5万円」 and
+       leaving 「副業で」 flat is why the renderer gained per-line glow at all), so it gets real
+       controls rather than being the one setting you have to hand-write. */
+    const g = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+    const col = /^#[0-9a-fA-F]{6}$/.test(g?.color) ? g.color : '#FF3366';
+    const em = Number.isFinite(g?.em) ? g.em : 0.24;
+    const op = Number.isFinite(g?.opacity) ? g.opacity : 0.6;
+    body = g
+      ? `<div class="hp-glow">
+           <div class="hp-colour">
+             <input type="color" value="${col}" oninput="_hpSetGlow(${i},{color:this.value.toUpperCase()})">
+             <input class="form-input hp-mono" type="text" value="${esc(col)}" onchange="_hpSetGlow(${i},{color:this.value.toUpperCase()})">
+           </div>
+           <label class="hp-glow-row"><span>広がり</span>
+             <input type="range" min="0.05" max="0.6" step="0.01" value="${em}"
+               oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlow(${i},{em:Number(this.value)})">
+             <input class="form-input hp-num" type="number" min="0.05" max="0.6" step="0.01" value="${em}" onchange="_hpSetGlow(${i},{em:Number(this.value)})">
+           </label>
+           <label class="hp-glow-row"><span>強さ</span>
+             <input type="range" min="0.1" max="1" step="0.05" value="${op}"
+               oninput="this.nextElementSibling.value=this.value" onchange="_hpSetGlow(${i},{opacity:Number(this.value)})">
+             <input class="form-input hp-num" type="number" min="0.1" max="1" step="0.05" value="${op}" onchange="_hpSetGlow(${i},{opacity:Number(this.value)})">
+           </label>
+           <button class="act-btn" onclick="_hpSetLine(${i},'glow','')">発光をやめる</button>
+         </div>`
+      : `<button class="act-btn" onclick="_hpSetGlow(${i},{})">この行を光らせる</button>`;
+  } else if (desc.type === 'union' && (_hpVocab?.metals || []).length) {
+    // The named patterns the renderer resolves. A custom object stays editable in the JSON below.
+    const named = typeof value === 'string' ? value : '';
+    const custom = value && typeof value !== 'string';
+    body = `<select class="form-select" onchange="${setter('this.value')}"><option value="">なし</option>`
+      + _hpVocab.metals.map((m) => `<option value="${esc(m)}"${m === named ? ' selected' : ''}>${esc(m)}</option>`).join('')
+      + `</select>${custom ? '<div class="hp-ctl-hint">独自の指定あり — 下の JSON で編集</div>' : ''}`;
+  } else {
+    body = `<div class="hp-ctl-json">下の JSON で編集</div>`;
+  }
+  return `<div class="hp-ctl"><div class="hp-ctl-head"><span class="hp-ctl-name">${lbl}</span><code class="hp-ctl-key">${key}</code></div>${body}</div>`;
+}
+
+function _renderLineForm() {
+  const host = document.getElementById('hp-line-form');
+  if (!host) return;
+  const schema = _hpVocab?.lineSchema;
+  if (!schema) { host.innerHTML = ''; return; }
+
+  const lines = _hpLines();
+  if (lines === null) {
+    host.innerHTML = `<div class="hp-ctl-json">⚠ JSON が不正なため行を表示できません。下の JSON を直すと戻ります。</div>`;
+    return;
+  }
+
+  host.innerHTML = lines.map((l, i) => {
+    const text = String(l?.text ?? '').trim() || '（空の行）';
+    const bits = [l?.scale ? `×${l.scale}` : '', l?.color || '', typeof l?.metal === 'string' ? l.metal : '', l?.face || '', l?.palette || ''].filter(Boolean).join(' · ');
+    const roleBadge = HP_ROLE_LABELS[l?.role] ? `<span class="hp-line-role">${esc(HP_ROLE_LABELS[l.role])}</span>` : '';
+    const open = _hpOpenLine === i;
+    const head = `<button class="hp-line-row${open ? ' open' : ''}" onclick="_hpOpenLineRow(${i})">`
+      + `${roleBadge}<span class="hp-line-text">${esc(text)}</span><span class="hp-line-meta">${esc(bits)}</span><span class="chev">▶</span></button>`;
+    if (!open) return `<div class="hp-line">${head}</div>`;
+    const ctls = Object.entries(schema)
+      .filter(([k]) => k !== 'runs')
+      .map(([k, d]) => _hpLineControl(i, k, d, l?.[k])).join('');
+    return `<div class="hp-line">${head}<div class="hp-line-body">${ctls}
+      ${_hpRunEditor(i, l)}
+      <div class="hp-line-acts">
+        <button class="act-btn" onclick="_hpMoveLine(${i},-1)"${i === 0 ? ' disabled' : ''}>↑</button>
+        <button class="act-btn" onclick="_hpMoveLine(${i},1)"${i === lines.length - 1 ? ' disabled' : ''}>↓</button>
+        <button class="act-btn danger" onclick="_hpRemoveLine(${i})">この行を削除</button>
+      </div></div></div>`;
+  }).join('')
+    + `<button class="act-btn hp-line-add" onclick="_hpAddLine()">＋ 行を追加</button>`;
+}
+
+/* ── Tapping the picture ─────────────────────────────────────────────────────
+ *
+ * Restyling 「買ってよかったモノ。」 meant finding it in a list below the preview and working out
+ * which row was which. The renderer now reports where it drew each line and the badge, so the
+ * component itself is the control: tap the words, get that component's settings.
+ *
+ * Boxes arrive in the hero's own 1280×670 coordinates and are placed as percentages, so they stay
+ * on their component at whatever width the preview is being shown — which changes with the
+ * viewport and, on a phone, with the height cap.
+ */
+let _hpRegions = null;
+
+function _renderPreviewHits() {
+  const host = document.getElementById('hp-preview-hits');
+  if (!host) return;
+  const r = _hpRegions;
+  if (!r?.regions?.length) { host.innerHTML = ''; return; }
+  const pc = (v, total) => `${(v / total) * 100}%`;
+  host.innerHTML = r.regions.map((x) => {
+    const sel = x.kind === 'line' && _hpOpenLine === x.index;
+    // A line with a role reads as "タイトル"; one without falls back to its position, which is all
+    // there is to say about it until someone assigns one.
+    const label = x.kind === 'badge' ? 'バッジ' : (HP_ROLE_LABELS[x.role] || `${x.index + 1}行目`);
+    return `<button class="hp-hit${sel ? ' on' : ''}" title="${label}を編集"
+      style="left:${pc(x.left, r.width)};top:${pc(x.top, r.height)};width:${pc(x.right - x.left, r.width)};height:${pc(x.bottom - x.top, r.height)}"
+      onclick="_hpTapRegion('${x.kind}',${x.index})"><span>${label}</span></button>`;
+  }).join('');
+}
+
+function _hpTapRegion(kind, index) {
+  if (kind === 'line') {
+    /* Open the section too. Selecting a row inside a collapsed 見本 would highlight the picture and
+       show nothing, which reads as the tap having failed.
+
+       `block: 'start'`, not 'nearest': the always-open スタイル section sits directly above 見本, so
+       the opened row is often already partly on screen and 'nearest' would not move at all — which
+       reads exactly like a failed tap, except the thing left on screen (スタイル, プリセット全体に
+       効く設定) is the one panel that is *not* what got opened, and someone could easily mistake its
+       controls for being scoped to the tapped line. Forcing the jump to the top removes that
+       ambiguity; a brief flash on the row confirms which one actually opened. */
+    const sec = document.getElementById('hp-sec-example');
+    if (sec) sec.open = true;
+    _hpOpenLineRow(index);
+    _renderPreviewHits();
+    const row = document.querySelectorAll('#hp-line-form .hp-line-row')[index];
+    (row || document.getElementById('hp-line-form'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (row) {
+      row.classList.add('hp-flash');
+      setTimeout(() => row.classList.remove('hp-flash'), 900);
+    }
+  } else {
+    const sec = document.getElementById('hp-sec-example');
+    if (sec) sec.open = true;
+    document.getElementById('hp-example-badge')?.closest('details')?.setAttribute('open', '');
+    document.getElementById('hp-example-badge')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+/* Three authored line-sets per preset, one per length, rather than one demo plus three throwaway
+ * sample titles.
+ *
+ * The question this preview answers is "does the style hold up", and that depends almost entirely
+ * on how much text arrives — a preset that looks decisive at eight characters can wrap to four
+ * cramped lines at thirty. A single sample title used to stand in for that, but the renderer always
+ * draws authored `exampleLines` verbatim and never falls back to wrapping a title once any are
+ * present (see buildOverlaySvg's `authored` branch) — so the sample-title buttons could not
+ * actually show what they claimed to. Each button now switches to its own real, editable line-set
+ * instead: the buttons and the content are the same thing, so there is nothing left for them to
+ * silently fail to affect.
+ *
+ * `_hpVariants` holds all three; `#hp-example-lines` (and everything downstream of `_hpLines()`)
+ * always holds the *current* one, so the whole line-editor is unaware anything changed underneath
+ * it. Switching tabs just flushes the outgoing variant and loads the incoming one into that slot. */
+const HP_VARIANT_KEYS = ['short', 'standard', 'long'];
+const HP_VARIANT_LABELS = { short: '短い', standard: '標準', long: '長い' };
+let _hpVariants = { short: [], standard: [], long: [] };
+let _hpVariant = 'standard';
+
+function _hpSetSample(i) {
+  const key = HP_VARIANT_KEYS[i];
+  if (!key) return;
+  const outgoing = _hpLines();
+  if (outgoing !== null) _hpVariants[_hpVariant] = outgoing;
+  _hpVariant = key;
+  _hpOpenLine = null;
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants[key] || [], null, 2);
+  _renderLineForm();
+  _renderSampleTabs();
+  _renderStyleForm();
+  _syncHpSummaries();
+  _debouncedPreview();
+}
+
+function _renderSampleTabs() {
+  const host = document.getElementById('hp-sample-tabs');
+  if (!host) return;
+  host.innerHTML = HP_VARIANT_KEYS.map((key, i) => {
+    const lines = key === _hpVariant ? (_hpLines() || []) : (_hpVariants[key] || []);
+    const chars = lines.reduce((n, l) => n + String(l?.text ?? '').length, 0);
+    return `<button class="hp-sample${key === _hpVariant ? ' on' : ''}" onclick="_hpSetSample(${i})">${esc(HP_VARIANT_LABELS[key])}<span>${chars}字</span></button>`;
+  }).join('');
+}
+
 let _previewTimer = null;
 function _debouncedPreview() {
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(_refreshPreview, 1000);
+}
+
+/* What each collapsed section is holding.
+ *
+ * The point of the accordion is that the panel answers "how is this preset configured" without
+ * expanding anything — a section that collapses to nothing but its own title has hidden the
+ * information rather than organised it. So each summary carries the value a reader would open the
+ * section to check.
+ *
+ * Style is summarised by the keys the spec actually sets, not by the JSON: 「face, strokes, glows」
+ * is the shape of the design, whereas 240 characters of JSON truncated at the pill's width tells
+ * you nothing. Invalid JSON says so rather than showing a stale summary, since a spec that will not
+ * parse is the single most useful thing to know before pressing save.
+ */
+function _syncHpSummaries() {
+  const val = (id) => document.getElementById(id)?.value?.trim() ?? '';
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+  const id = val('hp-id');
+  const tpl = val('hp-template-id');
+  set('hp-sum-basic', [id || '（ID未設定）', tpl].filter(Boolean).join(' · '));
+
+  const spec = val('hp-style-spec');
+  if (!spec) set('hp-sum-style', '未設定');
+  else {
+    try {
+      const keys = Object.keys(JSON.parse(spec));
+      set('hp-sum-style', keys.length ? `${keys.length}項目: ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}` : '空');
+    } catch { set('hp-sum-style', '⚠ JSONが不正'); }
+  }
+
+  const count = (raw) => { try { const v = JSON.parse(raw); return Array.isArray(v) ? v.length : (v ? 1 : 0); } catch { return null; } };
+  const lines = val('hp-example-lines') ? count(val('hp-example-lines')) : 0;
+  const badge = val('hp-example-badge') ? count(val('hp-example-badge')) : 0;
+  set('hp-sum-example', lines === null || badge === null
+    ? '⚠ JSONが不正'
+    : (lines || badge ? `${lines}行${badge ? ' + バッジ' : ''}` : 'なし'));
 }
 
 async function _refreshPreview() {
@@ -2181,7 +3951,9 @@ async function _refreshPreview() {
   const rawSpec    = document.getElementById('hp-style-spec')?.value.trim() || '{}';
   const rawLines   = document.getElementById('hp-example-lines')?.value.trim() || '[]';
   const rawBadge   = document.getElementById('hp-example-badge')?.value.trim() || '';
-  const article    = document.getElementById('hp-preview-article')?.value.trim() || 'サンプル記事タイトル';
+  // Only reached if the active variant's lines are empty — the renderer always prefers authored
+  // lines and falls back to wrapping this title otherwise (see buildOverlaySvg's `authored` branch).
+  const article    = document.getElementById('hp-name')?.value.trim() || 'サンプル見出し';
 
   let styleSpec, lines, badge;
   try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON'; errEl.style.display = ''; return; }
@@ -2211,6 +3983,12 @@ async function _refreshPreview() {
     imgEl.src = url;
     imgEl.style.display = '';
     if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+    /* Where each component landed, so the picture itself is the control surface.
+       The header is only readable because the API exposes it through CORS — without that the
+       browser receives it and refuses to hand it over, which looks exactly like the server not
+       having sent it. */
+    try { _hpRegions = JSON.parse(res.headers.get('X-Hero-Regions') || 'null'); } catch { _hpRegions = null; }
+    _renderPreviewHits();
   } catch (e) {
     errEl.textContent = e.message;
     errEl.style.display = '';
@@ -2232,10 +4010,14 @@ async function _saveHeroPreset() {
   const rawLines    = document.getElementById('hp-example-lines').value.trim();
   const rawBadge    = document.getElementById('hp-example-badge').value.trim();
 
-  let styleSpec, exampleLines, exampleBadge;
+  let styleSpec, activeLines, exampleBadge;
   try { styleSpec = JSON.parse(rawSpec); } catch { errEl.textContent = 'styleSpec が不正な JSON です'; errEl.style.display = ''; return; }
-  try { exampleLines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON です'; errEl.style.display = ''; return; }
+  try { activeLines = rawLines ? JSON.parse(rawLines) : []; } catch { errEl.textContent = 'exampleLines が不正な JSON です'; errEl.style.display = ''; return; }
   try { exampleBadge = rawBadge ? JSON.parse(rawBadge) : null; } catch { errEl.textContent = 'exampleBadge が不正な JSON です'; errEl.style.display = ''; return; }
+  // The textarea only ever holds the currently selected length's lines; the other two live in
+  // memory until now, when all three are assembled into what actually gets saved.
+  _hpVariants[_hpVariant] = activeLines;
+  const exampleLines = { short: _hpVariants.short || [], standard: _hpVariants.standard || [], long: _hpVariants.long || [] };
 
   const isNew = _hpEditingId === null;
   const url   = isNew ? apiUrl('/api/hero-presets') : apiUrl(`/api/hero-presets/${_hpEditingId}`);
@@ -2271,6 +4053,250 @@ async function _deleteHeroPreset(id) {
 }
 
 // ─── End Hero Image Presets ───────────────────────────────────────────────────
+
+/* ─── Image prompt recipes ─────────────────────────────────────────────────────
+ *
+ * A hero preset says how the *type* is drawn; a recipe says what the *picture* is. The library and
+ * its approval loop have existed on the server since before this page did — the recipes were only
+ * reachable through Discord cards and a category's `visual.imagePrompt` field, so there was no
+ * screen on which to see what the catalogue contained.
+ *
+ * The samples are the substance of the card. A recipe's text ("cinematic, low-key, 35mm") reads as
+ * plausible for almost any look, and the only honest way to judge one is to see three pictures it
+ * produced and ask whether they belong to the same publication.
+ */
+let _imagePrompts = [];
+
+async function _loadImagePrompts() {
+  const listEl = document.getElementById('image-prompts-list');
+  if (!listEl) return;
+  listEl.className = '';
+  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl('/api/image-prompts'), { headers: _authHeaders() });
+    if (res.status === 401) { _handleUnauthorized(); return; }
+    if (!res.ok) { listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error ${res.status}</div>`; return; }
+    const data = await res.json();
+    _imagePrompts = data.recipes || [];
+    _renderImagePrompts();
+  } catch (e) {
+    listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
+  }
+}
+
+/* The catalogue as the category picker needs it. Same shape and same reason as
+   `_ensureHeroPresets` — the picker lives on カテゴリ, the list belongs to this page. */
+async function _ensureImagePrompts() {
+  if (_imagePrompts.length) return _imagePrompts;
+  const res = await fetch(apiUrl('/api/image-prompts'), { headers: _authHeaders() }).catch(() => null);
+  if (res?.ok) _imagePrompts = (await res.json().catch(() => ({})))?.recipes || [];
+  return _imagePrompts;
+}
+
+function _renderImagePrompts() {
+  const listEl = document.getElementById('image-prompts-list');
+  if (!listEl) return;
+  if (!_imagePrompts.length) {
+    listEl.className = '';
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">レシピがありません</div>';
+    return;
+  }
+  listEl.className = 'hp-card-grid';
+  listEl.innerHTML = _imagePrompts.map(_imagePromptCard).join('');
+}
+
+const _IP_KIND = { hero: '見出し画像', figure: '図解' };
+const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画像→加工' };
+
+function _imagePromptCard(r) {
+  const ap = _presetApproval(r);
+  const off = r.enabled === false;
+  const samples = Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : [];
+  const keywords = (r.keywords || []).slice(0, 6).map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('');
+  const isApproved = ap.label === '承認済';
+  /* Only what a Japanese operator actually reads: `spec`'s values are the English prompt fragments
+     sent straight to the image model ("Hyper-photorealistic documentary photography of..."), and
+     showing them here was the generator's input leaking into the card meant for judging its
+     output — the same leak image-curator's own doc comment warns against for the Discord card. The
+     Japanese description is the recipe's content as far as this display is concerned. */
+  return `<div class="hp-card${off ? ' is-off' : ''}">
+    <div class="ip-shots">
+      ${samples.length
+    ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
+    : '<div class="ip-shots-empty">見本がまだありません</div>'}
+    </div>
+    <div class="hp-card-body">
+      <div class="hp-card-name">${esc(r.name || r.id)}</div>
+      <div class="hp-card-id">${esc(r.id)}</div>
+      <div class="hp-card-chips">
+        <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
+        <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
+        <span class="cat-chip">${esc(_IP_SOURCE[r.sourceMode] || r.sourceMode || '')}</span>
+        ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
+      </div>
+      ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
+      ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
+    </div>
+    <div class="hp-card-acts">
+      <button class="act-btn" data-ip-gen="${esc(r.id)}" onclick="_genImagePromptSamples('${esc(r.id)}')"
+        title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">${samples.length ? '見本を作り直す' : '見本を作る'}</button>
+      <button class="act-btn" onclick="_toggleImagePrompt('${esc(r.id)}',${off})"
+        title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
+      ${samples.length ? `<button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
+        title="Discord に承認カードを送ります。承認済みのレシピでも、変更を相談したいときに送れます">${isApproved ? '変更をDiscordで相談' : '承認へ'}</button>` : ''}
+    </div>
+  </div>`;
+}
+
+/* Generating costs real image calls and takes tens of seconds, so the button says so and stays
+   disabled for the duration — a second tap would spend the quota twice for the same three
+   pictures. */
+// Bare request, shared by the single-card button and the bulk runner below — the two differ only
+// in how they report progress, not in what they ask the server to do.
+async function _requestImagePromptSamples(id) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/samples`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+  }).catch(() => null);
+  if (res?.ok) return { ok: true };
+  const err = await res?.json().catch(() => ({}));
+  return { ok: false, error: err?.error || `Error ${res?.status ?? '—'}` };
+}
+
+async function _genImagePromptSamples(id) {
+  const btn = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  showToast('3枚生成しています…（1分ほどかかります）', 'info');
+  const r = await _requestImagePromptSamples(id);
+  if (!r.ok) {
+    showToast(r.error || '見本を生成できませんでした', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '見本を作る'; }
+    return;
+  }
+  showToast('見本を保存しました', 'success');
+  _loadImagePrompts();
+}
+
+
+async function _toggleImagePrompt(id, currentlyOff) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !!currentlyOff }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
+  showToast(currentlyOff ? '有効にしました。' : '無効にしました。記事の生成時に選ばれなくなります。', 'success');
+  _loadImagePrompts();
+}
+
+/* Approval stays a Discord decision rather than becoming a button here.
+ *
+ * It is the same `approve_design` ledger the hero presets use, and the ledger records who decided
+ * and when — a dashboard button that wrote "approved" locally would either lose that provenance or
+ * duplicate the loop that already exists. So this posts the card and the decision happens where
+ * every other design decision in this system is already made. */
+async function _proposeImagePrompt(id) {
+  const r = _imagePrompts.find((x) => x.id === id);
+  const samples = Array.isArray(r?.samples) ? r.samples.filter((s) => s?.url) : [];
+  if (!samples.length) {
+    showToast('先に「見本を作る」で3枚生成してください', 'error');
+    return;
+  }
+  showToast('承認カードを作っています…', 'info');
+  /* `reuseSamples` sends the three pictures already on the card — the ones just looked at and
+     judged worth approving. Without it the endpoint would generate three more, so the card would
+     ask about a different set of pictures than the ones that prompted the request, and bill for
+     them again. */
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/propose`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reuseSamples: true }),
+  }).catch(() => null);
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    showToast(err?.error || '承認カードを送れませんでした', 'error');
+    return;
+  }
+  showToast('Discord に承認カードを送りました', 'success');
+  _loadImagePrompts();
+}
+
+// ─── New recipe from reference images ──────────────────────────────────────
+// Files never leave the browser as File objects — the API takes base64 JSON like every other
+// image path in this dashboard (hero preset previews, category thumbnails), so they are read into
+// data URLs client-side and the `data:...;base64,` prefix is stripped before sending.
+let _ipNewImages = [];
+
+function _openNewRecipeModal() {
+  _ipNewImages = [];
+  document.getElementById('ip-new-files').value = '';
+  document.getElementById('ip-new-thumbs').innerHTML = '';
+  document.getElementById('ip-new-note').value = '';
+  document.getElementById('ip-new-id').value = '';
+  document.getElementById('ip-new-error').style.display = 'none';
+  document.getElementById('ip-new-modal').classList.add('open');
+}
+function _closeNewRecipeModal() { document.getElementById('ip-new-modal')?.classList.remove('open'); }
+
+async function _onNewRecipeFiles(fileList) {
+  const files = Array.from(fileList || []).slice(0, 5);
+  const errEl = document.getElementById('ip-new-error');
+  errEl.style.display = 'none';
+  _ipNewImages = [];
+  const thumbs = document.getElementById('ip-new-thumbs');
+  thumbs.innerHTML = '';
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(f);
+    }).catch(() => null);
+    if (!dataUrl) continue;
+    const [, mimeType, data] = dataUrl.match(/^data:([^;]+);base64,(.*)$/s) || [];
+    if (!data) continue;
+    _ipNewImages.push({ data, mimeType: mimeType || f.type });
+    thumbs.insertAdjacentHTML('beforeend', `<img src="${dataUrl}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;box-shadow:var(--sh-sm)">`);
+  }
+  if (!_ipNewImages.length && files.length) {
+    errEl.textContent = '画像を読み込めませんでした';
+    errEl.style.display = '';
+  }
+}
+
+async function _submitNewRecipe() {
+  const errEl = document.getElementById('ip-new-error');
+  const btn = document.getElementById('ip-new-submit');
+  const id = document.getElementById('ip-new-id').value.trim();
+  const note = document.getElementById('ip-new-note').value.trim();
+  if (!/^[a-z0-9-]+$/.test(id)) {
+    errEl.textContent = 'ID は英小文字・数字・ハイフンのみ';
+    errEl.style.display = '';
+    return;
+  }
+  if (!_ipNewImages.length) {
+    errEl.textContent = '参考画像を1枚以上選んでください';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '解析しています…（1分ほどかかります）';
+  const res = await fetch(apiUrl('/api/image-prompts/generate'), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, note, images: _ipNewImages }),
+  }).catch(() => null);
+  btn.disabled = false;
+  btn.textContent = '生成する';
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    errEl.textContent = err?.error || '作成できませんでした';
+    errEl.style.display = '';
+    return;
+  }
+  const data = await res.json();
+  _closeNewRecipeModal();
+  showToast(data.confidence === 'low' ? '作成しました（参考画像の傾向がばらついていました。内容を確認してください）' : '絵のレシピを作成しました', 'success');
+  _loadImagePrompts();
+}
 
 function _renderKnowledge() {
   document.getElementById('k-sources').innerHTML   = _buildSourceRows(SOURCES.filter(s => !s.blocked));
@@ -5827,6 +7853,7 @@ if (window.location.hash.startsWith('#xentry')) {
 } else {
 // Draw the sub-navigation for whichever destination we open on, so the strip is correct before
 // the first click rather than only after one.
-if (_openAt && _destOf(_openAt)) navTo(_openAt); else _renderDestSub(_activeDest, _activePage);
+// Guarded by _destOf, so _openAt is always a page id here — never a destination key.
+if (_openAt && _destOf(_openAt)) navTo(_openAt, true); else _renderDestSub(_activeDest, _activePage);
 loadDashboard();
 }

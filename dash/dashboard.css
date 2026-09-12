@@ -11,7 +11,12 @@
   --accent:var(--acc);--accent-bg:color-mix(in srgb,var(--acc) 10%,transparent);--accent-light:color-mix(in srgb,var(--acc) 22%,transparent);
   --success:var(--grn);--warn:var(--yel);--error:var(--red);--info:var(--blue);
   --border:transparent;--border-strong:transparent;
-  --mob-tab-h:58px;--page-pad:12px;
+  /* Tall enough for what the bar actually contains: a 34px icon, a 4px gap, and the active tab's
+     1.4em label, inside .mob-tab's own padding and the bar's. At 58px the content box came to 43px
+     against ~56px of content, and .mob-tab clips its overflow — so the selected tab's name was cut
+     off along its bottom edge. Anything reserving space for the bar reads this, so it has to be the
+     real height rather than a guess. */
+  --mob-tab-h:72px;--page-pad:12px;
 }
 
 /* ── FULL-HEIGHT APP LAYOUT (enables flex:1 on .page-area) ── */
@@ -21,7 +26,15 @@ body { display:flex; flex-direction:column; height:100% }
 /* ══════════════════════════════════════════════════════════════
    PAGE AREA
 ══════════════════════════════════════════════════════════════ */
-.page-area{flex:1;overflow-y:auto;min-height:0}
+/* `overflow-y:auto` alone leaves the x axis at `visible`, which a scroll container resolves to
+   `auto` — so one child a few pixels too wide made the whole page pannable sideways, and a thumb
+   swiping down at any angle got horizontal movement competing with the scroll. That reads as
+   stuttering rather than as panning, which is why it was reported as scrolling not being smooth
+   rather than as a layout fault.
+
+   Individual causes still get fixed where they are (grid tracks that will not shrink are the usual
+   one — see .acard-map); this stops the next one from costing the whole page its scrolling. */
+.page-area{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
 .page{display:none;padding:16px var(--page-pad);max-width:1200px;margin:0 auto}
 .page.active{display:block;animation:riseIn .22s cubic-bezier(.22,1,.36,1) backwards}
 .page-hd{margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -197,7 +210,9 @@ header{margin:12px;padding:10px 16px}
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;
   gap:4px;border:none;background:none;color:var(--m);
   font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.01em;
-  padding:6px 2px;border-radius:14px;
+  /* min-height below carries the touch target, so this padding only has to keep the icon off the
+     bar's edges — at 6px it was buying height the bar did not have and pushing the label out. */
+  padding:2px;border-radius:14px;
   transition:color .15s,background .15s;position:relative;min-height:44px;
 }
 
@@ -322,9 +337,19 @@ header{margin:12px;padding:10px 16px}
   border-radius:12px;padding:14px 12px;cursor:pointer;
   transition:box-shadow .2s,transform .15s;
   position:relative;display:flex;flex-direction:column;gap:7px;
+  /* The thumbnail bleeds past the padding with a negative margin (see .acard-thumb). At two tiles
+     across that stayed well inside the page gutter; full-width it reached the viewport edge and
+     spilled. Clipping here keeps the bleed to the card — the card's own box-shadow is unaffected,
+     since an element's shadow is not clipped by its own overflow. */
+  overflow:hidden;
 }
 .acard:hover{box-shadow:var(--sh-lg);transform:translateY(-2px)}
 .acard:active{box-shadow:var(--sh-press);transform:none}
+/* Escapes the card's own padding to run edge-to-edge along the top, the same way a magazine cover
+   sits flush against its own card in every other feed in this dashboard. Reserved before the image
+   arrives (aspect-ratio) so the grid does not reflow as lazily-loaded thumbnails land one by one. */
+.acard-thumb{margin:-14px -12px 4px;aspect-ratio:1280/670;border-radius:12px 12px 0 0;overflow:hidden;background:color-mix(in srgb,var(--m) 8%,transparent)}
+.acard-thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
 /* Status as a raised pip in the corner: same surface, same light, just a small object sitting on
    it. Colour is confined to a 7px dot instead of running the height of the card. */
 .acard{position:relative}
@@ -396,6 +421,14 @@ header{margin:12px;padding:10px 16px}
 .chip-queued{background:color-mix(in srgb,var(--pur) 14%,transparent);color:var(--pur)}
 .chip-inline{background:color-mix(in srgb,var(--m) 10%,transparent);color:var(--m)}
 .cat-chip{font-size:9px;padding:2px 7px;border-radius:99px;background:color-mix(in srgb,var(--m) 10%,transparent);color:var(--m)}
+/* The tile's single inline action. A raised chip, so it reads as an object sitting on the card
+   rather than as another status label — the two sit side by side and must not be confused. */
+.cat-quick{
+  font-size:9px;padding:3px 9px;border-radius:99px;font-weight:700;letter-spacing:.02em;
+  border:none;background:var(--bg);box-shadow:var(--sh-sm);color:var(--acc);
+  cursor:pointer;font-family:inherit;margin-left:auto;
+}
+.cat-quick:active{box-shadow:var(--sh-press)}
 .trig-chip{font-size:9px;padding:2px 7px;border-radius:99px;border:1px solid;text-transform:capitalize}
 .trig-chip.interactive{background:color-mix(in srgb,var(--grn) 14%,transparent);color:var(--grn);border-color:color-mix(in srgb,var(--grn) 28%,transparent)}
 .trig-chip.scheduled{background:color-mix(in srgb,var(--yel) 14%,transparent);color:var(--yel);border-color:color-mix(in srgb,var(--yel) 28%,transparent)}
@@ -588,6 +621,18 @@ body:has(.mob-more-sheet.open) .page-area{
 .act-btn.cancel{color:var(--m)}.act-btn.cancel:hover{box-shadow:var(--sh),0 0 6px color-mix(in srgb,var(--red) 28%,transparent);color:var(--red)}
 .act-btn.stop{color:var(--blue)}.act-btn.stop:hover{box-shadow:var(--sh),0 0 6px color-mix(in srgb,var(--blue) 28%,transparent)}
 .act-btn.resume{color:var(--grn)}.act-btn.resume:hover{box-shadow:var(--sh),0 0 6px color-mix(in srgb,var(--grn) 28%,transparent)}
+/* The third tier: an action that cannot be undone.
+ *
+ * `cancel` above is grey and only becomes red on :hover — which means that on a phone, where there
+ * is no hover, 「削除」 was indistinguishable from 「保存」 right up until it ran. The distinction
+ * this tier draws is not "dangerous-looking" but *irreversible*: 却下 is a status a category comes
+ * back from, deletion takes the editorial prompt and every article written under it. So the colour
+ * is carried at rest, not on interaction, and it is deliberately the only red in the bar. */
+.act-btn.danger{
+  color:var(--red);
+  box-shadow:var(--sh-sm),inset 0 0 0 1px color-mix(in srgb,var(--red) 22%,transparent);
+}
+.act-btn.danger:hover{box-shadow:var(--sh),0 0 8px color-mix(in srgb,var(--red) 34%,transparent)}
 .act-btn:active{box-shadow:var(--sh-press)}
 .act-btn:disabled{opacity:.4;cursor:not-allowed}
 
@@ -747,7 +792,11 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* Category tiles carry Japanese names, which need more width than the agent grid's 158px.
    Sized so two fit a phone and four-to-six a desktop, without a lone orphan on the last row. */
-.cat-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:20px}
+/* One column on a phone. These tiles lead with a 1280×670 thumbnail now, and two of them across a
+   390px screen left the headline rendered at a size nothing could be judged at — which is the one
+   thing the picture is here for. Wider screens still fit two or three. */
+.cat-tile-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+@media(min-width:560px){.cat-tile-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
 .cat-tile-icon{font-size:26px;text-align:center;line-height:1;margin-bottom:2px}
 .acard .acard-name{overflow-wrap:anywhere}
 /* Chips line up with the name above them; centring them under a left-aligned title read as an
@@ -1229,7 +1278,10 @@ body:has(.mob-more-sheet.open) .page-area{
   }
   .p-actions{margin:14px -16px -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-radius:0}
   .p-close{top:10px;right:10px;width:40px;height:40px}
-  .cat-tile-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  /* One up, not two. The tile leads with a 1280×670 thumbnail whose whole job is to show whether a
+     headline survives its treatment; at two across a phone the type was too small to judge, which
+     made the picture decorative. */
+  .cat-tile-grid{grid-template-columns:minmax(0,1fr);gap:16px}
   .cat-tile-icon{font-size:22px}
   /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
   .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
@@ -1304,7 +1356,16 @@ body:has(.mob-more-sheet.open) .page-area{
 .cat-toolbar-views{
   display:flex;gap:2px;align-self:flex-start;
   background:var(--bg);box-shadow:var(--sh-in);border-radius:99px;padding:4px;
+  /* Five tabs whose labels carry counts (「承認待ち 100」) do not fit a phone, and the children are
+     `white-space:nowrap`. Without this the strip simply clipped: 「実験」 was cut off at the screen
+     edge with nothing to say it existed, let alone that it could be reached. Scrolling makes the
+     overflow both reachable and visible — a half-shown tab is its own affordance, which a hard
+     clip is not. */
+  max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;scroll-snap-type:x proximity;
 }
+.cat-toolbar-views::-webkit-scrollbar{display:none}
+.cat-view-btn{flex:0 0 auto;scroll-snap-align:center}
 .cat-view-btn{
   background:transparent;box-shadow:none;border:none;font-family:inherit;cursor:pointer;
   color:var(--m);font-size:.7rem;font-weight:600;padding:0 14px;height:28px;border-radius:99px;
@@ -2156,3 +2217,382 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-skill-preview{margin-top:10px;padding:10px;border-radius:9px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-import-results{grid-column:1/-1}
 @media(max-width:600px){.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}}
+/* ── Hero preset editor ──────────────────────────────────────────────────────
+ *
+ * These three were inline `style=` attributes, which is why the editor was unusable on a phone:
+ * a media query cannot reach a style attribute, so the desktop `1fr 340px` applied at every width.
+ * On a 390px screen that left the form column 30px wide, and every label — 「ID（英小文字・
+ * ハイフン）」 and the rest — wrapped to one character per line while the preview ran off-screen.
+ *
+ * The lesson is the same one the renderer keeps teaching: a rule that cannot be reached is
+ * indistinguishable from a rule that was never written. `.form-grid` already had the mobile
+ * collapse this needed; the markup simply was not using it.
+ */
+.hp-editor-layout{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.hp-field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+/* top:0, not an offset for the header.
+   `.page-area` is the scroll container (`overflow-y:auto`), and the header and the section tabs are
+   its siblings rather than its children — so this scrollport already begins directly below them.
+   The 80px copied from the desktop side panels was therefore pushing the panel 80px *into* the
+   scrollport, leaving a band of page above it that read as the pin having failed. */
+.hp-preview-col{position:sticky;top:0}
+/* The hero's own proportions, so the frame scales with its column instead of being pinned to a
+   width wider than the phone it is being read on. */
+.hp-preview-frame{
+  width:100%;max-width:340px;aspect-ratio:1280/670;
+  background:var(--bg);border-radius:8px;overflow:hidden;position:relative;box-shadow:var(--sh);
+}
+
+@media(max-width:767px){
+  /* One column, preview first: it is the thing being judged, and on a phone a sticky panel below
+     a long form is a panel nobody scrolls back to.
+     Flex rather than a one-column grid, and that is the whole reason the pinning did not work: a
+     sticky *grid item* is positioned within its own grid area, not within the grid. In a single
+     column that area is exactly the item's own height, so there is nowhere for it to travel and it
+     scrolls away like static content. A flex item's containing block is the flex container, which
+     is as tall as the form — so the same `top` finally has room to hold. */
+  /* align-items:start comes from the base rule, where it keeps the two columns top-aligned. In a
+     flex *column* it governs the cross axis instead, so it would size both children to their
+     content width rather than the screen. */
+  .hp-editor-layout{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+  /* Flex children default to min-width:auto, which lets a long JSON line push the column wider
+     than the screen and take the horizontal scrollbar with it. */
+  .hp-editor-layout > *{min-width:0}
+  .hp-preview-col{flex:0 0 auto}
+  .hp-field-row{grid-template-columns:1fr}
+  .hp-preview-frame{max-width:none}
+}
+
+/* Hero preset editor — field labels.
+ *
+ * These were repeated inline on every label (`font-size:11px;color:var(--m)` and a per-field
+ * `width:100%;box-sizing:border-box`). Inline meant the size could not be raised for a phone
+ * without editing nine attributes, which is how 11px labels survived on the screen they were
+ * hardest to read on. */
+.hp-label{display:block;font-size:11px;color:var(--m)}
+.hp-label > .form-input,.hp-label > .form-select,.hp-label > textarea{margin-top:4px;width:100%;box-sizing:border-box}
+.hp-label-block{margin-bottom:12px}
+.hp-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.hp-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;resize:vertical}
+
+@media(max-width:767px){
+  /* Small type is a desktop affordance borrowed onto a phone, where the label is doing more work:
+     there is no adjacent column to infer the field's meaning from. */
+  .hp-label{font-size:12px}
+  .hp-code{font-size:12px}
+}
+
+/* ── styleSpec controls ──────────────────────────────────────────────────────
+ * Generated from the renderer's vocabulary. Sized for a thumb: the whole reason this exists is
+ * that the previous control was a JSON textarea, and a form that needs a mouse would have moved
+ * the problem rather than solved it. */
+.hp-grp{margin-bottom:14px}
+.hp-grp-hd{font-size:11px;font-weight:700;color:var(--m2);margin:0 0 8px;letter-spacing:.04em}
+.hp-ctl{background:var(--bg);box-shadow:var(--sh-in);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+/* Set, valid, and drawn nowhere — see HP_DEAD_WITH_LINES. Muted rather than hidden: the value is
+   still there in the JSON and still worth seeing, just not worth acting on for this preset. */
+.hp-ctl-dead{opacity:.55}
+.hp-ctl-dead .hp-ctl-hint{opacity:1;color:var(--m)}
+.hp-ctl-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.hp-ctl-name{font-size:12px;font-weight:600;color:var(--txt)}
+.hp-ctl-key{font-size:10px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.hp-rm{margin-left:auto;min-height:28px;padding:2px 10px;font-size:12px;line-height:1}
+.hp-ctl-json{font-size:11px;color:var(--m);padding:6px 0}
+
+/* Generic object/array/union editors — path-addressed, for the styleSpec shapes (typography,
+   stroke, gradient stops, …) with no bespoke control. See _hpObjectFields/_hpArrayCtl/_hpUnionCtl. */
+.hp-obj-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.hp-obj-row:last-child{margin-bottom:0}
+.hp-obj-key{font-size:11px;color:var(--m2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:64px;flex-shrink:0}
+.hp-obj-row .hp-rm{margin-left:0}
+.hp-obj-nested{margin-bottom:8px}
+.hp-obj-nested:last-child{margin-bottom:0}
+.hp-obj-nested>.hp-obj-key{display:block;margin-bottom:6px;min-width:0}
+.hp-obj-sub{box-shadow:var(--sh-in);border-radius:8px;padding:8px;margin-left:0}
+.hp-obj-add{display:flex;gap:6px;align-items:center;margin-top:4px}
+.hp-obj-add .form-input{flex:1;min-width:0;font-size:12px}
+.hp-arr{display:flex;flex-direction:column;gap:8px}
+.hp-arr-item{box-shadow:var(--sh-in);border-radius:8px;padding:8px;position:relative}
+.hp-arr-item .act-btn.danger{margin-top:6px}
+.hp-stops{display:flex;flex-direction:column;gap:6px}
+.hp-stop-row{display:flex;gap:8px;align-items:center}
+.hp-stop-off{max-width:64px;flex:none}
+.hp-stop-row .form-input.hp-mono{flex:1;min-width:0}
+.hp-union-toggle{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.act-btn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+
+/* A よく使う設定 row the preset does not actually set. Dimmed rather than hidden: the control is
+   live, and touching it is what sets the key — see HP_QUICK_KEYS. */
+.hp-ctl-unset{opacity:.6}
+.hp-ctl-unset:focus-within{opacity:1}
+.hp-ground-note{background:#F59E0B14;border-radius:12px;padding:10px 12px}
+.hp-ground-note .hp-ctl-hint{margin-bottom:8px}
+.hp-card-note{font-size:10.5px;color:var(--m2);line-height:1.5;padding:0 12px 10px}
+
+/* 編集方針 is read here and changed in Discord — see proposeCategoryPrompt. */
+.cat-prompt-ro{font-size:12px;color:var(--txt);line-height:1.7;white-space:pre-wrap}
+.cat-prompt-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.cat-prompt-acts .form-input{flex:1;min-width:140px;font-size:12px}
+
+/* The merged thumbnail: recipe picture with the title preset drawn over it. */
+.cat-sample-wrap{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:10px}
+.cat-sample-hd{font-size:11px;font-weight:700;color:var(--m2);letter-spacing:.04em}
+.cat-sample-img{width:100%;border-radius:10px;display:block;cursor:zoom-in}
+
+/* The merged sample in the list, plus the two controls that change it in place. */
+.acard-thumb.is-sample{background:none}
+/* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
+.acard-thumb.is-empty{opacity:.4}
+/* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width
+   tile; the button takes the last slot on its own. */
+/* minmax(0,1fr), not 1fr. A grid track's automatic minimum is its content's min-content width, and
+   a <select> reports the width of its longest option — 「自動（記事ごとに選ぶ）」 — so the columns
+   grew past the card, past the page, and gave the whole list a horizontal scroll that fought every
+   vertical swipe. `width:100%` on the select cannot help: the track was already too wide. */
+.acard-map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;align-items:end;margin:2px 0 4px}
+.acard-mapf{display:flex;flex-direction:column;gap:2px;min-width:0}
+.acard-mapf>span{font-size:9px;color:var(--m2);font-weight:600}
+.acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
+.acard-map .cat-quick{justify-self:start;white-space:nowrap}
+
+/* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
+.hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}
+.hp-grp-fold>summary::-webkit-details-marker{display:none}
+.hp-grp-fold>summary::after{content:'▶';font-size:9px;color:var(--m2);margin-left:auto;transition:transform .15s}
+.hp-grp-fold[open]>summary::after{transform:rotate(90deg)}
+.hp-grp-fold>summary .hp-grp-hd{margin:0}
+.hp-grp-n{font-size:9px;color:var(--m2);background:color-mix(in srgb,var(--m) 12%,transparent);border-radius:99px;padding:1px 6px}
+
+/* Marking the claim inside a sample line. The marking says *which* words; the highlight preset
+   above says how they look — so this row stays appearance-free on purpose. */
+.hp-run-emph{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.hp-run-mark{font-weight:700}
+.hp-run-badge{font-size:9px;padding:2px 7px;border-radius:99px;font-weight:600;
+  background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc)}
+.hp-run-badge.off{background:color-mix(in srgb,var(--m) 12%,transparent);color:var(--m2)}
+
+/* Highlight presets — how the claim inside a headline is marked. Swatch-first, because the choice
+   is "which colour marker", and reading `decorationColor` off a key-value form is not that. */
+.hp-hl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.hp-hl-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:5px 9px}
+.hp-hl-sw{width:11px;height:11px;border-radius:3px;flex:none;box-shadow:var(--sh-sm)}
+.hp-hl-tune{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.hp-hl-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--m)}
+.hp-hl-row>span{min-width:62px;flex:none}
+.hp-hl-row input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+.hp-hl-row input[type=color]{width:34px;height:30px;border:none;background:none;padding:0;border-radius:8px}
+
+/* The four most-changed category settings, above the fold and saving on change. */
+.cat-quickbar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+.cat-quickf{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cat-quickf>span{font-size:9.5px;color:var(--m2);font-weight:600}
+.cat-quickf .cat-in{width:100%;font-size:11px}
+@media(min-width:600px){.cat-quickbar{grid-template-columns:repeat(4,1fr)}}
+.hp-ctl-hint{margin-left:8px;color:var(--m2)}
+
+.hp-colour{display:flex;gap:8px;align-items:center}
+.hp-colour input[type=color]{
+  /* A 44px target: the default swatch is ~24px, which is under every touch guideline there is. */
+  inline-size:44px;block-size:44px;padding:0;border:none;border-radius:10px;background:none;cursor:pointer;flex:0 0 auto;
+}
+.hp-colour .form-input{flex:1;min-width:0}
+
+.hp-range{display:flex;gap:10px;align-items:center}
+/* The slider sets it roughly, the number sets it exactly — these values get copied between presets
+   and "about 0.44" is not a thing you can copy. */
+.hp-range input[type=range]{flex:1;min-width:0;block-size:32px;accent-color:var(--acc)}
+.hp-num{inline-size:78px;flex:0 0 auto;text-align:right}
+
+.hp-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt);min-height:32px}
+.hp-switch input{inline-size:20px;block-size:20px;accent-color:var(--acc)}
+
+.hp-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
+.hp-add .form-select{flex:1;min-width:0}
+/* Full width on its own line under the select + button, not squeezed inline beside them. */
+.hp-add #hp-add-hint{flex-basis:100%;margin-left:0;font-size:11px}
+
+.hp-json{margin-top:10px}
+.hp-json > summary{
+  font-size:11px;color:var(--m);cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:6px;padding:6px 0;
+}
+.hp-json > summary::-webkit-details-marker{display:none}
+.hp-json[open] > summary .chev{transform:rotate(90deg)}
+.hp-json > summary .chev{font-size:9px;transition:transform .15s}
+
+@media(max-width:767px){
+  /* Stacked, because a label and its control sharing a row leaves neither enough width to be
+     read or hit. */
+  .hp-range{flex-wrap:wrap}
+  .hp-num{inline-size:100%;text-align:left}
+}
+
+/* ── Full-size image lightbox ────────────────────────────────────────────────
+   One shared overlay for every thumbnail in the app — preset previews, recipe samples, category
+   thumbnails — rather than a bespoke viewer per feature. */
+.lightbox-ov{
+  position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.82);
+  display:none;align-items:center;justify-content:center;padding:24px;
+  padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+}
+.lightbox-ov.open{display:flex}
+.lightbox-ov img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lightbox-close{
+  position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;
+  width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.12);
+  color:#fff;font-size:22px;line-height:1;cursor:pointer;
+}
+
+/* ── Preset catalogue cards ──────────────────────────────────────────────────
+ * The same card language as the category grid, one step wider because each one carries a picture.
+ * A preset is a look, and the list used to describe it only as JSON — so the card leads with the
+ * rendered hero and the text sits underneath as the caption it always was. */
+.hp-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.hp-card{
+  background:var(--bg);box-shadow:var(--sh);border-radius:14px;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.hp-card.is-off{opacity:.55}
+/* The hero's own 1280×670. Reserved before the picture arrives so the grid does not reflow as
+   each lazily-loaded preview lands. */
+.hp-card-shot{
+  aspect-ratio:1280/670;background:color-mix(in srgb,var(--m) 8%,transparent);
+  display:flex;align-items:center;justify-content:center;
+}
+.hp-card-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.hp-card-shot-fail{font-size:10px;color:var(--m2);padding:0 12px;text-align:center}
+.hp-card-body{padding:12px 12px 0;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+.hp-card-name{font-size:13px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
+.hp-card-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--acc)}
+.hp-card-chips{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.hp-card-desc{font-size:10px;color:var(--m);line-height:1.4}
+.hp-card-meta{font-size:10px;color:var(--m2)}
+.hp-card-upd{font-size:10px;color:var(--m2);margin-top:auto;padding-bottom:2px}
+.hp-card-acts{display:flex;gap:6px;padding:10px 12px 12px}
+.hp-card-acts .act-btn{flex:1;font-size:10px;min-height:36px;justify-content:center}
+
+/* Three samples across the head of a recipe card.
+   Side by side rather than stacked, because the question they answer is a comparison — do these
+   look like the same publication — and that only reads when they are seen at once. */
+.ip-shots{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:color-mix(in srgb,var(--m) 8%,transparent)}
+.ip-shot{margin:0;position:relative;aspect-ratio:1/1;overflow:hidden}
+.ip-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.ip-shot figcaption{
+  position:absolute;left:0;right:0;bottom:0;padding:3px 5px;
+  font-size:9px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.72));
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ip-shots-empty{
+  grid-column:1/-1;aspect-ratio:3/1;display:flex;align-items:center;justify-content:center;
+  font-size:10px;color:var(--m2);
+}
+
+/* ── Per-line editor ─────────────────────────────────────────────────────────
+ * A row per authored line, showing that line's own text. The row is the tap target: to restyle
+ * 「月5万円」 you tap 「月5万円」, rather than locating it inside a JSON array. */
+.hp-line{margin-bottom:8px}
+.hp-line-row{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:10px 12px;
+  background:var(--bg);box-shadow:var(--sh-sm);border:none;border-radius:12px;
+  font-family:inherit;cursor:pointer;text-align:left;
+}
+.hp-line-row.open{box-shadow:var(--sh-in)}
+/* Confirms which row a tap on the preview actually opened, since the jump alone can be subtle on a
+   tall page. */
+.hp-line-row.hp-flash{animation:hp-line-flash .9s ease-out}
+@keyframes hp-line-flash{
+  0%{background:var(--accent-light)}
+  100%{background:var(--bg)}
+}
+.hp-line-row .chev{margin-left:auto;font-size:9px;color:var(--m2);transition:transform .15s;flex:0 0 auto}
+.hp-line-row.open .chev{transform:rotate(90deg)}
+/* The line's text at something close to its real weight — this is the thing being pointed at, and
+   at 11px in a row of grey chrome it stops reading as the content and starts reading as a label. */
+.hp-line-text{font-size:14px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hp-line-meta{font-size:10px;color:var(--m2);white-space:nowrap;flex:0 0 auto}
+/* Same shape as ch-agent-pill — a role is metadata about the line, not the line itself. */
+.hp-line-role{font-size:9px;padding:2px 7px;border-radius:5px;background:var(--accent-bg);color:var(--acc);font-weight:600;flex:0 0 auto}
+.hp-line-body{padding:10px 0 2px}
+.hp-line-acts{display:flex;gap:8px;align-items:center;margin-top:4px}
+.hp-line-add{width:100%;justify-content:center;min-height:44px;margin-top:4px}
+
+/* ── Word-selection highlight editor ─────────────────────────────────────────
+ * Each character is its own tap target, sized for a thumb rather than for reading — this is a
+ * selector, not a text display, and the actual text is already shown at real size in the row above
+ * it and in the live preview. */
+.hp-run-editor{margin-top:8px}
+.hp-run-text{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px}
+.hp-run-ch{
+  min-width:30px;min-height:36px;padding:4px 2px;border:none;border-radius:6px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--txt);font-size:15px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.hp-run-ch.sel{box-shadow:var(--sh-in);background:var(--accent-bg);color:var(--acc)}
+.hp-run-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.hp-run-chip{width:32px;height:32px;border-radius:50%;border:none;box-shadow:var(--sh-sm);cursor:pointer}
+.hp-run-chip:active{box-shadow:var(--sh-press)}
+
+/* ── Keeping the preview on screen ───────────────────────────────────────────
+ * Every control here changes the picture, and a preview that scrolls away turns each change into
+ * edit → scroll up → look → scroll back. Pinned under the header instead, so the form moves and
+ * the picture does not. Capped by height rather than left at its aspect ratio: on a short screen a
+ * full-width hero would take the whole viewport and leave nothing to edit with. */
+@media(max-width:767px){
+  .hp-preview-col{
+    position:sticky;z-index:5;order:-1;
+    top:0;
+    background:var(--surf);padding:4px 0 8px;margin:0 -2px;
+  }
+  .hp-preview-frame{max-width:none;max-height:34vh;margin-inline:auto;aspect-ratio:1280/670}
+}
+@media(max-width:767px) and (max-height:640px){
+  /* Less room to spare: the picture yields first, since a preview you cannot edit beside is not
+     worth the space it takes. */
+  .hp-preview-frame{max-height:26vh}
+}
+
+/* A colour the preset does not set. The swatch still shows something — a colour input has no empty
+   state — so it is dimmed, and the field beside it is left blank behind a 未設定 placeholder rather
+   than printing a value the preset never chose. */
+.hp-ctl-unset .hp-colour input[type=color]{opacity:.35;filter:grayscale(1)}
+
+/* ── Tapping the preview ─────────────────────────────────────────────────────
+ * Targets sit over the components the renderer reported, in percentages of the hero's own
+ * 1280×670, so they stay on their component at any displayed size. */
+.hp-hits{position:absolute;inset:0;pointer-events:none}
+.hp-hit{
+  position:absolute;pointer-events:auto;cursor:pointer;padding:0;
+  background:none;border:1.5px dashed transparent;border-radius:6px;
+  transition:border-color .12s,background .12s;
+}
+/* Invisible until touched, and outlined once chosen.
+   A picture permanently covered in boxes is a picture you cannot judge, and judging it is the
+   entire reason the preview is here — so the affordance only appears on contact. */
+.hp-hit:hover,.hp-hit:focus-visible{border-color:rgba(255,255,255,.75);background:rgba(255,255,255,.10);outline:none}
+.hp-hit.on{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 16%,transparent);border-style:solid}
+.hp-hit > span{
+  position:absolute;top:-9px;left:-2px;font-size:9px;font-weight:700;line-height:1;
+  padding:2px 5px;border-radius:5px;background:var(--acc);color:#fff;opacity:0;transition:opacity .12s;
+  white-space:nowrap;pointer-events:none;
+}
+.hp-hit.on > span,.hp-hit:hover > span{opacity:1}
+
+/* ── Sample headlines ────────────────────────────────────────────────────────
+ * Three lengths rather than a field to type in: whether a style holds up is decided almost
+ * entirely by how much text arrives. */
+.hp-samples{display:flex;gap:6px;margin-top:10px}
+.hp-sample{
+  flex:1;min-width:0;min-height:38px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:1px;font-family:inherit;cursor:pointer;border:none;border-radius:10px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--m);font-size:11px;font-weight:600;
+}
+.hp-sample > span{font-size:9px;color:var(--m2);font-weight:500}
+.hp-sample.on{box-shadow:var(--sh-in);color:var(--acc)}
+.hp-sample.on > span{color:var(--acc)}
+
+/* Per-line glow: three settings that belong together, so they read as one control rather than as
+   three unrelated rows that happen to be adjacent. */
+.hp-glow{display:flex;flex-direction:column;gap:8px}
+.hp-glow-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--m)}
+.hp-glow-row > span{flex:0 0 42px}
+.hp-glow-row input[type=range]{flex:1;min-width:0;block-size:32px;accent-color:var(--acc)}

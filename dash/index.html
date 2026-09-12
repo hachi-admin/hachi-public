@@ -3,12 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- The one file that cannot carry a ?v= query, because it is the URL being asked for.
+     GitHub Pages serves it with max-age=600, so a reader could hold this document for ten minutes
+     (much longer with a tab left open) while dashboard.css and app.js came back fresh from their
+     new versioned URLs — new styling applied to old markup. That is not hypothetical: the hero
+     preset editor's sections were invisible on a phone for exactly this reason while the same
+     deploy's CSS was plainly in effect. Revalidating the document costs one conditional request
+     and makes the ?v= scheme on the other two actually mean something. -->
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>hachi dash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/neu.css?v=7">
-<link rel="stylesheet" href="dashboard.css?v=10">
+<link rel="stylesheet" href="dashboard.css?v=16">
 </head>
 <body>
 
@@ -170,10 +178,50 @@
     <div id="k-topics" class="feed-box"></div>
   </section>
 
+  <!-- ── IMAGE PROMPT RECIPES ──────────────────────
+       A recipe is a description of a look, which is the one thing that cannot be judged from its
+       own text — so each card leads with the pictures it actually produced. -->
+  <section class="page" id="page-image-prompts" data-dest="articles">
+    <div class="page-hd">
+      <div class="page-title">絵のレシピ</div>
+      <button class="act-btn" onclick="_openNewRecipeModal()" style="font-size:11px">＋ 参考画像から作る</button>
+      <button class="refresh-btn" onclick="_loadImagePrompts()" style="font-size:11px">&#8635; 更新</button>
+    </div>
+    <div id="image-prompts-list" class="feed-box"></div>
+  </section>
+
+  <!-- ── New recipe from reference images ──────────────────────────────────────
+       Up to 5 images + a note go to agents/recipe-vision/, which writes back a spec — the operator
+       never hand-types style/composition/lighting/... vocabulary they may not have. -->
+  <div class="lightbox-ov" id="ip-new-modal" onclick="_closeNewRecipeModal()">
+    <div class="neu-well" style="background:var(--surf);max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()">
+      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">参考画像から絵のレシピを作る</div>
+      <div class="cat-hint" style="margin-bottom:12px">似た見た目の画像を1〜5枚。共通する画づくり（構図・光・質感・トーン）をAIが言葉にします。写っている被写体そのものではなく、その作風が抽出されます。</div>
+      <label class="cat-field">
+        <span class="cat-label">参考画像（最大5枚）</span>
+        <input type="file" id="ip-new-files" accept="image/*" multiple onchange="_onNewRecipeFiles(this.files)">
+      </label>
+      <div id="ip-new-thumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"></div>
+      <label class="cat-field">
+        <span class="cat-label">メモ（任意）</span>
+        <input type="text" id="ip-new-note" class="cat-in" placeholder="例: 記事の見出し画像に使いたい／文字が入っても潰れない構図で">
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">ID（英小文字・ハイフン。AIが名前を決めた後に自分で調整可）</span>
+        <input type="text" id="ip-new-id" class="cat-in" placeholder="例: soft-editorial-portrait">
+      </label>
+      <div id="ip-new-error" style="display:none;color:var(--error);font-size:11px;margin-top:6px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="act-btn" onclick="_closeNewRecipeModal()" style="flex:1;justify-content:center">キャンセル</button>
+        <button class="act-btn resume" id="ip-new-submit" onclick="_submitNewRecipe()" style="flex:1;justify-content:center">生成する</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── HERO PRESETS ──────────────────────────── -->
   <section class="page" id="page-hero-presets" data-dest="articles">
     <div class="page-hd">
-      <div class="page-title">ヒーロー画像テンプレート</div>
+      <div class="page-title">サムネタイトルテンプレート</div>
       <button class="act-btn" onclick="_showNewPresetForm()" style="font-size:11px">＋ 新規テンプレート</button>
       <button class="refresh-btn" onclick="_loadHeroPresets()" style="font-size:11px">&#8635; 更新</button>
     </div>
@@ -183,43 +231,93 @@
     <div id="hero-preset-editor" style="display:none;margin-top:20px;padding:18px;background:var(--surf);border-radius:14px;box-shadow:var(--sh)">
       <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:14px" id="hp-editor-title">テンプレートを編集</div>
 
-      <!-- Two-column: form (left) + live preview (right) -->
-      <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start">
+      <!-- Two-column: form (left) + live preview (right). Both grids are classes rather than
+           inline styles, because a `style=` attribute cannot be reached by a media query. While
+           these were inline the form column computed to 30px on a 390px phone and set every label
+           one character per line. -->
+      <div class="hp-editor-layout">
 
-        <!-- ── Form ── -->
+        <!-- ── Form ──
+             Grouped the way the category sheet is, and for the same reason: nine fields including
+             three JSON textareas is a long scroll on a phone, and the answer to "how is this preset
+             configured" should not require expanding anything. Each closed row states its own value.
+
+             styleSpec is the section left open, because it is the lever you come here to move —
+             identity and examples are things you set once. -->
         <div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-            <label style="font-size:11px;color:var(--m)">ID（英小文字・ハイフン）
-              <input id="hp-id" class="form-input" type="text" placeholder="my-preset" style="margin-top:4px;font-family:monospace">
-            </label>
-            <label style="font-size:11px;color:var(--m)">テンプレート地（templateId）
-              <select id="hp-template-id" class="form-select" style="margin-top:4px" onchange="_debouncedPreview()">
-                <option value="photo_scrim">photo_scrim（写真+スクリム）</option>
-                <option value="light_flat">light_flat（明るいフラット）</option>
-                <option value="photo_full">photo_full（写真フル）</option>
-                <option value="dark_flat">dark_flat（黒地）</option>
-              </select>
-            </label>
-            <label style="font-size:11px;color:var(--m)">名前
-              <input id="hp-name" class="form-input" type="text" placeholder="プリセット名" style="margin-top:4px">
-            </label>
-            <label style="font-size:11px;color:var(--m)">タグ（カンマ区切り）
-              <input id="hp-mood" class="form-input" type="text" placeholder="tech, news, dark" style="margin-top:4px">
-            </label>
-          </div>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">説明
-            <input id="hp-description" class="form-input" type="text" placeholder="どんな記事に向くか" style="margin-top:4px;width:100%;box-sizing:border-box">
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">styleSpec（JSON）
-            <textarea id="hp-style-spec" class="form-input" rows="10" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:12px">exampleLines（JSON配列）
-            <textarea id="hp-example-lines" class="form-input" rows="6" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <label style="font-size:11px;color:var(--m);display:block;margin-bottom:16px">exampleBadge（JSON、任意）
-            <textarea id="hp-example-badge" class="form-input" rows="3" oninput="_debouncedPreview()" style="margin-top:4px;width:100%;box-sizing:border-box;font-family:monospace;font-size:11px;resize:vertical"></textarea>
-          </label>
-          <div id="hp-editor-error" style="font-size:11px;color:var(--error);margin-bottom:10px;display:none"></div>
+          <details class="neu-sec">
+            <summary>基本<span class="sum-val" id="hp-sum-basic">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <div class="hp-field-row">
+                <label class="hp-label">ID（英小文字・ハイフン）
+                  <input id="hp-id" class="form-input hp-mono" type="text" placeholder="my-preset" oninput="_syncHpSummaries()">
+                </label>
+                <label class="hp-label">テンプレート地（templateId）
+                  <select id="hp-template-id" class="form-select" onchange="_debouncedPreview();_syncHpSummaries()">
+                    <option value="light_flat">light_flat（白地・文字主役）</option>
+                    <option value="dark_flat">dark_flat（黒地・白抜き）</option>
+                    <option value="colour_block">colour_block（色地・白文字）</option>
+                    <option value="photo_scrim">photo_scrim（写真＋スクリム）</option>
+                    <option value="photo_punch">photo_punch（写真＋縁取り）</option>
+                    <option value="photo_full">photo_full（写真全面・グラデ文字）</option>
+                    <option value="photo_tilt">photo_tilt（写真＋傾き・立体文字）</option>
+                    <option value="photo_metal">photo_metal（写真＋メタリック立体文字）</option>
+                    <option value="photo_crown">photo_crown（写真＋上部見出し）</option>
+                    <option value="photo_lower">photo_lower（写真＋左下見出し）</option>
+                    <option value="photo_stack">photo_stack（写真＋三段見出し）</option>
+                    <option value="photo_gold">photo_gold（写真＋金文字）</option>
+                    <option value="photo_vivid">photo_vivid（写真＋ハーフグラデ）</option>
+                    <option value="photo_split">photo_split（写真＋左テキスト）</option>
+                  </select>
+                </label>
+                <label class="hp-label">名前
+                  <input id="hp-name" class="form-input" type="text" placeholder="プリセット名" oninput="_syncHpSummaries()">
+                </label>
+                <label class="hp-label">タグ（カンマ区切り）
+                  <input id="hp-mood" class="form-input" type="text" placeholder="tech, news, dark" oninput="_syncHpSummaries()">
+                </label>
+              </div>
+              <label class="hp-label hp-label-block">説明
+                <input id="hp-description" class="form-input" type="text" placeholder="どんな記事に向くか">
+              </label>
+            </div>
+          </details>
+
+          <details class="neu-sec" open>
+            <summary>スタイル<span class="sum-val" id="hp-sum-style">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <!-- Generated from the renderer's own vocabulary. The JSON below stays as the escape
+                   hatch for shapes no control expresses; both edit the same object. -->
+              <div id="hp-style-form"></div>
+              <details class="hp-json">
+                <summary>JSON で編集<span class="chev">▶</span></summary>
+                <label class="hp-label hp-label-block">styleSpec（JSON）
+                  <textarea id="hp-style-spec" class="form-input hp-code" rows="10" oninput="_debouncedPreview();_syncHpSummaries();_renderStyleForm()"></textarea>
+                </label>
+              </details>
+            </div>
+          </details>
+
+          <details class="neu-sec" id="hp-sec-example">
+            <summary>見本<span class="sum-val" id="hp-sum-example">—</span><span class="chev">▶</span></summary>
+            <div class="neu-sec-body">
+              <!-- One row per line, showing its own text. Tapping a row opens the controls for
+                   that line alone — changing how 「月5万円」 is set should not mean finding it
+                   inside a JSON array and editing around it. -->
+              <div id="hp-line-form"></div>
+              <details class="hp-json">
+                <summary>JSON で編集<span class="chev">▶</span></summary>
+                <label class="hp-label hp-label-block">exampleLines（JSON配列）
+                  <textarea id="hp-example-lines" class="form-input hp-code" rows="6" oninput="_debouncedPreview();_syncHpSummaries();_renderLineForm();_renderSampleTabs();_renderStyleForm()"></textarea>
+                </label>
+              </details>
+              <label class="hp-label hp-label-block">exampleBadge（JSON、任意）
+                <textarea id="hp-example-badge" class="form-input hp-code" rows="3" oninput="_debouncedPreview();_syncHpSummaries()"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <div id="hp-editor-error" style="font-size:11px;color:var(--error);margin:10px 0;display:none"></div>
           <div style="display:flex;gap:10px">
             <button class="save-btn" onclick="_saveHeroPreset()">保存</button>
             <button class="refresh-btn" onclick="_closeHeroPresetEditor()">キャンセル</button>
@@ -227,14 +325,16 @@
         </div>
 
         <!-- ── Live Preview ── -->
-        <div style="position:sticky;top:80px">
-          <div style="font-size:11px;font-weight:700;color:var(--m);margin-bottom:8px;display:flex;align-items:center;gap:8px">
-            ライブプレビュー
-            <button class="act-btn" onclick="_refreshPreview()" style="font-size:9px;padding:2px 8px">更新</button>
-          </div>
-          <!-- Preview image: 1280×670 → 340×178 -->
-          <div style="width:340px;height:178px;background:var(--bg);border-radius:8px;overflow:hidden;position:relative;box-shadow:var(--sh)">
+        <div class="hp-preview-col">
+          <!-- No "live preview" heading: the picture is self-evidently the picture, and it
+               re-renders on its own. The label was a row of chrome above the one thing worth
+               looking at, on the screen with the least room for chrome. -->
+          <!-- Preview frame: holds the hero's own 1280×670 via aspect-ratio rather than a fixed
+               height, so it scales with the column instead of overflowing a narrow screen. -->
+          <div class="hp-preview-frame">
             <img id="hp-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none">
+            <!-- Tap targets over the components, positioned from the renderer's own boxes. -->
+            <div id="hp-preview-hits" class="hp-hits"></div>
             <div id="hp-preview-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px">
               <div style="font-size:11px;color:var(--m)">プレビューなし</div>
               <button class="act-btn" onclick="_refreshPreview()" style="font-size:9px">レンダリング</button>
@@ -247,10 +347,10 @@
           <div style="font-size:10px;color:var(--m2);margin-top:6px">
             styleSpec または exampleLines を変更すると自動更新（1秒後）
           </div>
-          <!-- Article title input for preview -->
-          <label style="font-size:10px;color:var(--m);display:block;margin-top:12px">記事タイトル（プレビュー用）
-            <input id="hp-preview-article" class="form-input" type="text" value="サンプル記事タイトル" style="margin-top:4px;font-size:11px;width:100%;box-sizing:border-box" oninput="_debouncedPreview()">
-          </label>
+          <!-- Sample headlines instead of a field to type in. What decides whether a style holds
+               up is how much text arrives, so the useful action is sweeping that range rather than
+               composing a title. -->
+          <div id="hp-sample-tabs" class="hp-samples"></div>
         </div>
 
       </div><!-- /two-column grid -->
@@ -919,6 +1019,6 @@
 </script>
 <script src="../shared/ui.js?v=7"></script>
 <script src="x-affiliate.js?v=3"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
