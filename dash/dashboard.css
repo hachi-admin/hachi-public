@@ -2332,6 +2332,14 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-grp-fold>summary .hp-grp-hd{margin:0}
 .hp-grp-n{font-size:9px;color:var(--m2);background:color-mix(in srgb,var(--m) 12%,transparent);border-radius:99px;padding:1px 6px}
 
+/* Marking the claim inside a sample line. The marking says *which* words; the highlight preset
+   above says how they look — so this row stays appearance-free on purpose. */
+.hp-run-emph{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.hp-run-mark{font-weight:700}
+.hp-run-badge{font-size:9px;padding:2px 7px;border-radius:99px;font-weight:600;
+  background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc)}
+.hp-run-badge.off{background:color-mix(in srgb,var(--m) 12%,transparent);color:var(--m2)}
+
 /* Highlight presets — how the claim inside a headline is marked. Swatch-first, because the choice
    is "which colour marker", and reading `decorationColor` off a key-value form is not that. */
 .hp-hl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}

@@ -3541,7 +3541,7 @@ function _hpRunExistingRange(line) {
   let pos = 0;
   for (const r of line.runs) {
     const len = String(r?.text ?? '').length;
-    if (r?.palette || r?.metal || r?.gradient) return { start: pos, end: pos + len - 1 };
+    if (r?.emph || r?.palette || r?.metal || r?.gradient) return { start: pos, end: pos + len - 1 };
     pos += len;
   }
   return null;
@@ -3557,15 +3557,35 @@ function _hpRunEditor(i, line) {
     `<button class="hp-run-ch${k >= lo && k <= hi ? ' sel' : ''}" onclick="_hpTapRunChar(${i},${k})">${esc(ch)}</button>`).join('');
   const hasSel = sel && sel.end != null;
   const opts = _hpVocab?.lineSchema?.palette?.options || [];
-  const chips = hasSel
-    ? opts.map((o) => `<button class="hp-run-chip" style="background:${HP_SPLIT_SWATCH[o] || '#888'}"
-        title="${esc(HP_SPLIT_LABELS[o] || o)}" onclick="_hpApplyRunPalette(${i},'${o}')"></button>`).join('')
-      + `<button class="act-btn" onclick="_hpApplyRunPalette(${i},null)">色を外す</button>`
-    : '';
+  const marked = (line?.runs || []).some((r) => r?.emph);
+
+  /* Two different things you can do to the words you selected, and the order matters.
+   *
+   * 「強調にする」 records *which* words carry the claim and leaves the look to the styleSpec's
+   * highlight — so changing the highlight preset restyles every sample at once, and the marking
+   * means the same thing here as the writer's per-article emphasis does in a published hero. That
+   * is the one that transfers, so it leads.
+   *
+   * A palette fixes one specific colour into this sample and travels nowhere; it stays because a
+   * two-tone line is a composition the highlight block cannot express, but it is the exception. */
+  const acts = hasSel
+    ? `<div class="hp-run-emph">
+         <button class="act-btn hp-run-mark" onclick="_hpMarkRunEmph(${i},true)">強調にする</button>
+         ${marked ? `<button class="act-btn" onclick="_hpMarkRunEmph(${i},false)">強調をやめる</button>` : ''}
+       </div>
+       <div class="hp-ctl-hint">この行だけの色を固定したいとき:</div>
+       <div class="hp-run-chips">${
+         opts.map((o) => `<button class="hp-run-chip" style="background:${HP_SPLIT_SWATCH[o] || '#888'}"
+           title="${esc(HP_SPLIT_LABELS[o] || o)}" onclick="_hpApplyRunPalette(${i},'${o}')"></button>`).join('')
+       }<button class="act-btn" onclick="_hpApplyRunPalette(${i},null)">色を外す</button></div>`
+    : `<div class="hp-ctl-hint">文字をタップ→タップで範囲を選びます。${
+        marked ? '' : 'どこも強調しない行にするなら、何も選ばないままで構いません。'}</div>`;
+
   return `<div class="hp-ctl hp-run-editor">
-    <div class="hp-ctl-head"><span class="hp-ctl-name">文字を選んで装飾</span></div>
+    <div class="hp-ctl-head"><span class="hp-ctl-name">強調する言葉</span>
+      ${marked ? '<span class="hp-run-badge">強調あり</span>' : '<span class="hp-run-badge off">強調なし</span>'}</div>
     <div class="hp-run-text">${chars}</div>
-    ${hasSel ? `<div class="hp-run-chips">${chips}</div>` : '<div class="hp-ctl-hint">文字をタップ→タップで範囲を選び、色のパターンを選びます</div>'}
+    ${acts}
   </div>`;
 }
 
@@ -3578,23 +3598,57 @@ function _hpTapRunChar(i, k) {
   _renderLineForm();
 }
 
-function _hpApplyRunPalette(i, palette) {
+/* Mark the selected words as the line's claim — or clear every marking on the line.
+ *
+ * Splitting is the same operation as applying a palette (prefix / middle / suffix), so the two
+ * share `_hpSplitRun`; what differs is what the middle run is told to carry. `emph: true` carries
+ * no appearance at all, which is the point: the styleSpec decides that. */
+function _hpMarkRunEmph(i, on) {
   const lines = _hpLines();
   const line = lines?.[i];
-  if (!line || !_hpRunSel || _hpRunSel.end == null) return;
+  if (!line) return;
+  if (!on) {
+    // Clearing does not un-split the line — the breaks may be carrying sizes — it only drops the
+    // marking. A line left with one plain run collapses back to bare text.
+    for (const r of line.runs || []) delete r.emph;
+    if ((line.runs || []).length === 1 && Object.keys(line.runs[0]).join() === 'text') {
+      line.text = line.runs[0].text; delete line.runs;
+    }
+    _hpRunSel = null;
+    _hpWriteLines(lines);
+    return;
+  }
+  if (!_hpSplitRun(line, (mid) => ({ text: mid, emph: true }))) return;
+  _hpRunSel = null;
+  _hpWriteLines(lines);
+}
+
+/* Rewrite a line as prefix / selection / suffix, with the caller deciding what the selection
+   carries. Returns false when there is no selection to act on. */
+function _hpSplitRun(line, makeMid) {
+  if (!_hpRunSel || _hpRunSel.end == null) return false;
   const text = _hpRunFlatText(line);
   const s = Math.min(_hpRunSel.start, _hpRunSel.end);
   const e = Math.max(_hpRunSel.start, _hpRunSel.end);
-  const prefix = text.slice(0, s);
-  const mid = text.slice(s, e + 1);
-  const suffix = text.slice(e + 1);
   const runs = [];
-  if (prefix) runs.push({ text: prefix });
-  if (mid) runs.push(palette ? { text: mid, palette } : { text: mid });
-  if (suffix) runs.push({ text: suffix });
-  // A single, undecorated run is just the line's plain text — collapse back to none rather than
-  // carry a `runs` array that says nothing `text` didn't already.
-  if (runs.length > 1) line.runs = runs; else delete line.runs;
+  if (text.slice(0, s)) runs.push({ text: text.slice(0, s) });
+  const mid = text.slice(s, e + 1);
+  if (mid) runs.push(makeMid(mid));
+  if (text.slice(e + 1)) runs.push({ text: text.slice(e + 1) });
+  if (runs.length > 1 || runs.some((r) => Object.keys(r).length > 1)) {
+    line.runs = runs;
+    delete line.text;
+  } else {
+    delete line.runs;
+  }
+  return true;
+}
+
+function _hpApplyRunPalette(i, palette) {
+  const lines = _hpLines();
+  const line = lines?.[i];
+  if (!line) return;
+  if (!_hpSplitRun(line, (mid) => (palette ? { text: mid, palette } : { text: mid }))) return;
   _hpRunSel = null;
   _hpWriteLines(lines);
 }

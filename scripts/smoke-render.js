@@ -72,7 +72,7 @@ const sandbox = {
   _hpSetGlowSpec:()=>{}, _hpClearGround:()=>{}, _hpSetPath:()=>{}, _hpRemovePath:()=>{},
   _hpSetHighlight:()=>{}, _hpTuneHighlight:()=>{},
   _hpAddObjField:()=>{}, _hpAddArrayItem:()=>{}, _hpAddStop:()=>{}, _hpSwitchVariant:()=>{},
-  _hpApplyRunPalette:()=>{}, _hpTapRunChar:()=>{}, _hpSetStrokeColor:()=>{}, _hpSetStrokeEm:()=>{},
+  _hpApplyRunPalette:()=>{}, _hpTapRunChar:()=>{}, _hpMarkRunEmph:()=>{}, _hpSetStrokeColor:()=>{}, _hpSetStrokeEm:()=>{},
   _hpShowAddHint:()=>{}, showToast:()=>{},
   setTimeout, clearTimeout, URL, Math, Date, JSON, Object, Array, String, Number, Boolean, Map, Set, RegExp, isNaN, parseInt, parseFloat,
 };
@@ -450,6 +450,32 @@ run('_syncHpSummaries on a brand new preset', () => {
       const h = lineHtml(JSON.stringify([{ text:'x', glow:{ color:'oops' } }]), 0);
       if (!/value="#FF3366"/.test(h)) throw new Error('did not fall back to a usable colour');
       if (/undefined|NaN/.test(h)) throw new Error('leaked a raw value');
+      return 'ok';
+    });
+
+    /* Marking which words carry the claim.
+     *
+     * The marking says *which*; the styleSpec's highlight says *how*. That indirection is the whole
+     * feature — a run carrying `palette` bakes one colour into the sample and reaches no article,
+     * while an `emph` run is drawn with whatever highlight the preset currently uses. So the line
+     * editor has to offer the marking first, and has to say whether a line is marked at all, since
+     * "no emphasis on this line" is a design decision rather than an omission. */
+    run('a line says whether it marks a claim, and offers to mark one', () => {
+      const sel = (line, s, e) => {
+        domForLines(line);
+        const a = make(...Object.keys(sandbox).map((k) => (k === '_hpVocab' ? vocab
+          : k === '_hpOpenLine' ? 0 : k === '_hpRunSel' ? { start: s, end: e } : sandbox[k])));
+        a._renderLineForm();
+        return _lineHost.innerHTML || '';
+      };
+      const plain = sel(JSON.stringify([{ text: '待つのは時間の無駄' }]), 4, 8);
+      if (!/強調なし/.test(plain)) throw new Error('an unmarked line does not say so');
+      if (!/_hpMarkRunEmph\(0,true\)/.test(plain)) throw new Error('no way to mark the selection');
+
+      const marked = sel(JSON.stringify([{ runs: [{ text: '待つのは' }, { text: '時間の無駄', emph: true }] }]), 4, 8);
+      if (!/強調あり/.test(marked)) throw new Error('a marked line does not say so');
+      if (!/_hpMarkRunEmph\(0,false\)/.test(marked)) throw new Error('no way to clear the marking');
+      if (/undefined|NaN|\[object Object\]/.test(marked)) throw new Error('leaked a raw value');
       return 'ok';
     });
 
