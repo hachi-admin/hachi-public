@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '29';
+const DASH_BUILD = '30';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2671,7 +2671,14 @@ async function _loadHeroPreviewInto(id) {
   for (const [i, variant] of _HP_VARIANTS.entries()) {
     const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
     if (!host) continue;
-    const lines = (v[variant.key]?.length ? v[variant.key] : v.standard) ?? [];
+    /* Indents are dropped for the comparison.
+       Each authored line carries its own `indent`, applied *after* alignment (hero-title.js:1208:
+       `x = originX(lineW) + indent * size`). A style whose big line is stepped 0.2em in therefore
+       lands in nearly the same place whether the block was centred or flushed left, which is why
+       both columns looked identical. Zeroing them leaves alignment as the only thing moving, which
+       is the one question these four panels exist to answer. */
+    const raw = (v[variant.key]?.length ? v[variant.key] : v.standard) ?? [];
+    const lines = raw.map((l) => ({ ...l, indent: 0 }));
     try {
       const res = await fetch(apiUrl('/api/hero-presets/preview'), {
         method: 'POST',
@@ -2822,11 +2829,15 @@ function _heroPresetCard(p) {
       <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
       <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${off && !p.isSystem
+      ${/* System presets are deletable now. Deleting one used to be refused because the seeder
+            recreated any id it could not find, so the row came back; it is retired in place
+            instead, which keeps the tombstone that stops the seeder and removes it from every
+            reader. Same gate as before otherwise: disable it first. */ ''}
+      ${off
         ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
     ${off && p.isSystem
-      ? '<div class="hp-card-note">既定のスタイルは削除できません（次のデプロイで再生成されます）。無効のままにしておけば選ばれません。</div>' : ''}
+      ? '<div class="hp-card-note">既定のスタイルを削除すると一覧とエージェントの選択肢から外れます。次のデプロイで戻ることはありません。</div>' : ''}
   </div>`;
 }
 
