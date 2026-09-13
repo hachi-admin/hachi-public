@@ -1379,6 +1379,11 @@ function _categoryTile(c) {
         <span class="cat-chip">${esc(freq)}</span>
         ${quick ? `<button class="cat-quick" title="${esc(quick.label)}"
           onclick="event.stopPropagation();catAction('${c.id}','${quick.action}')">${quick.label}</button>` : ''}
+        ${/* Same rule the preset cards use: a category that is still running has to be stopped
+              before it can be deleted. 稼働中 is this screen's 有効, so offering an irreversible
+              delete next to a live category would be the one tap that loses a working stream. */ ''}
+        ${c.status !== 'active' ? `<button class="cat-quick danger" title="削除"
+          onclick="event.stopPropagation();deleteCategory('${c.id}')">削除</button>` : ''}
       </div>
       <div class="acard-foot">
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
@@ -2458,7 +2463,7 @@ async function catAction(id, action) {
   // Rejecting is the only irreversible one here — it marks the category "do not re-suggest".
   if (action === 'reject') {
     showConfirm('却下すると今後スカウトから再提案されません。よろしいですか？', run,
-      document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+      document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`));
   } else { await run(); }
 }
 
@@ -2467,7 +2472,7 @@ function deleteCategory(id) {
     await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
     closeDetail(); _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`));
 }
 
 async function generateNow(id) {

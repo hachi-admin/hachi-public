@@ -429,6 +429,7 @@ header{margin:12px;padding:10px 16px}
   cursor:pointer;font-family:inherit;margin-left:auto;
 }
 .cat-quick:active{box-shadow:var(--sh-press)}
+.cat-quick.danger{color:var(--red);margin-left:0}
 .trig-chip{font-size:9px;padding:2px 7px;border-radius:99px;border:1px solid;text-transform:capitalize}
 .trig-chip.interactive{background:color-mix(in srgb,var(--grn) 14%,transparent);color:var(--grn);border-color:color-mix(in srgb,var(--grn) 28%,transparent)}
 .trig-chip.scheduled{background:color-mix(in srgb,var(--yel) 14%,transparent);color:var(--yel);border-color:color-mix(in srgb,var(--yel) 28%,transparent)}
