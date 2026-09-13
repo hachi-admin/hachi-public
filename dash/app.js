@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '30';
+const DASH_BUILD = '31';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2679,6 +2679,14 @@ async function _loadHeroPreviewInto(id) {
        is the one question these four panels exist to answer. */
     const raw = (v[variant.key]?.length ? v[variant.key] : v.standard) ?? [];
     const lines = raw.map((l) => ({ ...l, indent: 0 }));
+    /* Which phrase carries the claim, so the highlight is actually drawn.
+       The sample lines are plain {text, scale} with no `emph` runs, and with no emphasis supplied
+       the mask comes out entirely false (hero-title.js: emphasisMask over an empty list) — so every
+       style previewed as flat type and `highlight` / `emphasisScale`, the part most worth judging,
+       was the one part the picture could not show. The biggest line is the claim by construction:
+       that is what the scale on these samples means. */
+    const lead = raw.reduce((best, l) => ((l?.scale ?? 1) > (best?.scale ?? 0) ? l : best), null);
+    const emphasis = lead?.text ? [lead.text] : [];
     try {
       const res = await fetch(apiUrl('/api/hero-presets/preview'), {
         method: 'POST',
@@ -2695,6 +2703,7 @@ async function _loadHeroPreviewInto(id) {
              type. */
           styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
           lines,
+          emphasis,
           badge: p.exampleBadge || undefined,
           article: p.name || 'サンプル見出し',
         }),
@@ -4173,7 +4182,13 @@ async function _deleteHeroPreset(id) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
     showToast('削除しました', 'success');
-    await _loadHeroPresets();
+    /* Remove the one card, rather than reloading the tab.
+       `_loadHeroPresets()` refetches the catalogue and re-renders every card, which also throws
+       away all the drawn samples and re-requests four renders per card — so deleting one entry
+       repainted the whole screen and scrolled the operator back to the top. Nothing else on screen
+       depends on this row, so nothing else needs to move. */
+    _heroPresets = _heroPresets.filter((x) => x.id !== id);
+    document.querySelector(`.hp-shot-grid[data-preset-id="${CSS.escape(id)}"]`)?.closest('.hp-card')?.remove();
   } catch (e) {
     showToast(e.message, 'error');
   }
@@ -4326,7 +4341,9 @@ async function _deleteImagePrompt(id) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
     showToast('削除しました', 'success');
-    await _loadImagePrompts();
+    // Same reasoning as the hero presets: drop the row, leave the rest of the screen alone.
+    _imagePrompts = _imagePrompts.filter((x) => x.id !== id);
+    document.querySelector(`.hp-card [data-ip-gen="${CSS.escape(id)}"]`)?.closest('.hp-card')?.remove();
   } catch (e) {
     showToast(`削除できませんでした: ${e.message}`, 'error');
   }
