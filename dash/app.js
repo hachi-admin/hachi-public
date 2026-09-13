@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '25';
+const DASH_BUILD = '26';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2333,12 +2333,29 @@ async function saveCategory(id, { silent = false } = {}) {
   closeDetail(); _loadTopics();
 }
 
+/* Where a category's confirm banner should appear.
+ *
+ * These actions fire from two places — the tile in the grid and the open detail overlay — and the
+ * banner is an ordinary flow element, not a fixed one. Anchor it to the tile while the overlay is
+ * open and it renders *behind* the overlay; give showConfirm nothing and it falls through to
+ * document.body, which puts it at the foot of the page. Both are indistinguishable from the button
+ * doing nothing, and the operator's next move is to press it again.
+ *
+ * Every one of these used to query `.cat-card`, which is not a class this dashboard has — the
+ * tiles are `.acard`. So the fallback was what always ran, and no confirm banner had ever appeared
+ * next to the thing it was asking about. */
+const _catConfirmAnchor = (id) =>
+  (document.getElementById('detail-overlay')?.classList.contains('open')
+    ? document.querySelector('#detail-content .p-actions')
+    : null)
+  ?? document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`);
+
 function resetCategoryPrompt(id) {
   showConfirm('編集方針を最初の提案内容に戻しますか？', async () => {
     await fetch(apiUrl(`/api/article-categories/${id}/reset-prompt`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
     showToast('提案内容に戻しました。', 'success');
     _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 /* Ask for a rewrite. Drafting runs a Pro-tier agent and posts a card, so the button reports what
@@ -2371,7 +2388,7 @@ function revertCategoryPrompt(id) {
     }).catch(() => {});
     showToast('直前の方針に戻しました。', 'success');
     _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 /* Change the lettering without buying another picture.
@@ -2463,7 +2480,7 @@ async function catAction(id, action) {
   // Rejecting is the only irreversible one here — it marks the category "do not re-suggest".
   if (action === 'reject') {
     showConfirm('却下すると今後スカウトから再提案されません。よろしいですか？', run,
-      document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`));
+      _catConfirmAnchor(id));
   } else { await run(); }
 }
 
@@ -2472,7 +2489,7 @@ function deleteCategory(id) {
     await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
     closeDetail(); _loadTopics();
-  }, document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 async function generateNow(id) {
