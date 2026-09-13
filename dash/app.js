@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '28';
+const DASH_BUILD = '29';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2577,8 +2577,9 @@ function _renderHeroPresets() {
     listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
     return;
   }
-  listEl.className = 'hp-card-grid';
-  listEl.innerHTML = _heroPresets.map(_heroPresetCard).join('');
+  listEl.className = '';
+  listEl.innerHTML = _hpGroundSwitch()
+    + `<div class="hp-card-grid">${_heroPresets.map(_heroPresetCard).join('')}</div>`;
   _observeHeroPreviews();
 }
 
@@ -2616,6 +2617,41 @@ function _observeHeroPreviews() {
  * other*, and varying the background as well would mean no two panels on the screen differed by
  * one thing. What the style does over a photograph is a question for the article, not the
  * catalogue. */
+/* What the samples are drawn on — chosen here, not decided for you.
+ *
+ * These four panels were hardcoded to 白地 so that only one thing varied between them. The cost was
+ * that クロム・インパクト and ゴールド立体 — whose metals are built to catch light on a darkened
+ * picture — were shown in the one condition where they wash out, which is the same mistake the
+ * hero-style prompt now warns the agent against.
+ *
+ * A background is not a property of a style anyway: at publish time it is 単色 or 絵, and if 絵 then
+ * the recipe decides whether that is AI-generated or found on the web. So the catalogue offers the
+ * choice rather than pre-empting it, and defaults to 絵, which is the case most styles are drawn
+ * for. */
+const _HP_GROUNDS = [
+  { id: 'photo_scrim', label: '絵' },
+  { id: 'light_flat', label: '白地' },
+  { id: 'dark_flat', label: '黒地' },
+];
+let _hpPreviewGround = 'photo_scrim';
+
+function _hpSetPreviewGround(id) {
+  if (!_HP_GROUNDS.some((g) => g.id === id)) return;
+  _hpPreviewGround = id;
+  document.querySelectorAll('#hp-ground-switch .cat-quick').forEach((b) => {
+    b.classList.toggle('is-on', b.dataset.ground === id);
+  });
+  _renderHeroPresets();   // re-render clears the cached panels, then the observer redraws them
+}
+
+function _hpGroundSwitch() {
+  return `<div id="hp-ground-switch" class="hp-ground-switch" role="group" aria-label="見本を描く地">
+    <span class="hp-ground-lbl">見本の地</span>
+    ${_HP_GROUNDS.map((g) => `<button class="cat-quick${g.id === _hpPreviewGround ? ' is-on' : ''}"
+      data-ground="${g.id}" onclick="_hpSetPreviewGround('${g.id}')">${g.label}</button>`).join('')}
+  </div>`;
+}
+
 const _HP_VARIANTS = [
   { key: 'short', align: 'center', label: '短文・中央' },
   { key: 'short', align: 'left', label: '短文・左' },
@@ -2641,10 +2677,16 @@ async function _loadHeroPreviewInto(id) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ..._authHeaders() },
         body: JSON.stringify({
-          templateId: 'light_flat',
-          // The alignment under test wins over whatever the style itself sets, so the pair really
-          // is the same style twice rather than one of them silently ignoring the column heading.
-          styleSpec: { ...(p.styleSpec || {}), align: variant.align },
+          templateId: _hpPreviewGround,
+          /* The alignment under test wins over whatever the style itself sets, and the text zone is
+             opened to full width for all four.
+             Overriding align alone was not enough: news-banner confines the type to the left 56%
+             (textZone/zoneWidth), so 「中央」 meant centred *inside that column* — the heading was a
+             lie — and a long headline authored for full width was clipped off at the left edge.
+             The zone is still visible on the card as a chip (左56%); what these four panels answer
+             is whether the lettering survives length and alignment, which is a question about the
+             type. */
+          styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
           lines,
           badge: p.exampleBadge || undefined,
           article: p.name || 'サンプル見出し',
@@ -3277,10 +3319,15 @@ const HP_CORE_KEYS = ['text'];
  * `usesPhoto` overrides that choice for every article it is ever applied to — so these are taken
  * out of the editor rather than left as a control that quietly outranks the picture.
  *
- * `accentFrom` stays: it groups under 地・写真 in the vocabulary but decides where the *accent
- * colour* comes from, which is a lettering decision. Presets that already set the background keep
- * their values until the operator clears them — see the notice `_hpGroundNotice` renders. */
-const HP_GROUND_KEYS = ['ground', 'usesPhoto', 'scrimMax'];
+ * `scrimMax` is NOT hidden, despite having been in this list. It is how far the picture is sunk
+ * for *this* lettering to read, which is a decision about the letters — and once the eleven photo
+ * templates were stripped of their typography, that single number, 0.10 to 0.44, was the only
+ * thing left telling them apart. Hiding it meant the operator could not see or set the one control
+ * that made those treatments different from each other.
+ *
+ * `accentFrom` is gone from the vocabulary entirely: it only ever branched on 'category', which
+ * left a one-value enum, and where the accent comes from is the template's business. */
+const HP_GROUND_KEYS = ['ground', 'usesPhoto'];
 
 /* The settings worth reaching for, on screen without being asked for.
  *

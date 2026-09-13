@@ -2436,6 +2436,16 @@ body:has(.mob-more-sheet.open) .page-area{
    alignment, the rows only in headline length, which is what makes the comparison legible rather
    than four unrelated pictures. Each cell reserves the hero's aspect ratio before its render
    lands, so a card does not reflow four times while it loads. */
+/* The catalogue does not decide what the samples sit on. A style has no ground of its own — at
+   publish time it is 単色 or 絵 — so this picks what to draw against rather than assuming. */
+.hp-ground-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.hp-ground-lbl{font-size:10px;color:var(--m2);font-weight:600;margin-right:2px}
+.hp-ground-switch .cat-quick{margin-left:0}
+.hp-ground-switch .cat-quick.is-on{
+  box-shadow:var(--sh-press);color:var(--txt);
+  background:color-mix(in srgb,var(--acc) 14%,var(--bg));
+}
+
 /* Hairline borders rather than a gap: these four are panes of one comparison, not four raised
    objects, so they carry no shadow and need no clearance between them. A real gap would also trip
    the grid-gap rule, which exists for exactly the shadow case this is not. */
