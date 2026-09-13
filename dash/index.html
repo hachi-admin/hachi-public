@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=27">
-<link rel="stylesheet" href="dashboard.css?v=27">
+<link rel="stylesheet" href="../shared/neu.css?v=28">
+<link rel="stylesheet" href="dashboard.css?v=28">
 </head>
 <body>
 
@@ -249,7 +249,7 @@
                 <label class="hp-label">ID（英小文字・ハイフン）
                   <input id="hp-id" class="form-input hp-mono" type="text" placeholder="my-preset" oninput="_syncHpSummaries()">
                 </label>
-                <label class="hp-label">テンプレート地（templateId）
+                <label class="hp-label">見本を描く地（保存されません）
                   <select id="hp-template-id" class="form-select" onchange="_debouncedPreview();_syncHpSummaries()">
                     <option value="light_flat">light_flat（白地・文字主役）</option>
                     <option value="dark_flat">dark_flat（黒地・白抜き）</option>
@@ -1013,7 +1013,7 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="../shared/ui.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

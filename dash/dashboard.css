@@ -2431,6 +2431,34 @@ body:has(.mob-more-sheet.open) .page-area{
 }
 .hp-card-shot img{width:100%;height:100%;object-fit:cover;display:block}
 .hp-card-shot-fail{font-size:10px;color:var(--m2);padding:0 12px;text-align:center}
+
+/* Four samples: 長さ×揃え. A 2×2 so the pairs read as pairs — the columns differ only in
+   alignment, the rows only in headline length, which is what makes the comparison legible rather
+   than four unrelated pictures. Each cell reserves the hero's aspect ratio before its render
+   lands, so a card does not reflow four times while it loads. */
+/* Hairline borders rather than a gap: these four are panes of one comparison, not four raised
+   objects, so they carry no shadow and need no clearance between them. A real gap would also trip
+   the grid-gap rule, which exists for exactly the shadow case this is not. */
+.hp-shot-grid{display:grid;grid-template-columns:1fr 1fr}
+.hp-shot{
+  margin:0;display:flex;flex-direction:column;background:var(--bg);
+  border-left:1px solid var(--div);border-top:1px solid var(--div);
+}
+.hp-shot:nth-child(odd){border-left:none}
+.hp-shot:nth-child(-n+2){border-top:none}
+.hp-shot-img{
+  aspect-ratio:1280/670;background:color-mix(in srgb,var(--m) 8%,transparent);
+  display:flex;align-items:center;justify-content:center;
+}
+.hp-shot-img img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.hp-shot figcaption{font-size:8.5px;color:var(--m2);text-align:center;padding:3px 2px;letter-spacing:.02em}
+
+/* A fixed colour is the one part of a style that can stop working when the ground changes, so it
+   is shown as the colour itself rather than as a hex nobody parses at a glance. */
+.cat-chip.hp-ink{display:inline-flex;align-items:center;gap:4px;font-family:ui-monospace,Menlo,monospace;font-size:8.5px}
+.cat-chip.hp-ink i{width:9px;height:9px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.hp-layout .cat-chip{background:color-mix(in srgb,var(--acc) 12%,transparent);color:var(--acc)}
+
 .hp-card-body{padding:12px 12px 0;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
 .hp-card-name{font-size:13px;font-weight:700;color:var(--txt);letter-spacing:-.01em}
 .hp-card-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--acc)}

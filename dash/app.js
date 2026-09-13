@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '27';
+const DASH_BUILD = '28';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2209,7 +2209,9 @@ function _fillPresetSelect(sel) {
   const want = sel.dataset.selected || '';
   const usable = _heroPresets.filter((p) => p.enabled !== false);
   sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
-    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}（${esc(p.templateId)}）</option>`).join('');
+    // Was `名前（templateId）`. A style no longer names a ground, and printing `undefined` in the
+    // one control where a magazine pins its lettering is worse than printing nothing.
+    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
   /* A preset that was pinned and has since been disabled or deleted would otherwise vanish from
      the list and leave the control reading 「自動」 — which is a lie about what is saved, and the
      kind that only surfaces once someone saves the category and silently drops the pin. */
@@ -2601,34 +2603,61 @@ function _observeHeroPreviews() {
       if (id && !_hpPreviewDone.has(id)) { _hpPreviewDone.add(id); _loadHeroPreviewInto(id); }
     }
   }, { rootMargin: '250px' });
-  document.querySelectorAll('#hero-presets-list .hp-card-shot').forEach((el) => _hpPreviewObserver.observe(el));
+  document.querySelectorAll('#hero-presets-list .hp-shot-grid').forEach((el) => _hpPreviewObserver.observe(el));
 }
+
+/* The four conditions every style is shown under.
+ *
+ * 長さ is the question a single sample cannot answer — a face that reads beautifully on 「完全版」
+ * may fall apart over three wrapped lines — and 揃え is the other, because a treatment tuned for a
+ * centred block often loses its balance pushed to one edge.
+ *
+ * The ground is fixed at `light_flat` for all four on purpose. These compare *styles against each
+ * other*, and varying the background as well would mean no two panels on the screen differed by
+ * one thing. What the style does over a photograph is a question for the article, not the
+ * catalogue. */
+const _HP_VARIANTS = [
+  { key: 'short', align: 'center', label: '短文・中央' },
+  { key: 'short', align: 'left', label: '短文・左' },
+  { key: 'long', align: 'center', label: '長文・中央' },
+  { key: 'long', align: 'left', label: '長文・左' },
+];
 
 async function _loadHeroPreviewInto(id) {
   const p = _heroPresets.find((x) => x.id === id);
-  const host = document.querySelector(`#hero-presets-list .hp-card-shot[data-preset-id="${CSS.escape(id)}"]`);
-  if (!p || !host) return;
-  // 標準 is the representative one; fall back only so a preset that has authored just 短い or 長い
-  // still shows something rather than the renderer's own 「サンプル」 placeholder.
+  const grid = document.querySelector(`#hero-presets-list .hp-shot-grid[data-preset-id="${CSS.escape(id)}"]`);
+  if (!p || !grid) return;
   const v = _hpNormalizeVariants(p.exampleLines);
-  const lines = v.standard.length ? v.standard : (v.short.length ? v.short : v.long);
-  try {
-    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-      body: JSON.stringify({
-        templateId: p.templateId,
-        styleSpec: p.styleSpec || {},
-        lines,
-        badge: p.exampleBadge || undefined,
-        article: p.name || 'サンプル見出し',
-      }),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const url = URL.createObjectURL(await res.blob());
-    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー" onclick="_openLightbox('${url}','${esc(p.name)} のプレビュー')">`;
-  } catch {
-    host.innerHTML = '<div class="hp-card-shot-fail">プレビューを生成できませんでした</div>';
+
+  /* In sequence, not in parallel. Each panel is a server-side render, and four cards coming into
+     view at once would otherwise open sixteen connections from a phone — the renders are cheap
+     individually and the queue is what keeps them that way. */
+  for (const [i, variant] of _HP_VARIANTS.entries()) {
+    const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
+    if (!host) continue;
+    const lines = (v[variant.key]?.length ? v[variant.key] : v.standard) ?? [];
+    try {
+      const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+        body: JSON.stringify({
+          templateId: 'light_flat',
+          // The alignment under test wins over whatever the style itself sets, so the pair really
+          // is the same style twice rather than one of them silently ignoring the column heading.
+          styleSpec: { ...(p.styleSpec || {}), align: variant.align },
+          lines,
+          badge: p.exampleBadge || undefined,
+          article: p.name || 'サンプル見出し',
+        }),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const url = URL.createObjectURL(await res.blob());
+      const alt = `${p.name} の見本（${variant.label}）`;
+      host.innerHTML = `<img src="${url}" alt="${esc(alt)}" loading="lazy"
+        onclick="_openLightbox('${url}','${esc(alt)}')">`;
+    } catch {
+      host.innerHTML = '<div class="hp-card-shot-fail">描けません</div>';
+    }
   }
 }
 
@@ -2671,6 +2700,49 @@ function _openLightbox(url, alt = '') {
 function _closeLightbox() { document.getElementById('img-lightbox')?.classList.remove('open'); }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLightbox(); });
 
+/* The style, said in words, for the cases the picture cannot carry.
+ *
+ * A thumbnail shows what a treatment looks like; it does not show *why* two of them differ, and
+ * this catalogue has pairs that are a stroke width apart. These name the decisions rather than
+ * dumping the spec — the JSON dump this replaced told you the preset set `metal` and `glows`
+ * without telling you anything you could act on. */
+const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝' };
+
+function _hpTypoChips(s = {}) {
+  const chip = (t, title) => `<span class="cat-chip"${title ? ` title="${esc(title)}"` : ''}>${esc(t)}</span>`;
+  const out = [];
+  if (s.face) out.push(chip(_HP_FACE[s.face] ?? s.face, '書体'));
+  const strokes = s.strokes ?? (s.stroke ? [s.stroke] : []);
+  if (strokes.length) out.push(chip(strokes.length > 1 ? `二重縁` : '縁取り', strokes.map((x) => x?.color).join(' / ')));
+  else if (s.strokeMode === 'auto') out.push(chip('縁自動', '背景に応じて縁を付ける'));
+  if (s.metal) out.push(chip('メタル', typeof s.metal === 'string' ? s.metal : '金属質感'));
+  if (s.gradient || s.gradients) out.push(chip('グラデ', '文字にグラデーション'));
+  if (s.extrude) out.push(chip('立体', '押し出し'));
+  if (s.bevel) out.push(chip('面取り'));
+  if (s.glow || s.glows || s.innerGlow) out.push(chip('光'));
+  if (s.band) out.push(chip('帯', '文字の下に帯を敷く'));
+  if (s.emphasisScale) out.push(chip(`強調${s.emphasisScale}倍`, '強調句だけ大きくする'));
+  const ink = s.inkOverride ?? s.text;
+  out.push(ink
+    ? `<span class="cat-chip hp-ink" title="文字色を固定しています。地によっては読めなくなります"><i style="background:${esc(ink)}"></i>${esc(ink)}</span>`
+    : chip('文字色は地に従う', '背景のテンプレートが決めるので、どの地でも読める'));
+  return out.join('');
+}
+
+/* Layout, as the five axes a style may differ on. Anything not shown is the default: 中央・全面.
+   Printed only when a style actually departs from that, so the common case stays quiet. */
+function _hpLayoutChips(s = {}) {
+  const out = [];
+  if (s.align === 'left') out.push('左寄せ');
+  if (s.anchor && s.anchor !== 'center') out.push(s.anchor === 'top' ? '上' : '下');
+  if (s.textZone === 'left') out.push(`左${s.zoneWidth ? Math.round(s.zoneWidth * 100) + '%' : '半分'}`);
+  if (s.tilt) out.push(`傾き${s.tilt}°`);
+  if (s.preferLines) out.push(`${s.preferLines}段`);
+  if (!out.length) return '';
+  return `<div class="hp-card-chips hp-layout" title="組み方（既定は中央・全面）">${
+    out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
+}
+
 function _heroPresetCard(p) {
   const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
   const sysLabel = p.isSystem
@@ -2681,16 +2753,26 @@ function _heroPresetCard(p) {
   const apLabel = `<span class="chip" title="${esc(apTitle)}" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
   const off = p.enabled === false;
   const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
-  const faceVal = p.styleSpec?.face || '—';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
   return `<div class="hp-card${off ? ' is-off' : ''}">
-    <div class="hp-card-shot" data-preset-id="${esc(p.id)}"></div>
+    ${/* Four panels, not one: 長さ×揃え. A style is judged on whether it survives a long headline
+          and whether it still reads pushed to one side, and a single representative sample shows
+          neither. Drawing costs no image generation — this is type over a flat field — so the only
+          budget is requests, and those are lazy per card and issued in sequence. */ ''}
+    <div class="hp-shot-grid" data-preset-id="${esc(p.id)}">
+      ${['短文・中央', '短文・左', '長文・中央', '長文・左'].map((l, i) =>
+    `<figure class="hp-shot" data-variant="${i}"><div class="hp-shot-img"></div><figcaption>${l}</figcaption></figure>`).join('')}
+    </div>
     <div class="hp-card-body">
       <div class="hp-card-name">${esc(p.name)}</div>
       <div class="hp-card-id">${esc(p.id)}</div>
       <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}</div>
       ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
-      <div class="hp-card-meta">${esc(p.templateId)} · face: ${esc(faceVal)}</div>
+      ${/* What the letters are made of, and how they sit — the two things this screen manages.
+            The ground is deliberately absent: it belongs to the template and is chosen per article.
+            See docs/reference/HERO_TEXT_STYLE.ja.md in hachi-core. */ ''}
+      <div class="hp-card-chips">${_hpTypoChips(p.styleSpec)}</div>
+      ${_hpLayoutChips(p.styleSpec)}
       ${tags ? `<div class="hp-card-chips">${tags}</div>` : ''}
       <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
@@ -2742,7 +2824,7 @@ function _showNewPresetForm() {
   document.getElementById('hp-name').value = '';
   document.getElementById('hp-mood').value = '';
   document.getElementById('hp-description').value = '';
-  document.getElementById('hp-template-id').value = 'photo_scrim';
+  document.getElementById('hp-template-id').value = 'light_flat';
   document.getElementById('hp-style-spec').value = JSON.stringify({ face: 'sans', strokes: [], glow: { color: '#000000', em: 0.16, opacity: 0.40 } }, null, 2);
   _hpVariants = {
     short: [{ text: 'コピー', scale: 1.2, indent: 0 }],
@@ -2775,7 +2857,7 @@ function _editHeroPreset(id) {
   document.getElementById('hp-name').value = p.name || '';
   document.getElementById('hp-mood').value = (p.mood || []).join(', ');
   document.getElementById('hp-description').value = p.description || '';
-  document.getElementById('hp-template-id').value = p.templateId || 'photo_scrim';
+  document.getElementById('hp-template-id').value = 'light_flat';  // preview ground only
   document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
   _hpVariants = _hpNormalizeVariants(p.exampleLines);
   _hpVariant = 'standard';
@@ -3990,7 +4072,9 @@ async function _saveHeroPreset() {
   const name        = document.getElementById('hp-name').value.trim();
   const mood        = document.getElementById('hp-mood').value.split(',').map(s => s.trim()).filter(Boolean);
   const description = document.getElementById('hp-description').value.trim();
-  const templateId  = document.getElementById('hp-template-id').value;
+  /* Deliberately not read into the payload. The selector below the preview chooses what ground to
+     *draw the sample on*; it is not a property of the style. A text style that pinned a background
+     would outrank each article's own picture everywhere it was applied. */
   const rawSpec     = document.getElementById('hp-style-spec').value.trim();
   const rawLines    = document.getElementById('hp-example-lines').value.trim();
   const rawBadge    = document.getElementById('hp-example-badge').value.trim();
@@ -4008,8 +4092,8 @@ async function _saveHeroPreset() {
   const url   = isNew ? apiUrl('/api/hero-presets') : apiUrl(`/api/hero-presets/${_hpEditingId}`);
   const method = isNew ? 'POST' : 'PATCH';
   const body  = isNew
-    ? { id, name, mood, description, templateId, styleSpec, exampleLines, exampleBadge }
-    : { name, mood, description, templateId, styleSpec, exampleLines, exampleBadge };
+    ? { id, name, mood, description, styleSpec, exampleLines, exampleBadge }
+    : { name, mood, description, styleSpec, exampleLines, exampleBadge };
 
   try {
     const res = await fetch(url, { method, headers: { ...{ 'Content-Type': 'application/json' }, ..._authHeaders() }, body: JSON.stringify(body) });
