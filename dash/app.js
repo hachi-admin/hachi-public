@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '26';
+const DASH_BUILD = '27';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4118,6 +4118,7 @@ function _imagePromptCard(r) {
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
         <span class="cat-chip">${esc(_IP_SOURCE[r.sourceMode] || r.sourceMode || '')}</span>
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
+        ${r.isSystem ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>' : ''}
       </div>
       ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
       ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
@@ -4129,7 +4130,11 @@ function _imagePromptCard(r) {
         title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
       ${samples.length ? `<button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
         title="Discord に承認カードを送ります。承認済みのレシピでも、変更を相談したいときに送れます">${isApproved ? '変更をDiscordで相談' : '承認へ'}</button>` : ''}
+      ${off && !r.isSystem
+        ? `<button class="act-btn" onclick="_deleteImagePrompt('${esc(r.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
+    ${off && r.isSystem
+      ? '<div class="hp-card-note">既定のレシピは削除できません。無効のままにしておけば選ばれません。</div>' : ''}
   </div>`;
 }
 
@@ -4170,6 +4175,19 @@ async function _toggleImagePrompt(id, currentlyOff) {
   if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
   showToast(currentlyOff ? '有効にしました。' : '無効にしました。記事の生成時に選ばれなくなります。', 'success');
   _loadImagePrompts();
+}
+
+async function _deleteImagePrompt(id) {
+  if (!confirm(`レシピ「${id}」を削除しますか？`)) return;
+  try {
+    const res = await fetch(apiUrl(`/api/image-prompts/${id}`), { method: 'DELETE', headers: _authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
+    showToast('削除しました', 'success');
+    await _loadImagePrompts();
+  } catch (e) {
+    showToast(`削除できませんでした: ${e.message}`, 'error');
+  }
 }
 
 /* Approval stays a Discord decision rather than becoming a button here.
