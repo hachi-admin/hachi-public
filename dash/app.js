@@ -1203,6 +1203,16 @@ function _renderTopics() {
           <span class="ac-desc">記事や動画の URL を渡すと、その内容を踏まえた考察記事を1本だけ書きます。カテゴリには属しません。</span>
         </span>
       </button>
+      ${/* Shown only while there is something to fix. Categories created before the rule existed
+            have no サムネタイトル and often no picture; new ones are styled at creation, so once the
+            backlog is cleared this button has no reason to occupy the toolbar again. */ ''}
+      ${_catBacklog() ? `<button class="act-card" onclick="backfillCategories()">
+        <span class="ac-ico"><i class="ni ni-refresh" aria-hidden="true"></i></span>
+        <span class="ac-txt">
+          <span class="ac-title">未設定のカテゴリを埋める <b>${_catBacklog()}</b></span>
+          <span class="ac-desc">サムネタイトルが決まっていないカテゴリにスタイルを割り当て、見本の絵が無いものには絵をつけます。絵の生成は pro 課金なので、一度に処理する件数は絞ってあります。</span>
+        </span>
+      </button>` : ''}
     </div>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
@@ -2646,6 +2656,28 @@ async function submitArticleFromUrl() {
   }).catch(() => null);
   document.getElementById('article-url-modal')?.remove();
   showToast(res?.ok ? '記事を書き始めました。完成すると #articles に投稿されます。' : '起動に失敗しました', res?.ok ? 'success' : 'error');
+}
+
+/* How many categories are still undecided. Counts the two states the backfill fixes — no style
+   pinned, or no sample drawn — as one number, because they are one backlog to the operator even
+   though they cost very differently to clear. */
+function _catBacklog() {
+  return (CATEGORIES || []).filter((c) => c.status !== 'blocked'
+    && (!c.visual?.heroPreset || !c.visual?.sampleAt)).length;
+}
+
+async function backfillCategories() {
+  const n = _catBacklog();
+  showConfirm(`${n}件が未設定です。一度に最大8件まで、スタイルを割り当てて絵をつけます（絵は pro 課金）。`, async () => {
+    const res = await fetch(apiUrl('/api/article-categories/backfill'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 8, withImages: true }),
+    }).catch(() => null);
+    if (!res?.ok) { showToast('起動できませんでした', 'error'); return; }
+    /* No progress here on purpose: the task posts to Discord as it goes, and a spinner that cannot
+       see the task would be inventing a state it does not know. Reloading is the honest refresh. */
+    showToast('埋めはじめました。絵の生成に少し時間がかかります。しばらくしてから再読み込みしてください。', 'success');
+  });
 }
 
 async function scoutTopicsNow() {
