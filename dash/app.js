@@ -1320,44 +1320,55 @@ function _catTileMapBar(c, v) {
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
     ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
     ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
-    ${/* The three colours, chosen for the magazine rather than per article.
-          Its options come from CAT_META, which is already in hand when the grid renders — unlike
-          the three above, which wait on their own catalogue fetches. So this one is filled inline
-          rather than by _fillCatTilePresetOptions, and is never briefly empty.
-          「自動」 here means the same as it does above: not "no colours" but "whichever style the
-          article gets decides them". */ ''}
-    <label class="acard-mapf">
-      <span>配色</span>
-      <select class="cat-in" id="cat-tilepal-${esc(c.id)}"
-        onchange="setCategoryPalette('${esc(c.id)}',this.value)"
-        aria-label="${esc(c.name)} の配色">
-        <option value=""${v.palette ? '' : ' selected'}>自動（スタイルに従う）</option>
-        ${(CAT_META?.palettes || []).map((pal) => `<option value="${esc(pal.id)}"${pal.id === v.palette ? ' selected' : ''}>${esc(pal.name)}</option>`).join('')}
-      </select>
-    </label>
+    ${/* The three colours — shown, not chosen.
+          They belong to the サムネタイトル above: a thumbnail style *is* a choice of three related
+          colours as much as of a typeface, so the category inherits the combination rather than
+          picking a second one. A select here would have been a way to overrule three colours that
+          were checked against each other with three that were not, and the server now resolves
+          `styleSpec.palette` over `visual.palette` for exactly that reason — leaving the control in
+          place would have let it save a value the renderer ignores.
+          Empty means no style is pinned. That is the state to fix, so it says so. */ ''}
+    ${_catPaletteField(c)}
     ${manual || v.sampleAt
       ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
           onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
 }
 
-/* Pinning the magazine's colours. Separate from setCategoryRecipe because the consequence differs:
-   a recipe changes what would be *generated* next time, while this changes how every headline is
-   set from now on — including the sample already on the tile, which is re-rendered so the choice
-   can be judged rather than taken on trust. */
-async function setCategoryPalette(id, value) {
-  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
-    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ visual: { palette: value } }),
-  }).catch(() => null);
-  if (!res?.ok) { showToast('配色を変更できませんでした', 'error'); return; }
-  const c = (CATEGORIES || []).find((x) => x.id === id);
-  if (c?.visual) c.visual.palette = value;
-  /* Re-read rather than patch in place: the server decides `palette` and `paletteSource` for the
-     card's swatch — resolving a pinned style's colours among other things — and guessing them here
-     would let the chip and the actual colours disagree. */
-  await _loadTopics();
-  showToast(value ? '配色を固定しました。' : '配色を自動に戻しました。', 'success');
+/* The resolved combination, read off the server's answer rather than looked up here.
+   `palette` and `paletteSource` are decided by GET /api/article-categories, which already knows the
+   palette catalogue and the pinned preset's styleSpec. Resolving it again in the browser would be a
+   second copy of that precedence to keep in step — and the whole reason this is display-only is that
+   the colours shown must be the colours painted. */
+/* Repaint the palette row after the pinned style changed, without a full grid reload.
+   `_loadTopics()` would be the honest thing and is what pinning colours directly used to do, but it
+   re-renders the tile from the *stored* sample and would throw away the preview just rendered for
+   the style being judged — the one picture the operator is looking at when they make this choice.
+
+   This is a second resolution of the precedence and is kept deliberately trivial because of it: the
+   pinned style's palette, or nothing. It never reproduces the `visual.palette` fallback, so a
+   category that has one sees `カテゴリ既定` return on the next load rather than being asserted here.
+   The server's answer wins on every real read; this only avoids a stale row in between. */
+function _refreshCatPalette(c, preset) {
+  const id = preset?.styleSpec?.palette;
+  const pal = id ? (CAT_META?.palettes || []).find((p) => p.id === id) : null;
+  if (pal) { c.palette = pal; c.paletteSource = 'preset'; }
+  else if (c.paletteSource === 'preset' || !preset) { c.palette = null; c.paletteSource = 'style'; }
+  const row = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-map .acard-mapf:has(.cat-palview,.cat-palnone)`);
+  if (row) row.outerHTML = _catPaletteField(c);
+}
+
+function _catPaletteField(c) {
+  const p = c.palette;
+  if (!p) {
+    return `<label class="acard-mapf"><span>配色</span>
+      <span class="cat-palnone">サムネタイトル未指定</span></label>`;
+  }
+  const from = c.paletteSource === 'preset' ? 'サムネタイトルより' : 'カテゴリ既定';
+  return `<label class="acard-mapf"><span>配色</span>
+    <span class="cat-palview" title="塗り ${esc(p.fill)} / 縁 ${esc(p.stroke)} / 強調 ${esc(p.emphasis)}"
+      ><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i
+      ><b>${esc(p.name)}</b><em>${from}</em></span></label>`;
 }
 
 async function setCategoryRecipe(id, field, value) {
@@ -1424,13 +1435,14 @@ function _categoryTile(c) {
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
         ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
-        ${/* The three colours this category will actually be drawn in — shown only when it pinned
-              them itself. The API returns `paletteSource: 'style'` and a null palette otherwise,
-              and a category that pinned nothing still gets colours from whichever style the article
-              ends up with; presenting those as a decision would be a lie, and this card is where
-              the operator decides whether the category looks right. */ ''}
+        ${/* The three colours this category will actually be drawn in. Normally they come from its
+              pinned サムネタイトル — every seeded style names a palette, and a style's palette outranks
+              a category's — so `via-preset` is the ordinary case rather than the exception.
+              The API returns `paletteSource: 'style'` and a null palette when nothing is pinned at
+              all; presenting the colours of whichever style the article happens to get as a decision
+              would be a lie, so nothing is shown. */ ''}
         ${c.palette ? `<span class="cat-chip cat-pal${c.paletteSource === 'preset' ? ' via-preset' : ''}"
-          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定したサムネタイトル由来' : 'このカテゴリが固定'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
+          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定したサムネタイトル由来' : 'カテゴリ既定（スタイル未指定時）'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
           ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
       </div>
     </div>
@@ -2476,6 +2488,7 @@ async function restyleCategorySample(id, presetId) {
       body: JSON.stringify({ visual: { heroPreset: presetId } }),
     }).catch(() => {});
     if (c.visual) c.visual.heroPreset = presetId;
+    _refreshCatPalette(c, preset);
     showToast(presetId ? 'このスタイルに変えました。' : '自動に戻しました。', 'success');
   } finally {
     if (host) host.style.opacity = '';
@@ -3377,15 +3390,21 @@ function _hpControl(key, desc, value, unset = false) {
      * vocabulary (see /api/hero-presets/vocabulary), so the picker can name each combination and
      * show its three colours beside the current choice.
      *
-     * 「未設定」 is a real option here, not an absence to hide: a style with no palette takes its
-     * colours from the template, which is what most of this catalogue does on purpose. */
+     * 「未設定」 remains selectable but is no longer the norm: every seeded style now names a palette,
+     * because a サムネタイトル is a choice of three related colours as much as of a typeface, and a
+     * style that leaves them to the template has not chosen a look. Left in for custom styles being
+     * built up a key at a time, and labelled as the gap it is.
+     *
+     * The `ground` hint is worded as a suggestion on purpose. Any combination may go on any ground:
+     * when a fill cannot survive the frame, hero-title.js alters the *photograph* behind the type
+     * (blur, or a band of the opposing value) rather than the catalogue being narrowed. */
     const cat = _hpVocab?.palettes || [];
     const cur = cat.find((q) => q.id === value);
     const sw = (q) => `<i style="background:${esc(q.fill)}"></i><i style="background:${esc(q.stroke)}"></i><i style="background:${esc(q.emphasis)}"></i>`;
     body = `<div class="hp-pal">`
       + `<select class="form-select" onchange="_hpSetPalette(this.value)">`
-      + `<option value=""${cur ? '' : ' selected'}>未設定（テンプレートの色に従う）</option>`
-      + cat.map((q) => `<option value="${esc(q.id)}"${q.id === value ? ' selected' : ''}>${esc(q.name)}${q.ground === 'any' ? '' : q.ground === 'dark' ? '（黒地向き）' : '（白地向き）'}</option>`).join('')
+      + `<option value=""${cur ? '' : ' selected'}>未設定（色を選んでいない状態）</option>`
+      + cat.map((q) => `<option value="${esc(q.id)}"${q.id === value ? ' selected' : ''}>${esc(q.name)}${q.ground === 'any' ? '' : q.ground === 'dark' ? '（黒地が得意）' : '（白地が得意）'}</option>`).join('')
       + '</select>'
       + (cur ? `<span class="cat-chip cat-pal" title="${esc(cur.description || '')}">${sw(cur)}</span>` : '')
       + '</div>';
