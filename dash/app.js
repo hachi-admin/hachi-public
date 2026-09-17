@@ -1320,10 +1320,44 @@ function _catTileMapBar(c, v) {
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
     ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
     ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
+    ${/* The three colours, chosen for the magazine rather than per article.
+          Its options come from CAT_META, which is already in hand when the grid renders — unlike
+          the three above, which wait on their own catalogue fetches. So this one is filled inline
+          rather than by _fillCatTilePresetOptions, and is never briefly empty.
+          「自動」 here means the same as it does above: not "no colours" but "whichever style the
+          article gets decides them". */ ''}
+    <label class="acard-mapf">
+      <span>配色</span>
+      <select class="cat-in" id="cat-tilepal-${esc(c.id)}"
+        onchange="setCategoryPalette('${esc(c.id)}',this.value)"
+        aria-label="${esc(c.name)} の配色">
+        <option value=""${v.palette ? '' : ' selected'}>自動（スタイルに従う）</option>
+        ${(CAT_META?.palettes || []).map((pal) => `<option value="${esc(pal.id)}"${pal.id === v.palette ? ' selected' : ''}>${esc(pal.name)}</option>`).join('')}
+      </select>
+    </label>
     ${manual || v.sampleAt
       ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
           onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
+}
+
+/* Pinning the magazine's colours. Separate from setCategoryRecipe because the consequence differs:
+   a recipe changes what would be *generated* next time, while this changes how every headline is
+   set from now on — including the sample already on the tile, which is re-rendered so the choice
+   can be judged rather than taken on trust. */
+async function setCategoryPalette(id, value) {
+  const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visual: { palette: value } }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('配色を変更できませんでした', 'error'); return; }
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  if (c?.visual) c.visual.palette = value;
+  /* Re-read rather than patch in place: the server decides `palette` and `paletteSource` for the
+     card's swatch — resolving a pinned style's colours among other things — and guessing them here
+     would let the chip and the actual colours disagree. */
+  await _loadTopics();
+  showToast(value ? '配色を固定しました。' : '配色を自動に戻しました。', 'success');
 }
 
 async function setCategoryRecipe(id, field, value) {
@@ -3046,6 +3080,16 @@ function _hpSetKey(key, value) {
   _hpWriteSpec(spec);
 }
 
+/* 未設定 removes the key rather than storing `null`.
+ *
+ * Both resolve to "no palette" at render time, but a stored `palette: null` is a key the preset
+ * carries saying nothing, and this catalogue has been bitten twice by keys that are present and
+ * inert. Absent means absent. */
+function _hpSetPalette(value) {
+  if (value) _hpSetKey('palette', value);
+  else _hpRemoveKey('palette');
+}
+
 function _hpRemoveKey(key) {
   const spec = _hpSpec();
   if (spec === null) return;
@@ -3325,7 +3369,27 @@ function _hpControl(key, desc, value, unset = false) {
   const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
   let body;
 
-  if (desc.type === 'enum') {
+  if (key === 'palette') {
+    /* The one enum whose options are not words.
+     *
+     * A generic enum control offers its raw values, and `navy-white-crimson` tells you nothing
+     * about what it looks like — which is the whole question. The catalogue comes down with the
+     * vocabulary (see /api/hero-presets/vocabulary), so the picker can name each combination and
+     * show its three colours beside the current choice.
+     *
+     * 「未設定」 is a real option here, not an absence to hide: a style with no palette takes its
+     * colours from the template, which is what most of this catalogue does on purpose. */
+    const cat = _hpVocab?.palettes || [];
+    const cur = cat.find((q) => q.id === value);
+    const sw = (q) => `<i style="background:${esc(q.fill)}"></i><i style="background:${esc(q.stroke)}"></i><i style="background:${esc(q.emphasis)}"></i>`;
+    body = `<div class="hp-pal">`
+      + `<select class="form-select" onchange="_hpSetPalette(this.value)">`
+      + `<option value=""${cur ? '' : ' selected'}>未設定（テンプレートの色に従う）</option>`
+      + cat.map((q) => `<option value="${esc(q.id)}"${q.id === value ? ' selected' : ''}>${esc(q.name)}${q.ground === 'any' ? '' : q.ground === 'dark' ? '（黒地向き）' : '（白地向き）'}</option>`).join('')
+      + '</select>'
+      + (cur ? `<span class="cat-chip cat-pal" title="${esc(cur.description || '')}">${sw(cur)}</span>` : '')
+      + '</div>';
+  } else if (desc.type === 'enum') {
     body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
       desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   } else if (desc.type === 'colour') {
@@ -3380,7 +3444,12 @@ function _hpControl(key, desc, value, unset = false) {
 // Always on screen regardless of whether the spec currently sets them — "what colour is the text"
 // and "what colour is the outline" are the questions asked before any other, and requiring
 // 項目を追加 first for exactly those read as though the control didn't exist at all.
-const HP_CORE_KEYS = ['text'];
+/* Always on screen, whether or not the preset sets them.
+ *
+ * `palette` joins `text` because it now outranks it: a style that names a combination gets its
+ * fill, edge and phrase colour from there, and a `text` sitting above an unset palette would read
+ * as the decision when it is the fallback. Both showing, in this order, says which is which. */
+const HP_CORE_KEYS = ['palette', 'text'];
 
 /* The background is not this catalogue's to fix.
  *

@@ -2475,6 +2475,10 @@ body:has(.mob-more-sheet.open) .page-area{
 /* Colours that came from a pinned style rather than from the category itself. Still a decision,
    one level removed — dashed, so the card does not claim the magazine chose these directly. */
 .cat-chip.cat-pal.via-preset{border:1px dashed color-mix(in srgb,currentColor 35%,transparent)}
+/* The palette picker: a select with the chosen combination's colours beside it, so the name and
+   the thing it names are on screen together. */
+.hp-pal{display:flex;align-items:center;gap:8px}
+.hp-pal .form-select{flex:1 1 auto;min-width:0}
 .hp-layout .cat-chip{background:color-mix(in srgb,var(--acc) 12%,transparent);color:var(--acc)}
 
 .hp-card-body{padding:12px 12px 0;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
