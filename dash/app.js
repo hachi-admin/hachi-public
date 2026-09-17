@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '24';
+const DASH_BUILD = '32';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1357,10 +1357,59 @@ function _catTileMapBar(c, v) {
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
     ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
     ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
+    ${/* The three colours — shown, not chosen.
+          They belong to the サムネタイトル above: a thumbnail style *is* a choice of three related
+          colours as much as of a typeface, so the category inherits the combination rather than
+          picking a second one. A select here would have been a way to overrule three colours that
+          were checked against each other with three that were not, and the server now resolves
+          `styleSpec.palette` over `visual.palette` for exactly that reason — leaving the control in
+          place would have let it save a value the renderer ignores.
+          Empty means no style is pinned. That is the state to fix, so it says so. */ ''}
+    ${_catPaletteField(c)}
     ${manual || v.sampleAt
       ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
           onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
+}
+
+/* The resolved combination, read off the server's answer rather than looked up here.
+   `palette` and `paletteSource` are decided by GET /api/article-categories, which already knows the
+   palette catalogue and the pinned preset's styleSpec. Resolving it again in the browser would be a
+   second copy of that precedence to keep in step — and the whole reason this is display-only is that
+   the colours shown must be the colours painted. */
+/* Repaint the palette row after the pinned style changed, without a full grid reload.
+   `_loadTopics()` would be the honest thing and is what pinning colours directly used to do, but it
+   re-renders the tile from the *stored* sample and would throw away the preview just rendered for
+   the style being judged — the one picture the operator is looking at when they make this choice.
+
+   This is a second resolution of the precedence and is kept deliberately trivial because of it: the
+   pinned style's palette, or nothing. It never reproduces the `visual.palette` fallback, so a
+   category that has one sees `カテゴリ既定` return on the next load rather than being asserted here.
+   The server's answer wins on every real read; this only avoids a stale row in between. */
+function _refreshCatPalette(c, preset) {
+  const id = preset?.styleSpec?.palette;
+  const pal = id ? (CAT_META?.palettes || []).find((p) => p.id === id) : null;
+  if (pal) { c.palette = pal; c.paletteSource = 'preset'; }
+  else if (c.paletteSource === 'preset' || !preset) { c.palette = null; c.paletteSource = 'style'; }
+  const row = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-map .acard-mapf:has(.cat-palview,.cat-palnone)`);
+  if (row) row.outerHTML = _catPaletteField(c);
+}
+
+function _catPaletteField(c) {
+  const p = c.palette;
+  if (!p) {
+    /* Two different empty states, and only one of them is a problem. A category set to 自由指定 has
+       no fixed colours *by decision* — its articles range too widely to settle on one look — so
+       saying 「未設定」 there would be nagging about something already answered. */
+    const free = (c.visual || {}).heroPreset === HP_AUTO;
+    return `<label class="acard-mapf"><span>配色</span>
+      <span class="cat-palnone">${free ? '記事ごとに決まる' : 'サムネタイトル未指定'}</span></label>`;
+  }
+  const from = c.paletteSource === 'preset' ? 'サムネタイトルより' : 'カテゴリ既定';
+  return `<label class="acard-mapf"><span>配色</span>
+    <span class="cat-palview" title="塗り ${esc(p.fill)} / 縁 ${esc(p.stroke)} / 強調 ${esc(p.emphasis)}"
+      ><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i
+      ><b>${esc(p.name)}</b><em>${from}</em></span></label>`;
 }
 
 async function setCategoryRecipe(id, field, value) {
@@ -1416,12 +1465,26 @@ function _categoryTile(c) {
         <span class="cat-chip">${esc(freq)}</span>
         ${quick ? `<button class="cat-quick" title="${esc(quick.label)}"
           onclick="event.stopPropagation();catAction('${c.id}','${quick.action}')">${quick.label}</button>` : ''}
+        ${/* Same rule the preset cards use: a category that is still running has to be stopped
+              before it can be deleted. 稼働中 is this screen's 有効, so offering an irreversible
+              delete next to a live category would be the one tap that loses a working stream. */ ''}
+        ${c.status !== 'active' ? `<button class="cat-quick danger" title="削除"
+          onclick="event.stopPropagation();deleteCategory('${c.id}')">削除</button>` : ''}
       </div>
       <div class="acard-foot">
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
         ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
+        ${/* The three colours this category will actually be drawn in. Normally they come from its
+              pinned サムネタイトル — every seeded style names a palette, and a style's palette outranks
+              a category's — so `via-preset` is the ordinary case rather than the exception.
+              The API returns `paletteSource: 'style'` and a null palette when nothing is pinned at
+              all; presenting the colours of whichever style the article happens to get as a decision
+              would be a lie, so nothing is shown. */ ''}
+        ${c.palette ? `<span class="cat-chip cat-pal${c.paletteSource === 'preset' ? ' via-preset' : ''}"
+          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定したサムネタイトル由来' : 'カテゴリ既定（スタイル未指定時）'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
+          ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
       </div>
     </div>
   </div>`;
@@ -1561,6 +1624,7 @@ async function _loadCatThumbInto(id) {
         photoUrl: c.visual?.samplePhotoUrl || '',
         templateId: c.visual?.template || preset?.templateId || 'photo_scrim',
         styleSpec: preset?.styleSpec || {},
+        width: 640,   // see the note on the preset grid below — a list thumbnail needs no more
         categoryId: id,
         visual: { accent: c.visual?.accent || '', align: c.visual?.align || '', eyebrow: c.visual?.eyebrow || '' },
         article: title,
@@ -2152,9 +2216,11 @@ function _visualSection(c, section) {
         <span class="cat-label">サムネタイトルのスタイル</span>
         <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
           onchange="queueCatPreview('${c.id}')">
-          <option value="">自動（記事ごとに選ぶ）</option>
+          <option value="">未設定（要指定）</option>
         </select>
-        <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
+        <span class="cat-hint">原則ここで指定します。選ぶと、このカテゴリの記事は毎回この装飾で描かれ、
+          その配色もこのスタイルのものになります。扱う話題の幅が広くて一つに決められないカテゴリだけ
+          「自由指定」にしてください</span>
       </label>
       <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
            visual.imagePrompt/figurePrompt have been on the category document and honoured by
@@ -2236,16 +2302,31 @@ async function _ensureHeroPresets() {
 // place — hence the element rather than an id derived from the category.
 function _fillCatPresetOptions(catId) { _fillPresetSelect(document.getElementById(`cat-preset-${catId}`)); }
 
+/* The reserved value meaning "this category picks per article on purpose" (HERO_PRESET_AUTO in
+   hachi-core's routes/hero-presets.js, where it is also refused as a real preset id). */
+const HP_AUTO = 'auto';
+
 function _fillPresetSelect(sel) {
   if (!sel) return;
   const want = sel.dataset.selected || '';
   const usable = _heroPresets.filter((p) => p.enabled !== false);
-  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
-    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}（${esc(p.templateId)}）</option>`).join('');
+  /* Three options, not two. The rule is that a category pins a style — it publishes one kind of
+     article and should look like one thing — so the empty option is not "automatic", it is
+     "nobody has decided yet", and it says so. 自由指定 is the deliberate version of the same
+     behaviour, stored as a distinct value so the two can be told apart on sight.
+
+     Both end up asking the agent; the pipeline treats them identically. The distinction exists for
+     the operator, not the renderer, which is why it lives in the stored value rather than in any
+     branch that changes what gets drawn. */
+  sel.innerHTML = `<option value=""${want ? '' : ' selected'}>未設定（要指定）</option>`
+    + `<option value="${HP_AUTO}"${want === HP_AUTO ? ' selected' : ''}>自由指定（記事ごとに選ぶ）</option>`
+    // Was `名前（templateId）`. A style no longer names a ground, and printing `undefined` in the
+    // one control where a magazine pins its lettering is worse than printing nothing.
+    + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
   /* A preset that was pinned and has since been disabled or deleted would otherwise vanish from
      the list and leave the control reading 「自動」 — which is a lie about what is saved, and the
      kind that only surfaces once someone saves the category and silently drops the pin. */
-  if (want && !usable.some((p) => p.id === want)) {
+  if (want && want !== HP_AUTO && !usable.some((p) => p.id === want)) {
     sel.insertAdjacentHTML('beforeend',
       `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
   }
@@ -2292,6 +2373,7 @@ async function refreshCatPreview(id) {
     },
     article: (c?.name || 'サンプルタイトル'),
     lines: [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }],
+    width: 640,
   };
   if (status) status.textContent = '生成中…';
   const res = await fetch(apiUrl('/api/hero-presets/preview'), {
@@ -2365,12 +2447,29 @@ async function saveCategory(id, { silent = false } = {}) {
   closeDetail(); _loadTopics();
 }
 
+/* Where a category's confirm banner should appear.
+ *
+ * These actions fire from two places — the tile in the grid and the open detail overlay — and the
+ * banner is an ordinary flow element, not a fixed one. Anchor it to the tile while the overlay is
+ * open and it renders *behind* the overlay; give showConfirm nothing and it falls through to
+ * document.body, which puts it at the foot of the page. Both are indistinguishable from the button
+ * doing nothing, and the operator's next move is to press it again.
+ *
+ * Every one of these used to query `.cat-card`, which is not a class this dashboard has — the
+ * tiles are `.acard`. So the fallback was what always ran, and no confirm banner had ever appeared
+ * next to the thing it was asking about. */
+const _catConfirmAnchor = (id) =>
+  (document.getElementById('detail-overlay')?.classList.contains('open')
+    ? document.querySelector('#detail-content .p-actions')
+    : null)
+  ?? document.querySelector(`.acard[data-id="${CSS.escape(id)}"]`);
+
 function resetCategoryPrompt(id) {
   showConfirm('編集方針を最初の提案内容に戻しますか？', async () => {
     await fetch(apiUrl(`/api/article-categories/${id}/reset-prompt`), { method: 'POST', headers: _authHeaders() }).catch(() => {});
     showToast('提案内容に戻しました。', 'success');
     _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 /* Ask for a rewrite. Drafting runs a Pro-tier agent and posts a card, so the button reports what
@@ -2403,7 +2502,7 @@ function revertCategoryPrompt(id) {
     }).catch(() => {});
     showToast('直前の方針に戻しました。', 'success');
     _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 /* Change the lettering without buying another picture.
@@ -2430,6 +2529,7 @@ async function restyleCategorySample(id, presetId) {
         photoUrl: v.samplePhotoUrl || '',
         templateId: v.template || preset?.templateId || 'photo_scrim',
         styleSpec: preset?.styleSpec || {},
+        width: 640,
         categoryId: id,
         visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
         article: v.sampleTitle || c.name,
@@ -2444,7 +2544,9 @@ async function restyleCategorySample(id, presetId) {
       body: JSON.stringify({ visual: { heroPreset: presetId } }),
     }).catch(() => {});
     if (c.visual) c.visual.heroPreset = presetId;
-    showToast(presetId ? 'このスタイルに変えました。' : '自動に戻しました。', 'success');
+    _refreshCatPalette(c, preset);
+    showToast(presetId === HP_AUTO ? '記事ごとに選ぶ設定にしました。'
+      : presetId ? 'このスタイルに変えました。' : '未設定に戻しました。', 'success');
   } finally {
     if (host) host.style.opacity = '';
   }
@@ -2495,7 +2597,7 @@ async function catAction(id, action) {
   // Rejecting is the only irreversible one here — it marks the category "do not re-suggest".
   if (action === 'reject') {
     showConfirm('却下すると今後スカウトから再提案されません。よろしいですか？', run,
-      document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+      _catConfirmAnchor(id));
   } else { await run(); }
 }
 
@@ -2504,7 +2606,7 @@ function deleteCategory(id) {
     await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
     closeDetail(); _loadTopics();
-  }, document.querySelector(`.cat-card[data-id="${CSS.escape(id)}"]`));
+  }, _catConfirmAnchor(id));
 }
 
 async function generateNow(id) {
@@ -2590,8 +2692,14 @@ function _renderHeroPresets() {
     listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
     return;
   }
-  listEl.className = 'hp-card-grid';
-  listEl.innerHTML = _heroPresets.map(_heroPresetCard).join('');
+  listEl.className = '';
+  const shown = _hpFaceFilter
+    ? _heroPresets.filter((p) => p.styleSpec?.face === _hpFaceFilter)
+    : _heroPresets;
+  listEl.innerHTML = _hpFaceBar(_heroPresets)
+    + (shown.length
+      ? `<div class="hp-card-grid">${shown.map(_heroPresetCard).join('')}</div>`
+      : '<div style="font-size:11px;color:var(--m);padding:12px">この書体のスタイルはありません</div>');
   _observeHeroPreviews();
 }
 
@@ -2616,34 +2724,152 @@ function _observeHeroPreviews() {
       if (id && !_hpPreviewDone.has(id)) { _hpPreviewDone.add(id); _loadHeroPreviewInto(id); }
     }
   }, { rootMargin: '250px' });
-  document.querySelectorAll('#hero-presets-list .hp-card-shot').forEach((el) => _hpPreviewObserver.observe(el));
+  document.querySelectorAll('#hero-presets-list .hp-shot-grid').forEach((el) => _hpPreviewObserver.observe(el));
 }
+
+/* The four conditions every style is shown under.
+ *
+ * 長さ is the question a single sample cannot answer — a face that reads beautifully on 「完全版」
+ * may fall apart over three wrapped lines — and 揃え is the other, because a treatment tuned for a
+ * centred block often loses its balance pushed to one edge.
+ *
+ * The ground is the same for all four on purpose. These compare *styles against each other*, and
+ * varying the background as well would mean no two panels on the screen differed by one thing. */
+/* The 見本の地 switch is gone, and what it was for went with it.
+ *
+ * It existed because クロム・インパクト and ゴールド立体 were built to catch light on a darkened
+ * picture and washed out on the 白地 the panels were hardcoded to. Those presets — and the whole
+ * metal/gradient family — have since been retired from the catalogue, because their colours were
+ * hand-picked ramps unrelated to anything else in the style. Nothing left in the catalogue needs a
+ * particular ground to be judged.
+ *
+ * And a ground was never a property of a style anyway: a サムネタイトル preset describes the
+ * lettering, the background comes from 絵のレシピ, and `tests/unit/hero-preset-ground.test.js`
+ * pins that a preset carries no ground at all. The switch was offering a choice about the
+ * *preview*, in a row of controls that otherwise describe the style — which reads as though the
+ * style had a background to choose.
+ *
+ * Fixed at the photograph, which is the case almost every style is drawn for. */
+const HP_PREVIEW_GROUND = 'photo_scrim';
+
+/* Which lettering, rather than which background — the filter this screen actually needed.
+ *
+ * Thirteen styles across six faces, on a phone, is a scroll. The face is the first thing anyone
+ * narrows by ("I want the mincho one"), and it is already on every card as a chip. Derived from the
+ * presets in hand rather than from a fixed list, so a face that no style uses is not offered and a
+ * face added later appears without touching this. */
+let _hpFaceFilter = '';
+
+function _hpSetFaceFilter(face) {
+  _hpFaceFilter = _hpFaceFilter === face ? '' : face;
+  _renderHeroPresets();   // re-render clears the cached panels, then the observer redraws them
+}
+
+function _hpFaceBar(presets) {
+  const faces = [...new Set(presets.map((p) => p.styleSpec?.face).filter(Boolean))];
+  if (faces.length < 2) return '';
+  const btn = (id, label, on) => `<button class="cat-quick${on ? ' is-on' : ''}"
+      data-face="${esc(id)}" onclick="_hpSetFaceFilter('${esc(id)}')">${esc(label)}</button>`;
+  return `<div id="hp-face-switch" class="hp-ground-switch" role="group" aria-label="書体で絞り込む">
+    <span class="hp-ground-lbl">書体</span>
+    ${btn('', 'すべて', !_hpFaceFilter)}
+    ${faces.map((f) => btn(f, _HP_FACE[f] ?? f, _hpFaceFilter === f)).join('')}
+  </div>`;
+}
+
+const _HP_VARIANTS = [
+  { key: 'short', align: 'center', label: '短文・中央' },
+  { key: 'short', align: 'left', label: '短文・左' },
+  { key: 'long', align: 'center', label: '長文・中央' },
+  { key: 'long', align: 'left', label: '長文・左' },
+];
 
 async function _loadHeroPreviewInto(id) {
   const p = _heroPresets.find((x) => x.id === id);
-  const host = document.querySelector(`#hero-presets-list .hp-card-shot[data-preset-id="${CSS.escape(id)}"]`);
-  if (!p || !host) return;
-  // 標準 is the representative one; fall back only so a preset that has authored just 短い or 長い
-  // still shows something rather than the renderer's own 「サンプル」 placeholder.
+  const grid = document.querySelector(`#hero-presets-list .hp-shot-grid[data-preset-id="${CSS.escape(id)}"]`);
+  if (!p || !grid) return;
   const v = _hpNormalizeVariants(p.exampleLines);
-  const lines = v.standard.length ? v.standard : (v.short.length ? v.short : v.long);
-  try {
-    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-      body: JSON.stringify({
-        templateId: p.templateId,
-        styleSpec: p.styleSpec || {},
-        lines,
-        badge: p.exampleBadge || undefined,
-        article: p.name || 'サンプル見出し',
-      }),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const url = URL.createObjectURL(await res.blob());
-    host.innerHTML = `<img src="${url}" alt="${esc(p.name)} のプレビュー" onclick="_openLightbox('${url}','${esc(p.name)} のプレビュー')">`;
-  } catch {
-    host.innerHTML = '<div class="hp-card-shot-fail">プレビューを生成できませんでした</div>';
+
+  /* In sequence, not in parallel. Each panel is a server-side render, and four cards coming into
+     view at once would otherwise open sixteen connections from a phone — the renders are cheap
+     individually and the queue is what keeps them that way. */
+  for (const [i, variant] of _HP_VARIANTS.entries()) {
+    const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
+    if (!host) continue;
+    /* Indents are dropped for the comparison.
+       Each authored line carries its own `indent`, applied *after* alignment (hero-title.js:1208:
+       `x = originX(lineW) + indent * size`). A style whose big line is stepped 0.2em in therefore
+       lands in nearly the same place whether the block was centred or flushed left, which is why
+       both columns looked identical. Zeroing them leaves alignment as the only thing moving, which
+       is the one question these four panels exist to answer. */
+    const raw = (v[variant.key]?.length ? v[variant.key] : v.standard) ?? [];
+    const lines = raw.map((l) => ({ ...l, indent: 0 }));
+    /* Which phrase carries the claim, so the highlight is actually drawn.
+       The sample lines are plain {text, scale} with no `emph` runs, and with no emphasis supplied
+       the mask comes out entirely false (hero-title.js: emphasisMask over an empty list) — so every
+       style previewed as flat type and `highlight` / `emphasisScale`, the part most worth judging,
+       was the one part the picture could not show. The biggest line is the claim by construction:
+       that is what the scale on these samples means. */
+    const lead = raw.reduce((best, l) => ((l?.scale ?? 1) > (best?.scale ?? 0) ? l : best), null);
+    const emphasis = lead?.text ? [lead.text] : [];
+    const attempt = async () => {
+      try {
+        const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+          body: JSON.stringify({
+            templateId: HP_PREVIEW_GROUND,
+            /* The alignment under test wins over whatever the style itself sets, and the text zone is
+               opened to full width for all four.
+               Overriding align alone was not enough: news-banner confines the type to the left 56%
+               (textZone/zoneWidth), so 「中央」 meant centred *inside that column* — the heading was a
+               lie — and a long headline authored for full width was clipped off at the left edge.
+               The zone is still visible on the card as a chip (左56%); what these four panels answer
+               is whether the lettering survives length and alignment, which is a question about the
+               type. */
+            styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
+            /* Half-size, which is a quarter of the pixels to decode.
+               The frame is rendered at 1280×670 and these panels are a few hundred CSS pixels wide on
+               a phone; asking for the full frame meant the device downloaded and decoded roughly sixty
+               megapixels to fill a screen that can show a fraction of one, and it ran hot doing it.
+               The renderer lays the type out against the real frame either way and downscales after,
+               so the composition previewed is unchanged. */
+            width: 640,
+            lines,
+            emphasis,
+            badge: p.exampleBadge || undefined,
+            article: p.name || 'サンプル見出し',
+          }),
+        });
+        if (!res.ok) throw new Error(`Error ${res.status}`);
+        const url = URL.createObjectURL(await res.blob());
+        const alt = `${p.name} の見本（${variant.label}）`;
+        host.innerHTML = `<img src="${url}" alt="${esc(alt)}" loading="lazy"
+          onclick="_openLightbox('${url}','${esc(alt)}')">`;
+        return true;
+      } catch {
+        return false;
+      }
+  };
+
+  /* One retry before giving up, because 描けません has meant two different things.
+   *
+   * It is drawn for *any* failure — a 500, a 404, a dropped connection — and the ones that show up
+   * here now are not the renderer refusing. Every panel in the catalogue renders when asked for on
+   * its own; what fails is the occasional request in a burst, and a burst is what this screen
+   * produces: four panels per card, several cards crossing into view at once, against an instance
+   * that may be cold. A single lost request left a permanent 描けません on a panel that would have
+   * drawn perfectly a second later.
+   *
+   * Once, and only once. A panel that genuinely cannot be drawn should say so rather than hammering
+   * the API, and the retry exists to absorb a hiccup rather than to paper over a broken preset. */
+  const ok = await attempt();
+  if (!ok) {
+    await new Promise((r) => setTimeout(r, 600));
+    if (!(await attempt())) {
+      host.innerHTML = '<div class="hp-card-shot-fail">描けません</div>';
+    }
+  }
   }
 }
 
@@ -2686,6 +2912,49 @@ function _openLightbox(url, alt = '') {
 function _closeLightbox() { document.getElementById('img-lightbox')?.classList.remove('open'); }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLightbox(); });
 
+/* The style, said in words, for the cases the picture cannot carry.
+ *
+ * A thumbnail shows what a treatment looks like; it does not show *why* two of them differ, and
+ * this catalogue has pairs that are a stroke width apart. These name the decisions rather than
+ * dumping the spec — the JSON dump this replaced told you the preset set `metal` and `glows`
+ * without telling you anything you could act on. */
+const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝' };
+
+function _hpTypoChips(s = {}) {
+  const chip = (t, title) => `<span class="cat-chip"${title ? ` title="${esc(title)}"` : ''}>${esc(t)}</span>`;
+  const out = [];
+  if (s.face) out.push(chip(_HP_FACE[s.face] ?? s.face, '書体'));
+  const strokes = s.strokes ?? (s.stroke ? [s.stroke] : []);
+  if (strokes.length) out.push(chip(strokes.length > 1 ? `二重縁` : '縁取り', strokes.map((x) => x?.color).join(' / ')));
+  else if (s.strokeMode === 'auto') out.push(chip('縁自動', '背景に応じて縁を付ける'));
+  if (s.metal) out.push(chip('メタル', typeof s.metal === 'string' ? s.metal : '金属質感'));
+  if (s.gradient || s.gradients) out.push(chip('グラデ', '文字にグラデーション'));
+  if (s.extrude) out.push(chip('立体', '押し出し'));
+  if (s.bevel) out.push(chip('面取り'));
+  if (s.glow || s.glows || s.innerGlow) out.push(chip('光'));
+  if (s.band) out.push(chip('帯', '文字の下に帯を敷く'));
+  if (s.emphasisScale) out.push(chip(`強調${s.emphasisScale}倍`, '強調句だけ大きくする'));
+  const ink = s.inkOverride ?? s.text;
+  out.push(ink
+    ? `<span class="cat-chip hp-ink" title="文字色を固定しています。地によっては読めなくなります"><i style="background:${esc(ink)}"></i>${esc(ink)}</span>`
+    : chip('文字色は地に従う', '背景のテンプレートが決めるので、どの地でも読める'));
+  return out.join('');
+}
+
+/* Layout, as the five axes a style may differ on. Anything not shown is the default: 中央・全面.
+   Printed only when a style actually departs from that, so the common case stays quiet. */
+function _hpLayoutChips(s = {}) {
+  const out = [];
+  if (s.align === 'left') out.push('左寄せ');
+  if (s.anchor && s.anchor !== 'center') out.push(s.anchor === 'top' ? '上' : '下');
+  if (s.textZone === 'left') out.push(`左${s.zoneWidth ? Math.round(s.zoneWidth * 100) + '%' : '半分'}`);
+  if (s.tilt) out.push(`傾き${s.tilt}°`);
+  if (s.preferLines) out.push(`${s.preferLines}段`);
+  if (!out.length) return '';
+  return `<div class="hp-card-chips hp-layout" title="組み方（既定は中央・全面）">${
+    out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
+}
+
 function _heroPresetCard(p) {
   const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
   const sysLabel = p.isSystem
@@ -2696,16 +2965,26 @@ function _heroPresetCard(p) {
   const apLabel = `<span class="chip" title="${esc(apTitle)}" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
   const off = p.enabled === false;
   const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
-  const faceVal = p.styleSpec?.face || '—';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
   return `<div class="hp-card${off ? ' is-off' : ''}">
-    <div class="hp-card-shot" data-preset-id="${esc(p.id)}"></div>
+    ${/* Four panels, not one: 長さ×揃え. A style is judged on whether it survives a long headline
+          and whether it still reads pushed to one side, and a single representative sample shows
+          neither. Drawing costs no image generation — this is type over a flat field — so the only
+          budget is requests, and those are lazy per card and issued in sequence. */ ''}
+    <div class="hp-shot-grid" data-preset-id="${esc(p.id)}">
+      ${['短文・中央', '短文・左', '長文・中央', '長文・左'].map((l, i) =>
+    `<figure class="hp-shot" data-variant="${i}"><div class="hp-shot-img"></div><figcaption>${l}</figcaption></figure>`).join('')}
+    </div>
     <div class="hp-card-body">
       <div class="hp-card-name">${esc(p.name)}</div>
       <div class="hp-card-id">${esc(p.id)}</div>
       <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}</div>
       ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
-      <div class="hp-card-meta">${esc(p.templateId)} · face: ${esc(faceVal)}</div>
+      ${/* What the letters are made of, and how they sit — the two things this screen manages.
+            The ground is deliberately absent: it belongs to the template and is chosen per article.
+            See docs/reference/HERO_TEXT_STYLE.ja.md in hachi-core. */ ''}
+      <div class="hp-card-chips">${_hpTypoChips(p.styleSpec)}</div>
+      ${_hpLayoutChips(p.styleSpec)}
       ${tags ? `<div class="hp-card-chips">${tags}</div>` : ''}
       <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
@@ -2713,11 +2992,15 @@ function _heroPresetCard(p) {
       <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
       <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${off && !p.isSystem
+      ${/* System presets are deletable now. Deleting one used to be refused because the seeder
+            recreated any id it could not find, so the row came back; it is retired in place
+            instead, which keeps the tombstone that stops the seeder and removes it from every
+            reader. Same gate as before otherwise: disable it first. */ ''}
+      ${off
         ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
     ${off && p.isSystem
-      ? '<div class="hp-card-note">既定のスタイルは削除できません（次のデプロイで再生成されます）。無効のままにしておけば選ばれません。</div>' : ''}
+      ? '<div class="hp-card-note">既定のスタイルを削除すると一覧とエージェントの選択肢から外れます。次のデプロイで戻ることはありません。</div>' : ''}
   </div>`;
 }
 
@@ -2757,7 +3040,7 @@ function _showNewPresetForm() {
   document.getElementById('hp-name').value = '';
   document.getElementById('hp-mood').value = '';
   document.getElementById('hp-description').value = '';
-  document.getElementById('hp-template-id').value = 'photo_scrim';
+  document.getElementById('hp-template-id').value = 'light_flat';
   document.getElementById('hp-style-spec').value = JSON.stringify({ face: 'sans', strokes: [], glow: { color: '#000000', em: 0.16, opacity: 0.40 } }, null, 2);
   _hpVariants = {
     short: [{ text: 'コピー', scale: 1.2, indent: 0 }],
@@ -2790,7 +3073,7 @@ function _editHeroPreset(id) {
   document.getElementById('hp-name').value = p.name || '';
   document.getElementById('hp-mood').value = (p.mood || []).join(', ');
   document.getElementById('hp-description').value = p.description || '';
-  document.getElementById('hp-template-id').value = p.templateId || 'photo_scrim';
+  document.getElementById('hp-template-id').value = 'light_flat';  // preview ground only
   document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
   _hpVariants = _hpNormalizeVariants(p.exampleLines);
   _hpVariant = 'standard';
@@ -2865,6 +3148,16 @@ function _hpSetKey(key, value) {
   if (spec === null) return;
   spec[key] = value;
   _hpWriteSpec(spec);
+}
+
+/* 未設定 removes the key rather than storing `null`.
+ *
+ * Both resolve to "no palette" at render time, but a stored `palette: null` is a key the preset
+ * carries saying nothing, and this catalogue has been bitten twice by keys that are present and
+ * inert. Absent means absent. */
+function _hpSetPalette(value) {
+  if (value) _hpSetKey('palette', value);
+  else _hpRemoveKey('palette');
 }
 
 function _hpRemoveKey(key) {
@@ -3146,7 +3439,33 @@ function _hpControl(key, desc, value, unset = false) {
   const deadWithLines = HP_DEAD_WITH_LINES.has(key) && (_hpLines() || []).some((l) => String(l?.text ?? '').trim());
   let body;
 
-  if (desc.type === 'enum') {
+  if (key === 'palette') {
+    /* The one enum whose options are not words.
+     *
+     * A generic enum control offers its raw values, and `navy-white-crimson` tells you nothing
+     * about what it looks like — which is the whole question. The catalogue comes down with the
+     * vocabulary (see /api/hero-presets/vocabulary), so the picker can name each combination and
+     * show its three colours beside the current choice.
+     *
+     * 「未設定」 remains selectable but is no longer the norm: every seeded style now names a palette,
+     * because a サムネタイトル is a choice of three related colours as much as of a typeface, and a
+     * style that leaves them to the template has not chosen a look. Left in for custom styles being
+     * built up a key at a time, and labelled as the gap it is.
+     *
+     * The `ground` hint is worded as a suggestion on purpose. Any combination may go on any ground:
+     * when a fill cannot survive the frame, hero-title.js alters the *photograph* behind the type
+     * (blur, or a band of the opposing value) rather than the catalogue being narrowed. */
+    const cat = _hpVocab?.palettes || [];
+    const cur = cat.find((q) => q.id === value);
+    const sw = (q) => `<i style="background:${esc(q.fill)}"></i><i style="background:${esc(q.stroke)}"></i><i style="background:${esc(q.emphasis)}"></i>`;
+    body = `<div class="hp-pal">`
+      + `<select class="form-select" onchange="_hpSetPalette(this.value)">`
+      + `<option value=""${cur ? '' : ' selected'}>未設定（色を選んでいない状態）</option>`
+      + cat.map((q) => `<option value="${esc(q.id)}"${q.id === value ? ' selected' : ''}>${esc(q.name)}${q.ground === 'any' ? '' : q.ground === 'dark' ? '（黒地が得意）' : '（白地が得意）'}</option>`).join('')
+      + '</select>'
+      + (cur ? `<span class="cat-chip cat-pal" title="${esc(cur.description || '')}">${sw(cur)}</span>` : '')
+      + '</div>';
+  } else if (desc.type === 'enum') {
     body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
       desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   } else if (desc.type === 'colour') {
@@ -3201,7 +3520,12 @@ function _hpControl(key, desc, value, unset = false) {
 // Always on screen regardless of whether the spec currently sets them — "what colour is the text"
 // and "what colour is the outline" are the questions asked before any other, and requiring
 // 項目を追加 first for exactly those read as though the control didn't exist at all.
-const HP_CORE_KEYS = ['text'];
+/* Always on screen, whether or not the preset sets them.
+ *
+ * `palette` joins `text` because it now outranks it: a style that names a combination gets its
+ * fill, edge and phrase colour from there, and a `text` sitting above an unset palette would read
+ * as the decision when it is the fallback. Both showing, in this order, says which is which. */
+const HP_CORE_KEYS = ['palette', 'text'];
 
 /* The background is not this catalogue's to fix.
  *
@@ -3210,10 +3534,15 @@ const HP_CORE_KEYS = ['text'];
  * `usesPhoto` overrides that choice for every article it is ever applied to — so these are taken
  * out of the editor rather than left as a control that quietly outranks the picture.
  *
- * `accentFrom` stays: it groups under 地・写真 in the vocabulary but decides where the *accent
- * colour* comes from, which is a lettering decision. Presets that already set the background keep
- * their values until the operator clears them — see the notice `_hpGroundNotice` renders. */
-const HP_GROUND_KEYS = ['ground', 'usesPhoto', 'scrimMax'];
+ * `scrimMax` is NOT hidden, despite having been in this list. It is how far the picture is sunk
+ * for *this* lettering to read, which is a decision about the letters — and once the eleven photo
+ * templates were stripped of their typography, that single number, 0.10 to 0.44, was the only
+ * thing left telling them apart. Hiding it meant the operator could not see or set the one control
+ * that made those treatments different from each other.
+ *
+ * `accentFrom` is gone from the vocabulary entirely: it only ever branched on 'category', which
+ * left a one-value enum, and where the accent comes from is the template's business. */
+const HP_GROUND_KEYS = ['ground', 'usesPhoto'];
 
 /* The settings worth reaching for, on screen without being asked for.
  *
@@ -4005,7 +4334,9 @@ async function _saveHeroPreset() {
   const name        = document.getElementById('hp-name').value.trim();
   const mood        = document.getElementById('hp-mood').value.split(',').map(s => s.trim()).filter(Boolean);
   const description = document.getElementById('hp-description').value.trim();
-  const templateId  = document.getElementById('hp-template-id').value;
+  /* Deliberately not read into the payload. The selector below the preview chooses what ground to
+     *draw the sample on*; it is not a property of the style. A text style that pinned a background
+     would outrank each article's own picture everywhere it was applied. */
   const rawSpec     = document.getElementById('hp-style-spec').value.trim();
   const rawLines    = document.getElementById('hp-example-lines').value.trim();
   const rawBadge    = document.getElementById('hp-example-badge').value.trim();
@@ -4023,8 +4354,8 @@ async function _saveHeroPreset() {
   const url   = isNew ? apiUrl('/api/hero-presets') : apiUrl(`/api/hero-presets/${_hpEditingId}`);
   const method = isNew ? 'POST' : 'PATCH';
   const body  = isNew
-    ? { id, name, mood, description, templateId, styleSpec, exampleLines, exampleBadge }
-    : { name, mood, description, templateId, styleSpec, exampleLines, exampleBadge };
+    ? { id, name, mood, description, styleSpec, exampleLines, exampleBadge }
+    : { name, mood, description, styleSpec, exampleLines, exampleBadge };
 
   try {
     const res = await fetch(url, { method, headers: { ...{ 'Content-Type': 'application/json' }, ..._authHeaders() }, body: JSON.stringify(body) });
@@ -4046,7 +4377,13 @@ async function _deleteHeroPreset(id) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
     showToast('削除しました', 'success');
-    await _loadHeroPresets();
+    /* Remove the one card, rather than reloading the tab.
+       `_loadHeroPresets()` refetches the catalogue and re-renders every card, which also throws
+       away all the drawn samples and re-requests four renders per card — so deleting one entry
+       repainted the whole screen and scrolled the operator back to the top. Nothing else on screen
+       depends on this row, so nothing else needs to move. */
+    _heroPresets = _heroPresets.filter((x) => x.id !== id);
+    document.querySelector(`.hp-shot-grid[data-preset-id="${CSS.escape(id)}"]`)?.closest('.hp-card')?.remove();
   } catch (e) {
     showToast(e.message, 'error');
   }
@@ -4133,6 +4470,7 @@ function _imagePromptCard(r) {
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
         <span class="cat-chip">${esc(_IP_SOURCE[r.sourceMode] || r.sourceMode || '')}</span>
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
+        ${r.isSystem ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>' : ''}
       </div>
       ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
       ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
@@ -4144,7 +4482,11 @@ function _imagePromptCard(r) {
         title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
       ${samples.length ? `<button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
         title="Discord に承認カードを送ります。承認済みのレシピでも、変更を相談したいときに送れます">${isApproved ? '変更をDiscordで相談' : '承認へ'}</button>` : ''}
+      ${off && !r.isSystem
+        ? `<button class="act-btn" onclick="_deleteImagePrompt('${esc(r.id)}')" style="color:var(--red)">削除</button>` : ''}
     </div>
+    ${off && r.isSystem
+      ? '<div class="hp-card-note">既定のレシピは削除できません。無効のままにしておけば選ばれません。</div>' : ''}
   </div>`;
 }
 
@@ -4185,6 +4527,21 @@ async function _toggleImagePrompt(id, currentlyOff) {
   if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
   showToast(currentlyOff ? '有効にしました。' : '無効にしました。記事の生成時に選ばれなくなります。', 'success');
   _loadImagePrompts();
+}
+
+async function _deleteImagePrompt(id) {
+  if (!confirm(`レシピ「${id}」を削除しますか？`)) return;
+  try {
+    const res = await fetch(apiUrl(`/api/image-prompts/${id}`), { method: 'DELETE', headers: _authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(data.error || `Error ${res.status}`, 'error'); return; }
+    showToast('削除しました', 'success');
+    // Same reasoning as the hero presets: drop the row, leave the rest of the screen alone.
+    _imagePrompts = _imagePrompts.filter((x) => x.id !== id);
+    document.querySelector(`.hp-card [data-ip-gen="${CSS.escape(id)}"]`)?.closest('.hp-card')?.remove();
+  } catch (e) {
+    showToast(`削除できませんでした: ${e.message}`, 'error');
+  }
 }
 
 /* Approval stays a Discord decision rather than becoming a button here.
