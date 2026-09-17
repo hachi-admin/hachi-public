@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=31">
-<link rel="stylesheet" href="dashboard.css?v=31">
+<link rel="stylesheet" href="../shared/neu.css?v=32">
+<link rel="stylesheet" href="dashboard.css?v=32">
 </head>
 <body>
 
@@ -32,6 +32,7 @@
     <button class="nav-pill" data-dest="knowledge" role="tab">知識</button>
     <button class="nav-pill" data-dest="ops" role="tab">運用</button>
     <button class="nav-pill" data-dest="system" role="tab">設定</button>
+    <button class="nav-pill" id="x-affiliate-entry" type="button" aria-label="X投稿BOT管理">X BOT</button>
   </nav>
 
   <div class="header-controls">
@@ -68,6 +69,8 @@
 <nav class="dest-sub" id="dest-sub" role="tablist" aria-label="セクション"></nav>
 
 <main class="page-area">
+
+  <section class="page" id="page-x-affiliate" data-dest="x-affiliate" hidden></section>
 
   <!-- ── OVERVIEW ─────────────────────────────── -->
   <section class="page" id="page-overview" data-dest="ops">
@@ -955,6 +958,7 @@
      MOBILE BOTTOM TAB BAR
 ════════════════════════════════════════════════ -->
 <nav class="mob-tab-bar" role="tablist">
+  <button class="mob-tab" id="x-affiliate-mobile-entry" type="button" role="tab" aria-label="X投稿BOT管理" aria-selected="false"><i class="ni ni-channels" aria-hidden="true"></i><span>X BOT</span></button>
   <button class="mob-tab active" data-dest="today" onclick="navTo('today')">
     <i class="ni ni-today" aria-hidden="true"></i>
     <span>今日</span>
@@ -1013,7 +1017,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="../shared/ui.js?v=32"></script>
+<script src="x-affiliate.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
