@@ -3464,7 +3464,14 @@ function _hpControl(key, desc, value, unset = false) {
       + cat.map((q) => `<option value="${esc(q.id)}"${q.id === value ? ' selected' : ''}>${esc(q.name)}${q.ground === 'any' ? '' : q.ground === 'dark' ? '（黒地が得意）' : '（白地が得意）'}</option>`).join('')
       + '</select>'
       + (cur ? `<span class="cat-chip cat-pal" title="${esc(cur.description || '')}">${sw(cur)}</span>` : '')
-      + '</div>';
+      + '</div>'
+      /* Where the three colours come from, under the swatches. This is the only thing separating a
+         palette from three hexes somebody liked, and it is completely invisible on a swatch — so it
+         is printed rather than left in the API response. `source` is served by
+         /api/hero-presets/vocabulary; a palette missing one is a palette that skipped the tooling,
+         which is worth seeing rather than hiding behind a fallback. */
+      + (cur?.source ? `<div class="hp-palsrc">${['fill', 'stroke', 'emphasis']
+        .map((r) => `<span><i style="background:${esc(cur[r])}"></i>${esc(cur.source[r] || '出典なし')}</span>`).join('')}</div>` : '');
   } else if (desc.type === 'enum') {
     body = `<select class="form-select" onchange="_hpSetKey('${key}',this.value)">${
       desc.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
