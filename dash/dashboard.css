@@ -2355,6 +2355,11 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-mapf>span{font-size:9px;color:var(--m2);font-weight:600}
 .acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
 .acard-map .cat-quick{justify-self:start;white-space:nowrap}
+/* One control, not four. The bar was a two-column grid because it carried サムネタイトル・見出しの絵・
+   本文中の絵・配色; the three that were tuning moved to the detail panel and 配色 was never a control
+   at all. A single field has no columns to balance, so it spans instead of sitting in a half-width
+   cell with dead space beside it. */
+.acard-map-min{grid-template-columns:1fr}
 
 /* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
 .hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}
@@ -2502,7 +2507,12 @@ body:has(.mob-more-sheet.open) .page-area{
    are the design, and three hex strings on a phone-width card are not readable anyway — the exact
    values are in the title attribute for anyone who needs them. */
 .cat-chip.cat-pal{display:inline-flex;align-items:center;gap:2px;padding-left:5px;padding-right:5px}
-.cat-chip.cat-pal i{width:9px;height:9px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.cat-chip.cat-pal i{width:9px;height:9px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);flex:0 0 auto}
+/* On a サムネタイトル card the chip carries the combination's name beside the swatches, because that
+   card is where a style's colours are being judged and 「黒字・白フチ・藍」 is the answer a bare hex
+   was failing to give. On a category tile it stays swatches only — there the colours are a
+   consequence of the style above, not the subject. */
+.cat-chip.cat-pal{gap:3px}
 /* Colours that came from a pinned style rather than from the category's own default. This is the
    ordinary case — dashed, so the card distinguishes it from a category-level default without
    implying anything is wrong with it. */
@@ -2511,13 +2521,6 @@ body:has(.mob-more-sheet.open) .page-area{
    Deliberately not a control: the colours belong to the サムネタイトル above, and the server resolves
    a style's palette over a category's, so a select here could only save something never painted.
    Sized to sit in the same row height as the selects beside it so the tile grid stays even. */
-.cat-palview{display:inline-flex;align-items:center;gap:4px;min-height:24px;font-size:10px}
-.cat-palview i{width:11px;height:11px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);flex:0 0 auto}
-.cat-palview b{font-weight:600;margin-left:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cat-palview em{font-style:normal;opacity:.55;white-space:nowrap}
-/* No style pinned, so there is no answer yet. The operator asked for one to be actively chosen
-   rather than left to the default, so this reads as something to fix, not as a setting. */
-.cat-palnone{display:inline-flex;align-items:center;min-height:24px;font-size:10px;opacity:.5}
 /* The palette picker: a select with the chosen combination's colours beside it, so the name and
    the thing it names are on screen together. */
 .hp-pal{display:flex;align-items:center;gap:8px}

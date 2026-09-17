@@ -1334,13 +1334,24 @@ const _CAT_QUICK = {
  * 変える re-renders type over the picture already generated for this category, which is free and
  * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
 function _catTileMapBar(c, v) {
-  /* All three mappings, where their result is. They are independent decisions about the same
-     category — the lettering, the cover picture, the pictures inside the article — and only the
-     first had a control here, so the other two still meant opening the detail panel.
-
-     Only the lettering re-renders the tile: it is a draw over a picture already in hand. Changing a
-     recipe changes what would be *generated*, which is not free, so those two save the pin and
-     leave the visible sample alone until 絵を作り直す is pressed. */
+  /* What the bar carries depends on what the tile is *for*, which depends on the status.
+   *
+   * It grew to four selects plus a button, and the tile ended up showing thirteen things above a
+   * title that sat underneath them — the thing that identifies the card, below its settings. Counted
+   * against the rule the design audit applies to everything else here (a surface carries what its
+   * decision needs, and no more), most of that is tuning shown to someone who has not yet decided
+   * whether to keep the category at all.
+   *
+   * 未承認 — the decision is 承認 or 削除, and it is made from the picture and the title. No tuning.
+   *          The one exception is a category with no picture yet: it cannot be judged without one,
+   *          so 絵をつける stays. 絵を作り直す does not — re-rolling a picture you already have is
+   *          tuning, and it costs a pro-tier call.
+   * 承認済み — the decision is how it should look, so the one control that changes the look is here,
+   *          where its result is. Judging a look is iterative and this is what saves the round trip.
+   *
+   * 見出しの絵・本文中の絵・配色 move to the detail panel in both states. The two recipes change what
+   * would be *generated* later, so their effect is not visible on the tile anyway; 配色 is not a
+   * choice at all any more — it follows the サムネタイトル above it. */
   const row = (key, label, kind, cur, handler) => `
     <label class="acard-mapf">
       <span>${label}</span>
@@ -1350,66 +1361,46 @@ function _catTileMapBar(c, v) {
         <option value="">自動</option>
       </select>
     </label>`;
-  // Auto-filled for approved categories, so the button would only ever duplicate what already
-  // happened — see _autoSampleQueue.
-  const manual = c.status !== 'active';
-  return `<div class="acard-map" onclick="event.stopPropagation()">
+  if (c.status !== 'active') {
+    /* Nothing at all once there is a picture: the card is already showing everything the 承認 /
+       削除 decision needs, and those two buttons live in the footer. */
+    if (v.sampleAt) return '';
+    return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">
+      <button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
+        onclick="regenCategorySample('${esc(c.id)}')">絵をつける</button>
+    </div>`;
+  }
+  return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
-    ${row('img', '見出しの絵', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
-    ${row('fig', '本文中の絵', 'figure', v.figurePrompt, `setCategoryRecipe('${esc(c.id)}','figurePrompt',this.value)`)}
-    ${/* The three colours — shown, not chosen.
-          They belong to the サムネタイトル above: a thumbnail style *is* a choice of three related
-          colours as much as of a typeface, so the category inherits the combination rather than
-          picking a second one. A select here would have been a way to overrule three colours that
-          were checked against each other with three that were not, and the server now resolves
-          `styleSpec.palette` over `visual.palette` for exactly that reason — leaving the control in
-          place would have let it save a value the renderer ignores.
-          Empty means no style is pinned. That is the state to fix, so it says so. */ ''}
-    ${_catPaletteField(c)}
-    ${manual || v.sampleAt
-      ? `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
-          onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>` : ''}
   </div>`;
 }
 
-/* The resolved combination, read off the server's answer rather than looked up here.
-   `palette` and `paletteSource` are decided by GET /api/article-categories, which already knows the
-   palette catalogue and the pinned preset's styleSpec. Resolving it again in the browser would be a
-   second copy of that precedence to keep in step — and the whole reason this is display-only is that
-   the colours shown must be the colours painted. */
-/* Repaint the palette row after the pinned style changed, without a full grid reload.
-   `_loadTopics()` would be the honest thing and is what pinning colours directly used to do, but it
-   re-renders the tile from the *stored* sample and would throw away the preview just rendered for
-   the style being judged — the one picture the operator is looking at when they make this choice.
+/* Repaint the palette swatch after the pinned style changed, without a full grid reload.
+   `_loadTopics()` would be the honest thing, but it re-renders the tile from the *stored* sample and
+   would throw away the preview just rendered for the style being judged — the one picture the
+   operator is looking at while making this choice.
 
-   This is a second resolution of the precedence and is kept deliberately trivial because of it: the
-   pinned style's palette, or nothing. It never reproduces the `visual.palette` fallback, so a
-   category that has one sees `カテゴリ既定` return on the next load rather than being asserted here.
-   The server's answer wins on every real read; this only avoids a stale row in between. */
+   The swatch is now the only place the three colours appear on a tile: the labelled 配色 row was
+   removed along with the other tuning controls, because it was never a control — it reports what the
+   サムネタイトル above it produced, and three squares next to that select say so in a tenth of the
+   space. `palette` and `paletteSource` are still decided by GET /api/article-categories; this is a
+   deliberately trivial second resolution (the pinned style's palette, or nothing) that never
+   reproduces the `visual.palette` fallback, so the server's answer wins on the next real read. */
 function _refreshCatPalette(c, preset) {
   const id = preset?.styleSpec?.palette;
   const pal = id ? (CAT_META?.palettes || []).find((p) => p.id === id) : null;
   if (pal) { c.palette = pal; c.paletteSource = 'preset'; }
   else if (c.paletteSource === 'preset' || !preset) { c.palette = null; c.paletteSource = 'style'; }
-  const row = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"] .acard-map .acard-mapf:has(.cat-palview,.cat-palnone)`);
-  if (row) row.outerHTML = _catPaletteField(c);
-}
-
-function _catPaletteField(c) {
-  const p = c.palette;
-  if (!p) {
-    /* Two different empty states, and only one of them is a problem. A category set to 自由指定 has
-       no fixed colours *by decision* — its articles range too widely to settle on one look — so
-       saying 「未設定」 there would be nagging about something already answered. */
-    const free = (c.visual || {}).heroPreset === HP_AUTO;
-    return `<label class="acard-mapf"><span>配色</span>
-      <span class="cat-palnone">${free ? '記事ごとに決まる' : 'サムネタイトル未指定'}</span></label>`;
-  }
-  const from = c.paletteSource === 'preset' ? 'サムネタイトルより' : 'カテゴリ既定';
-  return `<label class="acard-mapf"><span>配色</span>
-    <span class="cat-palview" title="塗り ${esc(p.fill)} / 縁 ${esc(p.stroke)} / 強調 ${esc(p.emphasis)}"
-      ><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i
-      ><b>${esc(p.name)}</b><em>${from}</em></span></label>`;
+  const card = document.querySelector(`.acard[data-id="${CSS.escape(c.id)}"]`);
+  const chip = card?.querySelector('.cat-chip.cat-pal');
+  if (!card) return;
+  if (!pal) { chip?.remove(); return; }
+  const swatches = [pal.fill, pal.stroke, pal.emphasis]
+    .map((h) => `<i style="background:${esc(h)}"></i>`).join('');
+  const title = `配色「${esc(pal.name)}」— 固定したサムネタイトル由来（塗り ${esc(pal.fill)} / 縁 ${esc(pal.stroke)} / 強調 ${esc(pal.emphasis)}）`;
+  if (chip) { chip.title = title; chip.innerHTML = swatches; return; }
+  card.querySelector('.acard-foot')?.insertAdjacentHTML('beforeend',
+    `<span class="cat-chip cat-pal via-preset" title="${title}">${swatches}</span>`);
 }
 
 async function setCategoryRecipe(id, field, value) {
@@ -2678,6 +2669,14 @@ async function _loadHeroPresets() {
     if (!res.ok) { listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error ${res.status}</div>`; return; }
     const data = await res.json();
     _heroPresets = data.presets || [];
+    /* The vocabulary before the cards, because the cards need it.
+       Each card now names its palette (「黒字・白フチ・藍」) rather than printing a bare hex, and the
+       catalogue those names come from arrives with the vocabulary. Rendering first meant that
+       opening the サムネタイトル tab directly — rather than reaching it via カテゴリ, which happens to
+       load the same list — showed thirteen cards with no colours on them. Awaited rather than
+       re-rendered on arrival: it is one small request, and a card that changes under the reader is
+       worse than one that appears a moment later. */
+    await _loadStyleVocab();
     _renderHeroPresets();
   } catch (e) {
     listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
@@ -2934,10 +2933,30 @@ function _hpTypoChips(s = {}) {
   if (s.glow || s.glows || s.innerGlow) out.push(chip('光'));
   if (s.band) out.push(chip('帯', '文字の下に帯を敷く'));
   if (s.emphasisScale) out.push(chip(`強調${s.emphasisScale}倍`, '強調句だけ大きくする'));
+  /* The combination, not a lone hex.
+   *
+   * This printed `#171716` under the tooltip 「文字色を固定しています。地によっては読めなくなります」,
+   * which is now two things wrong at once. A style's colours are a *named* combination — 黒字・白フチ・藍
+   * answers "what colour is this" and a hex does not — and the warning describes pinning as a hazard,
+   * which was true when it was the exception and is false now that every style pins deliberately and
+   * hero-title.js alters the photograph when a fill cannot survive the frame. The card was warning
+   * the operator about the system's own design.
+   *
+   * `styleSpec.text` can still be set outright, and that *is* worth flagging: it is a colour stated
+   * outside any combination, which is the state palettes exist to end. */
+  const pal = s.palette ? (_hpVocab?.palettes || CAT_META?.palettes || []).find((q) => q.id === s.palette) : null;
+  if (pal) {
+    out.push(`<span class="cat-chip cat-pal" title="配色「${esc(pal.name)}」— 塗り ${esc(pal.fill)} / 縁 ${esc(pal.stroke)} / 強調 ${esc(pal.emphasis)}"
+      ><i style="background:${esc(pal.fill)}"></i><i style="background:${esc(pal.stroke)}"></i><i style="background:${esc(pal.emphasis)}"></i>${esc(pal.name)}</span>`);
+  } else if (s.palette) {
+    out.push(chip(`配色 ${s.palette}`, 'カタログに無い配色idです'));
+  }
   const ink = s.inkOverride ?? s.text;
-  out.push(ink
-    ? `<span class="cat-chip hp-ink" title="文字色を固定しています。地によっては読めなくなります"><i style="background:${esc(ink)}"></i>${esc(ink)}</span>`
-    : chip('文字色は地に従う', '背景のテンプレートが決めるので、どの地でも読める'));
+  if (ink) {
+    out.push(`<span class="cat-chip hp-ink" title="配色ではなく単独で指定された文字色です"><i style="background:${esc(ink)}"></i>${esc(ink)}</span>`);
+  } else if (!pal) {
+    out.push(chip('配色なし', '色を選んでいない状態。地のテンプレート任せになります'));
+  }
   return out.join('');
 }
 
