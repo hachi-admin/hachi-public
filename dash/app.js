@@ -1390,6 +1390,14 @@ function _categoryTile(c) {
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
         ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
+        ${/* The three colours this category will actually be drawn in — shown only when it pinned
+              them itself. The API returns `paletteSource: 'style'` and a null palette otherwise,
+              and a category that pinned nothing still gets colours from whichever style the article
+              ends up with; presenting those as a decision would be a lie, and this card is where
+              the operator decides whether the category looks right. */ ''}
+        ${c.palette ? `<span class="cat-chip cat-pal"
+          title="配色「${esc(c.palette.name)}」— このカテゴリが固定（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
+          ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
       </div>
     </div>
   </div>`;
@@ -1529,6 +1537,7 @@ async function _loadCatThumbInto(id) {
         photoUrl: c.visual?.samplePhotoUrl || '',
         templateId: c.visual?.template || preset?.templateId || 'photo_scrim',
         styleSpec: preset?.styleSpec || {},
+        width: 640,   // see the note on the preset grid below — a list thumbnail needs no more
         categoryId: id,
         visual: { accent: c.visual?.accent || '', align: c.visual?.align || '', eyebrow: c.visual?.eyebrow || '' },
         article: title,
@@ -2262,6 +2271,7 @@ async function refreshCatPreview(id) {
     },
     article: (c?.name || 'サンプルタイトル'),
     lines: [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }],
+    width: 640,
   };
   if (status) status.textContent = '生成中…';
   const res = await fetch(apiUrl('/api/hero-presets/preview'), {
@@ -2417,6 +2427,7 @@ async function restyleCategorySample(id, presetId) {
         photoUrl: v.samplePhotoUrl || '',
         templateId: v.template || preset?.templateId || 'photo_scrim',
         styleSpec: preset?.styleSpec || {},
+        width: 640,
         categoryId: id,
         visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
         article: v.sampleTitle || c.name,
@@ -2578,8 +2589,13 @@ function _renderHeroPresets() {
     return;
   }
   listEl.className = '';
-  listEl.innerHTML = _hpGroundSwitch()
-    + `<div class="hp-card-grid">${_heroPresets.map(_heroPresetCard).join('')}</div>`;
+  const shown = _hpFaceFilter
+    ? _heroPresets.filter((p) => p.styleSpec?.face === _hpFaceFilter)
+    : _heroPresets;
+  listEl.innerHTML = _hpFaceBar(_heroPresets)
+    + (shown.length
+      ? `<div class="hp-card-grid">${shown.map(_heroPresetCard).join('')}</div>`
+      : '<div style="font-size:11px;color:var(--m);padding:12px">この書体のスタイルはありません</div>');
   _observeHeroPreviews();
 }
 
@@ -2613,42 +2629,47 @@ function _observeHeroPreviews() {
  * may fall apart over three wrapped lines — and 揃え is the other, because a treatment tuned for a
  * centred block often loses its balance pushed to one edge.
  *
- * The ground is fixed at `light_flat` for all four on purpose. These compare *styles against each
- * other*, and varying the background as well would mean no two panels on the screen differed by
- * one thing. What the style does over a photograph is a question for the article, not the
- * catalogue. */
-/* What the samples are drawn on — chosen here, not decided for you.
+ * The ground is the same for all four on purpose. These compare *styles against each other*, and
+ * varying the background as well would mean no two panels on the screen differed by one thing. */
+/* The 見本の地 switch is gone, and what it was for went with it.
  *
- * These four panels were hardcoded to 白地 so that only one thing varied between them. The cost was
- * that クロム・インパクト and ゴールド立体 — whose metals are built to catch light on a darkened
- * picture — were shown in the one condition where they wash out, which is the same mistake the
- * hero-style prompt now warns the agent against.
+ * It existed because クロム・インパクト and ゴールド立体 were built to catch light on a darkened
+ * picture and washed out on the 白地 the panels were hardcoded to. Those presets — and the whole
+ * metal/gradient family — have since been retired from the catalogue, because their colours were
+ * hand-picked ramps unrelated to anything else in the style. Nothing left in the catalogue needs a
+ * particular ground to be judged.
  *
- * A background is not a property of a style anyway: at publish time it is 単色 or 絵, and if 絵 then
- * the recipe decides whether that is AI-generated or found on the web. So the catalogue offers the
- * choice rather than pre-empting it, and defaults to 絵, which is the case most styles are drawn
- * for. */
-const _HP_GROUNDS = [
-  { id: 'photo_scrim', label: '絵' },
-  { id: 'light_flat', label: '白地' },
-  { id: 'dark_flat', label: '黒地' },
-];
-let _hpPreviewGround = 'photo_scrim';
+ * And a ground was never a property of a style anyway: a サムネタイトル preset describes the
+ * lettering, the background comes from 絵のレシピ, and `tests/unit/hero-preset-ground.test.js`
+ * pins that a preset carries no ground at all. The switch was offering a choice about the
+ * *preview*, in a row of controls that otherwise describe the style — which reads as though the
+ * style had a background to choose.
+ *
+ * Fixed at the photograph, which is the case almost every style is drawn for. */
+const HP_PREVIEW_GROUND = 'photo_scrim';
 
-function _hpSetPreviewGround(id) {
-  if (!_HP_GROUNDS.some((g) => g.id === id)) return;
-  _hpPreviewGround = id;
-  document.querySelectorAll('#hp-ground-switch .cat-quick').forEach((b) => {
-    b.classList.toggle('is-on', b.dataset.ground === id);
-  });
+/* Which lettering, rather than which background — the filter this screen actually needed.
+ *
+ * Thirteen styles across six faces, on a phone, is a scroll. The face is the first thing anyone
+ * narrows by ("I want the mincho one"), and it is already on every card as a chip. Derived from the
+ * presets in hand rather than from a fixed list, so a face that no style uses is not offered and a
+ * face added later appears without touching this. */
+let _hpFaceFilter = '';
+
+function _hpSetFaceFilter(face) {
+  _hpFaceFilter = _hpFaceFilter === face ? '' : face;
   _renderHeroPresets();   // re-render clears the cached panels, then the observer redraws them
 }
 
-function _hpGroundSwitch() {
-  return `<div id="hp-ground-switch" class="hp-ground-switch" role="group" aria-label="見本を描く地">
-    <span class="hp-ground-lbl">見本の地</span>
-    ${_HP_GROUNDS.map((g) => `<button class="cat-quick${g.id === _hpPreviewGround ? ' is-on' : ''}"
-      data-ground="${g.id}" onclick="_hpSetPreviewGround('${g.id}')">${g.label}</button>`).join('')}
+function _hpFaceBar(presets) {
+  const faces = [...new Set(presets.map((p) => p.styleSpec?.face).filter(Boolean))];
+  if (faces.length < 2) return '';
+  const btn = (id, label, on) => `<button class="cat-quick${on ? ' is-on' : ''}"
+      data-face="${esc(id)}" onclick="_hpSetFaceFilter('${esc(id)}')">${esc(label)}</button>`;
+  return `<div id="hp-face-switch" class="hp-ground-switch" role="group" aria-label="書体で絞り込む">
+    <span class="hp-ground-lbl">書体</span>
+    ${btn('', 'すべて', !_hpFaceFilter)}
+    ${faces.map((f) => btn(f, _HP_FACE[f] ?? f, _hpFaceFilter === f)).join('')}
   </div>`;
 }
 
@@ -2692,7 +2713,7 @@ async function _loadHeroPreviewInto(id) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ..._authHeaders() },
         body: JSON.stringify({
-          templateId: _hpPreviewGround,
+          templateId: HP_PREVIEW_GROUND,
           /* The alignment under test wins over whatever the style itself sets, and the text zone is
              opened to full width for all four.
              Overriding align alone was not enough: news-banner confines the type to the left 56%
@@ -2702,6 +2723,13 @@ async function _loadHeroPreviewInto(id) {
              is whether the lettering survives length and alignment, which is a question about the
              type. */
           styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
+          /* Half-size, which is a quarter of the pixels to decode.
+             The frame is rendered at 1280×670 and these panels are a few hundred CSS pixels wide on
+             a phone; asking for the full frame meant the device downloaded and decoded roughly sixty
+             megapixels to fill a screen that can show a fraction of one, and it ran hot doing it.
+             The renderer lays the type out against the real frame either way and downscales after,
+             so the composition previewed is unchanged. */
+          width: 640,
           lines,
           emphasis,
           badge: p.exampleBadge || undefined,
