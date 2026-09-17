@@ -2472,6 +2472,9 @@ body:has(.mob-more-sheet.open) .page-area{
    values are in the title attribute for anyone who needs them. */
 .cat-chip.cat-pal{display:inline-flex;align-items:center;gap:2px;padding-left:5px;padding-right:5px}
 .cat-chip.cat-pal i{width:9px;height:9px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+/* Colours that came from a pinned style rather than from the category itself. Still a decision,
+   one level removed — dashed, so the card does not claim the magazine chose these directly. */
+.cat-chip.cat-pal.via-preset{border:1px dashed color-mix(in srgb,currentColor 35%,transparent)}
 .hp-layout .cat-chip{background:color-mix(in srgb,var(--acc) 12%,transparent);color:var(--acc)}
 
 .hp-card-body{padding:12px 12px 0;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}

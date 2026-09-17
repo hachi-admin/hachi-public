@@ -1395,8 +1395,8 @@ function _categoryTile(c) {
               and a category that pinned nothing still gets colours from whichever style the article
               ends up with; presenting those as a decision would be a lie, and this card is where
               the operator decides whether the category looks right. */ ''}
-        ${c.palette ? `<span class="cat-chip cat-pal"
-          title="配色「${esc(c.palette.name)}」— このカテゴリが固定（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
+        ${c.palette ? `<span class="cat-chip cat-pal${c.paletteSource === 'preset' ? ' via-preset' : ''}"
+          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定したサムネタイトル由来' : 'このカテゴリが固定'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
           ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
       </div>
     </div>
@@ -2708,42 +2708,64 @@ async function _loadHeroPreviewInto(id) {
        that is what the scale on these samples means. */
     const lead = raw.reduce((best, l) => ((l?.scale ?? 1) > (best?.scale ?? 0) ? l : best), null);
     const emphasis = lead?.text ? [lead.text] : [];
-    try {
-      const res = await fetch(apiUrl('/api/hero-presets/preview'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-        body: JSON.stringify({
-          templateId: HP_PREVIEW_GROUND,
-          /* The alignment under test wins over whatever the style itself sets, and the text zone is
-             opened to full width for all four.
-             Overriding align alone was not enough: news-banner confines the type to the left 56%
-             (textZone/zoneWidth), so 「中央」 meant centred *inside that column* — the heading was a
-             lie — and a long headline authored for full width was clipped off at the left edge.
-             The zone is still visible on the card as a chip (左56%); what these four panels answer
-             is whether the lettering survives length and alignment, which is a question about the
-             type. */
-          styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
-          /* Half-size, which is a quarter of the pixels to decode.
-             The frame is rendered at 1280×670 and these panels are a few hundred CSS pixels wide on
-             a phone; asking for the full frame meant the device downloaded and decoded roughly sixty
-             megapixels to fill a screen that can show a fraction of one, and it ran hot doing it.
-             The renderer lays the type out against the real frame either way and downscales after,
-             so the composition previewed is unchanged. */
-          width: 640,
-          lines,
-          emphasis,
-          badge: p.exampleBadge || undefined,
-          article: p.name || 'サンプル見出し',
-        }),
-      });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const url = URL.createObjectURL(await res.blob());
-      const alt = `${p.name} の見本（${variant.label}）`;
-      host.innerHTML = `<img src="${url}" alt="${esc(alt)}" loading="lazy"
-        onclick="_openLightbox('${url}','${esc(alt)}')">`;
-    } catch {
+    const attempt = async () => {
+      try {
+        const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+          body: JSON.stringify({
+            templateId: HP_PREVIEW_GROUND,
+            /* The alignment under test wins over whatever the style itself sets, and the text zone is
+               opened to full width for all four.
+               Overriding align alone was not enough: news-banner confines the type to the left 56%
+               (textZone/zoneWidth), so 「中央」 meant centred *inside that column* — the heading was a
+               lie — and a long headline authored for full width was clipped off at the left edge.
+               The zone is still visible on the card as a chip (左56%); what these four panels answer
+               is whether the lettering survives length and alignment, which is a question about the
+               type. */
+            styleSpec: { ...(p.styleSpec || {}), align: variant.align, textZone: 'full', zoneWidth: undefined },
+            /* Half-size, which is a quarter of the pixels to decode.
+               The frame is rendered at 1280×670 and these panels are a few hundred CSS pixels wide on
+               a phone; asking for the full frame meant the device downloaded and decoded roughly sixty
+               megapixels to fill a screen that can show a fraction of one, and it ran hot doing it.
+               The renderer lays the type out against the real frame either way and downscales after,
+               so the composition previewed is unchanged. */
+            width: 640,
+            lines,
+            emphasis,
+            badge: p.exampleBadge || undefined,
+            article: p.name || 'サンプル見出し',
+          }),
+        });
+        if (!res.ok) throw new Error(`Error ${res.status}`);
+        const url = URL.createObjectURL(await res.blob());
+        const alt = `${p.name} の見本（${variant.label}）`;
+        host.innerHTML = `<img src="${url}" alt="${esc(alt)}" loading="lazy"
+          onclick="_openLightbox('${url}','${esc(alt)}')">`;
+        return true;
+      } catch {
+        return false;
+      }
+  };
+
+  /* One retry before giving up, because 描けません has meant two different things.
+   *
+   * It is drawn for *any* failure — a 500, a 404, a dropped connection — and the ones that show up
+   * here now are not the renderer refusing. Every panel in the catalogue renders when asked for on
+   * its own; what fails is the occasional request in a burst, and a burst is what this screen
+   * produces: four panels per card, several cards crossing into view at once, against an instance
+   * that may be cold. A single lost request left a permanent 描けません on a panel that would have
+   * drawn perfectly a second later.
+   *
+   * Once, and only once. A panel that genuinely cannot be drawn should say so rather than hammering
+   * the API, and the retry exists to absorb a hiccup rather than to paper over a broken preset. */
+  const ok = await attempt();
+  if (!ok) {
+    await new Promise((r) => setTimeout(r, 600));
+    if (!(await attempt())) {
       host.innerHTML = '<div class="hp-card-shot-fail">描けません</div>';
     }
+  }
   }
 }
 
