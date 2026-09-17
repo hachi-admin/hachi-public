@@ -10,7 +10,7 @@
   if (pendingCode) history.replaceState({}, '', location.pathname + location.search + '#xentry');
   let xJwt = '';
   let browserProof = '';
-  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), settings: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -59,9 +59,12 @@
     state.linkStatusPending = false;
     state.linkFinalizePending = false;
     state.settings = null;
+    state.budget = null;
+    state.notifications = null;
     state.importResult = null;
     state.skillPreview = null;
     state.skillDrafts.clear();
+    state.generationJobs.clear(); state.draftJobs.clear();
     retryState = new WeakMap();
     pendingWrites = new WeakSet();
     xJwt = '';
@@ -72,6 +75,7 @@
     ['#x-accounts', '#x-members', '#x-tags', '#x-products', '#x-skills', '#x-drafts', '#x-link', '#x-settings'].forEach(selector => {
       document.querySelector(selector)?.replaceChildren();
     });
+    ['#x-budget', '#x-notifications'].forEach(selector => document.querySelector(selector)?.replaceChildren());
     const root = document.getElementById('page-x-affiliate');
     if (root?.classList.contains('active')) render(root);
   }
@@ -119,7 +123,9 @@
     root.append(card('Skill（合成検証のみ）', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('候補文の生成・比較レビュー（ローカル境界）', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
-    root.append(card('プロフィール・テンプレート・通知先', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('プロフィール・テンプレート・通知先・定期', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('予算・予約状況', el('div', { id: 'x-budget' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('通知状況', el('div', { id: 'x-notifications' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     renderLinkCard();
     load();
   }
@@ -168,7 +174,7 @@
     box.replaceChildren();
     (data.accounts || []).forEach(a => {
       const b = button(`${a.label} (${a.accountId})`, () => {
-        if (state.accountId !== a.accountId) { state.importResult = null; state.skillPreview = null; }
+        if (state.accountId !== a.accountId) { state.importResult = null; state.skillPreview = null; state.budget = null; state.notifications = null; state.generationJobs.clear(); state.draftJobs.clear(); }
         state.accountId = a.accountId;
         loadSettings();
       });
@@ -427,7 +433,8 @@
         field('特徴（1行1件）', 'textarea', 'features', (product.features || []).join('\n')),
         field('追加の確認済み事実（種類 | 内容、1行1件。name=商品名、category/classification=分類、feature=特徴、size=サイズ、audience=対象、comparison=比較軸、placement=設置場所、object=対象物、brand=ブランド、price=価格、availability=在庫、sale=セール）', 'textarea', 'facts', (product.facts || []).map(fact => `${fact.type} | ${fact.value}`).join('\n'), 'audience | 狭い机で使いたい人\ncomparison | 同じ条件でAは100g、参照Bは150g\nplacement | 卓上'),
         field('運用メモ', 'text', 'operatorNote', accountProduct.operatorNote || ''),
-        checkbox('このaccountで利用', 'enabled', accountProduct.enabled !== false),
+          checkbox('このaccountで利用', 'enabled', accountProduct.enabled !== false),
+          checkbox('定期生成の対象', 'scheduleEnabled', accountProduct.scheduleEnabled === true),
         field('手修正の確認元・理由', 'text', 'sourceNote', null, '自分で確認した資料など'),
         button('保存', async event => {
           event.preventDefault();
@@ -444,7 +451,7 @@
             if (prior) usedFactIds.add(prior.factId);
             facts.push(prior ? { factId: prior.factId, type, value } : { type, value });
           }
-          const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on' };
+          const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on', scheduleEnabled: values.scheduleEnabled === 'on' };
           if ((values.name || '') !== (product.name || '')) fields.name = values.name || null;
           if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
           const currentFacts = (product.facts || []).map(({ factId, ...fact }) => fact);
@@ -685,7 +692,7 @@
   function renderDrafts(data, accountId, generation) {
     const box = document.getElementById('x-drafts');
     if (!box || !isCurrentScope(accountId, generation)) return;
-    box.replaceChildren(el('p', { className: 'x-muted', text: '実モデル・課金・X投稿・Discord送信は未接続です。生成adapterが明示設定された検証環境だけで候補を作成します。' }));
+    box.replaceChildren(el('p', { className: 'x-muted', text: '候補は人が確認して採用します。生成・再生成は予算を消費します。' }));
     const generateForm = el('form', { className: 'x-form x-generation-form' }, [
       field('商品ID（カンマ区切り・1〜3件）', 'text', 'productIds'),
       selectField('候補数', 'requestedVariantCount', '3', ['1', '2', '3']),
@@ -709,30 +716,67 @@
     const groups = new Map();
     (data.drafts || []).forEach(draft => { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); });
     for (const [groupId, drafts] of groups) {
-      const group = el('section', { className: 'x-draft-group' }, [el('strong', { text: `生成グループ ${groupId} · ${drafts.length}案` })]);
+      const groupBusy = drafts.some(draft => Boolean(draft.regenerationLock || draft.regeneration?.status === 'running' || draft.regeneration?.status === 'queued'));
+      const group = el('section', { className: 'x-draft-group' }, [el('strong', { text: `生成グループ ${groupId} · ${drafts.length}案${groupBusy ? ' · 再生成処理中' : ''}` })]);
       const comparison = el('div', { className: 'x-form x-draft-grid' });
       drafts.forEach(draft => {
         const edit = field('本文', 'textarea', 'body', draft.body); const textarea = edit.querySelector('textarea');
+        const regeneration = draft.regeneration || draft.regenerationJob || state.draftJobs.get(draft.draftId) || {};
+        const draftBusy = Boolean(draft.regenerationLock || regeneration.status === 'running' || regeneration.status === 'queued');
+        const jobId = regeneration.jobId || draft.regenerationJobId;
         const article = el('article', { className: 'x-product x-draft' }, [
           el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId} · ${draft.state}` }), el('span', { className: 'x-muted', text: `${draft.skillId}@${draft.skillVersion} · 切り口 ${draft.angleId}` })]),
           el('p', { className: draft.validation?.ok ? 'x-muted' : 'x-status', text: draft.validation?.ok ? '検証OK' : `検証NG: ${(draft.validation?.errors || []).join(', ')}` }),
+          ...(regeneration.status ? [el('p', { className: 'x-status', text: draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}` })] : []),
           edit,
         ]);
+        textarea.disabled = draftBusy || draft.state === 'archived';
         const actions = el('div', { className: 'x-inline-form' });
         actions.append(button('編集を保存', async () => {
           try { const idempotencyKey = random(); await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: draft.revision, body: textarea.value, idempotencyKey }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
           catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' 入力を残したまま最新状態を確認してください。' : ''), 'error'); }
-        }));
+        }, draftBusy || draft.state === 'archived'));
         if (draft.state === 'needs_review') {
-          actions.append(button('採用', async () => reviewDraft(draft, 'approve', null, article, accountId, generation), !draft.validation?.ok));
-          actions.append(button('見送り', async () => reviewDraft(draft, 'reject', 'not_this_time', article, accountId, generation)));
+          actions.append(button('採用', async () => reviewDraft(draft, 'approve', null, article, accountId, generation), groupBusy || draftBusy || !draft.validation?.ok));
+          actions.append(button('見送り', async () => reviewDraft(draft, 'reject', 'not_this_time', article, accountId, generation), groupBusy || draftBusy));
           if (drafts.length > 1) actions.append(button('この案を採用し残りを見送り', async () => {
-            if (!draft.validation?.ok || !window.confirm(`この案を採用し、同じグループの残り${drafts.length - 1}案を見送りますか？`)) return;
+            if (draftBusy || !draft.validation?.ok || !window.confirm(`この案を採用し、同じグループの残り${drafts.length - 1}案を見送りますか？`)) return;
             try { await api(`/api/x-affiliate/draft-groups/${encodeURIComponent(groupId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, approvedDraftId: draft.draftId, expectedRevisions: drafts.map(item => ({ draftId: item.draftId, revision: item.revision })), entrypoint: 'public', idempotencyKey: random() }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
             catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' グループ内の状態が変わりました。再確認してください。' : ''), 'error'); }
-          }));
-        } else if (draft.state === 'approved') actions.append(button('採用を解除', async () => reviewDraft(draft, 'unapprove', null, article, accountId, generation)));
-        else if (draft.state === 'rejected') actions.append(button('再検討', async () => reviewDraft(draft, 'reopen', null, article, accountId, generation)));
+          }, groupBusy || draftBusy));
+        } else if (draft.state === 'approved') actions.append(button('採用を解除', async () => reviewDraft(draft, 'unapprove', null, article, accountId, generation), draftBusy));
+        else if (draft.state === 'rejected') actions.append(button('再検討', async () => reviewDraft(draft, 'reopen', null, article, accountId, generation), draftBusy));
+        if (draft.state !== 'archived') actions.append(button('保管', async () => reviewDraft(draft, 'archive', null, article, accountId, generation), draftBusy));
+        if (draft.state === 'archived') actions.append(button('保管から復元', async () => reviewDraft(draft, 'restore', null, article, accountId, generation), draftBusy));
+        const estimated = state.budget?.operation?.limitMicroJPY;
+        const regenerationAllowed = draft.state !== 'archived' && !draftBusy && typeof estimated === 'number' && Number.isSafeInteger(estimated) && estimated >= 0;
+        const regenerateForm = el('form', { className: 'x-inline-form x-regeneration-form', 'data-account-id': accountId, 'data-busy': String(draftBusy), 'data-archived': String(draft.state === 'archived') }, [
+          el('p', { className: 'x-muted', 'data-regeneration-limit': 'true', text: regenerationAllowed ? `追加費用上限 ${microJPY(estimated)}（操作枠）` : '追加費用上限を確認できないため再生成できません。予算を再読み込みしてください。' }),
+          field('修正意図（1〜2000文字）', 'textarea', 'instruction', '', '直したい点を具体的に入力'),
+          button('この案を再生成', async event => {
+            event.preventDefault();
+            if (!regenerateForm.isConnected || draftBusy || !isCurrentScope(accountId, generation) || !beginWrite(regenerateForm)) return;
+            const instruction = String(formData(regenerateForm).instruction || '').trim();
+            if (!instruction || instruction.length > 2000) { endWrite(regenerateForm); message(regenerateForm, '修正意図は1〜2000文字で入力してください', 'error'); return; }
+            const payload = { expectedRevision: draft.revision, instruction };
+            try {
+              const idempotencyKey = await keyFor(regenerateForm, { operation: 'draft-regenerate', draftId: draft.draftId, ...payload });
+              if (!regenerateForm.isConnected || !isCurrentScope(accountId, generation)) { endWrite(regenerateForm); return; }
+              const result = await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+              endWrite(regenerateForm); clearRetry(regenerateForm);
+              if (isCurrentScope(accountId, generation)) {
+                if (result.job?.jobId) { state.generationJobs.set(result.job.jobId, result.job); state.draftJobs.set(draft.draftId, { ...result.job, draftId: draft.draftId }); }
+                message(regenerateForm, `再生成を受付しました${result.job?.estimatedMaxMicroJPY ? `（追加費用上限 ${microJPY(result.job.estimatedMaxMicroJPY)}）` : ''}`, 'warn');
+                if (result.job?.jobId) await refreshGenerationJob(result.job.jobId, accountId, generation);
+                await loadDrafts(accountId, generation);
+              }
+            } catch (error) { endWrite(regenerateForm); if (regenerateForm.isConnected && isCurrentScope(accountId, generation)) message(regenerateForm, error.message + (error.code === 409 ? ' 入力は保持しています。処理中または最新状態を確認してください。' : ''), 'error'); }
+          }, !regenerationAllowed),
+        ]);
+        regenerateForm.querySelector('button')?.setAttribute('data-regeneration-action', 'true');
+        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { message(regenerateForm, `ジョブ状態: ${job.status}`, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
+        if (draft.state === 'archived') regenerateForm.querySelectorAll('textarea,button').forEach(node => { node.disabled = true; });
+        article.append(regenerateForm);
         article.append(actions); comparison.append(article);
       });
       group.append(comparison); box.append(group);
@@ -746,9 +790,14 @@
       if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation);
     } catch (error) { if (root.isConnected) message(root, error.message + (error.code === 409 ? ' 最新状態を再確認してください。' : ''), 'error'); }
   }
+  async function refreshGenerationJob(jobId, accountId, generation) {
+    if (!jobId || !isCurrentScope(accountId, generation)) return null;
+    try { const result = await api(`/api/x-affiliate/generation-jobs/${encodeURIComponent(jobId)}`); if (isCurrentScope(accountId, generation) && result.job) { state.generationJobs.set(jobId, result.job); const draftId = result.job.draftId || [...state.draftJobs.entries()].find(([, value]) => value.jobId === jobId)?.[0]; if (draftId) state.draftJobs.set(draftId, { ...result.job, draftId }); } return isCurrentScope(accountId, generation) ? result.job : null; }
+    catch (error) { if (isCurrentScope(accountId, generation)) message(document.getElementById('x-drafts') || document.body, `再生成ジョブ状態を取得できませんでした: ${error.message}`, 'warn'); return null; }
+  }
   async function loadDrafts(accountId, generation) {
     if (!isCurrentScope(accountId, generation)) return;
-    try { const result = await api(`/api/x-affiliate/drafts?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) renderDrafts(result, accountId, generation); }
+    try { const result = await api(`/api/x-affiliate/drafts?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) { const ids = [...new Set((result.drafts || []).map(draft => draft.regenerationLock?.jobId).filter(Boolean))]; await Promise.all(ids.map(jobId => refreshGenerationJob(jobId, accountId, generation))); if (!isCurrentScope(accountId, generation)) return; (result.drafts || []).forEach(draft => { const jobId = draft.regenerationLock?.jobId; if (jobId && state.generationJobs.has(jobId)) { draft.regeneration = state.generationJobs.get(jobId); state.draftJobs.set(draft.draftId, draft.regeneration); } }); renderDrafts(result, accountId, generation); } }
     catch (error) { const box = document.getElementById('x-drafts'); if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error'); }
   }
   function isCurrentScope(accountId, generation) {
@@ -1047,6 +1096,7 @@
     state.settings = s;
     const p = s.profile || {};
     const children = [
+      el('p', { className: 'x-muted', text: `定期状況: ${s.schedule?.enabled === true ? '有効' : '無効（初期OFF）'}${s.schedule?.nextRunAt ? ` · 次回 ${new Date(s.schedule.nextRunAt).toLocaleString('ja-JP')}` : ''}` }),
       field('トーン', 'text', 'tone', p.tone || ''),
       field('対象読者', 'text', 'target', p.target || ''),
       field('ジャンル', 'text', 'genre', p.genre || ''),
@@ -1055,6 +1105,7 @@
       field('templateRefs（JSON）', 'text', 'templateRefs', JSON.stringify(s.templateRefs || [])),
     ];
     if (isAdmin()) children.push(field('通知先（channel metadata）', 'text', 'reviewChannelRef', s.reviewChannelRef || ''));
+    if (isAdmin()) children.push(checkbox('定期生成を有効化（初期OFF）', 'scheduleEnabled', s.schedule?.enabled === true));
     children.push(button('設定を保存', async e => {
         e.preventDefault();
         if (!f.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(f)) return;
@@ -1073,6 +1124,7 @@
         });
         const patch = { profile, templateRefs: refs };
         if (d.reviewChannelRef) patch.reviewChannelRef = d.reviewChannelRef;
+        if (isAdmin()) patch.schedule = { enabled: d.scheduleEnabled === 'on' };
         if (!isCurrentScope(accountId, generation)) { endWrite(f); return; }
         const payload = {
           accountId,
@@ -1124,6 +1176,100 @@
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');
     }
   }
+  function microJPY(value) {
+    if (!Number.isFinite(Number(value))) return '不明';
+    return `${(Number(value) / 1000000).toLocaleString('ja-JP')}円`;
+  }
+  function renderBudget(data, accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-budget'); if (!box) return;
+    state.budget = data; box.replaceChildren();
+    document.querySelectorAll('.x-regeneration-form[data-account-id]').forEach(form => {
+      if (form.dataset.accountId !== accountId) return;
+      const allowed = typeof data.operation?.limitMicroJPY === 'number' && Number.isSafeInteger(data.operation.limitMicroJPY) && data.operation.limitMicroJPY >= 0 && form.dataset.archived !== 'true' && form.dataset.busy !== 'true';
+      const action = form.querySelector('[data-regeneration-action]'); if (action) action.disabled = !allowed;
+      const note = form.querySelector('[data-regeneration-limit]'); if (note) note.textContent = allowed ? `追加費用上限 ${microJPY(data.operation.limitMicroJPY)}（操作枠）` : '追加費用上限を確認できないため再生成できません。予算を再読み込みしてください。';
+    });
+    const rows = [];
+    const monthly = data.monthly || data.month || {};
+    const daily = data.daily || data.day || {};
+    const operation = data.operation || {};
+    [['月次', monthly], ['日次', daily]].forEach(([label, item]) => {
+      if (!item || Object.keys(item).length === 0) return;
+      rows.push(el('div', { className: 'x-row' }, [el('strong', { text: label }), el('span', { className: 'x-muted', text: `実績 ${microJPY(item.spentMicroJPY)} · 予約 ${microJPY(item.reservedMicroJPY)} · 不明 ${microJPY(item.unknownMicroJPY)} · 上限 ${microJPY(item.limitMicroJPY)}` })]));
+    });
+    if (operation && Object.keys(operation).length) rows.push(el('div', { className: 'x-row' }, [el('strong', { text: '1操作' }), el('span', { className: 'x-muted', text: `上限 ${microJPY(operation.limitMicroJPY)}` })]));
+    if (data.unreviewed) {
+      const u = data.unreviewed;
+      rows.push(el('div', { className: 'x-row' }, [el('strong', { text: '未レビュー枠' }), el('span', { className: 'x-muted', text: `${u.used ?? 0}件使用 · ${u.reserved ?? 0}件予約 · 上限 ${u.limit ?? '不明'}件` })]));
+    }
+    const alertState = data.alertState;
+    if (daily.unknownMicroJPY > 0 || monthly.unknownMicroJPY > 0) rows.push(el('p', { className: 'x-status', text: `応答不明の費用: 日次 ${microJPY(daily.unknownMicroJPY)} · 月次 ${microJPY(monthly.unknownMicroJPY)}` }));
+    if (alertState?.capacity) {
+      const labels = { day: '日次', month: '月次', operation: '1操作' };
+      const blocked = Object.entries(alertState.capacity).filter(([, value]) => value === true).map(([key]) => labels[key] || key);
+      if (blocked.length) rows.push(el('p', { className: 'x-status', text: `予算枠不足: ${blocked.join(', ')}` }));
+    }
+    const reservations = data.reservations || [];
+    const unknown = reservations.filter(item => item.status === 'unknown' || item.state === 'unknown').concat(data.unknownJobs || []);
+    if (unknown.length) rows.push(el('p', { className: 'x-status', text: `応答不明の予約 ${unknown.length}件。照合まで保持されています。` }));
+    unknown.forEach(item => { const id = item.jobId || item.reservationId; if (id) rows.push(el('div', { className: 'x-row' }, [el('span', { className: 'x-muted', text: `照合ID: ${id}${item.reservationId && item.jobId ? ` · job ${item.jobId} · reservation ${item.reservationId}` : ''}` })])); });
+    const alerts = data.alerts || [];
+    alerts.forEach(alert => rows.push(el('p', { className: 'x-status', text: typeof alert === 'string' ? alert : (alert.message || alert.code || '予算アラート') })));
+    if (!rows.length) rows.push(el('p', { className: 'x-muted', text: '予算情報はありません' }));
+    box.append(...rows);
+  }
+  async function loadBudget(accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-budget');
+    try { const result = await api(`/api/x-affiliate/budget?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) renderBudget(result, accountId, generation); }
+    catch (error) { if (box && isCurrentScope(accountId, generation)) message(box, error.message, error.code === 403 ? 'warn' : 'error'); }
+  }
+  function renderNotifications(data, accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-notifications'); if (!box) return;
+    state.notifications = data; box.replaceChildren();
+    const items = data.notifications || data.jobs || [];
+    if (!items.length) { box.append(el('p', { className: 'x-muted', text: '通知履歴はありません' })); return; }
+    items.forEach(item => {
+      const id = item.notificationId || item.id || item.jobId;
+      const row = el('div', { className: 'x-row' }, [
+        el('span', { text: `${item.event || item.type || '通知'} · ${item.status || '不明'} · 試行 ${item.attempts ?? 0}` }),
+      ]);
+      if (item.status === 'failed' && id) {
+        const retry = button('通知を再試行', async () => {
+          if (!retry.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(retry)) return;
+          retry.disabled = true;
+          try {
+            await api(`/api/x-affiliate/notification-jobs/${encodeURIComponent(id)}/retry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedAttempts: Number(item.attempts || 0) }) });
+            endWrite(retry); if (isCurrentScope(accountId, generation)) await loadNotifications(accountId, generation);
+          } catch (error) { endWrite(retry); retry.disabled = false; if (retry.isConnected && isCurrentScope(accountId, generation)) message(row, error.message + (error.code === 409 ? ' 最新状態を確認してください。入力は保持しています。' : ''), 'error'); }
+        });
+        row.append(retry);
+      }
+      box.append(row);
+    });
+    if (data.nextCursor) box.append(button('次の通知を表示', async () => loadNotifications(accountId, generation, data.nextCursor)));
+  }
+  async function loadNotifications(accountId, generation, cursor = '') {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-notifications');
+    try { const query = new URLSearchParams({ accountId }); if (cursor) query.set('cursor', cursor); const result = await api(`/api/x-affiliate/notifications?${query}`); if (isCurrentScope(accountId, generation)) renderNotifications(result, accountId, generation); }
+    catch (error) { if (box && isCurrentScope(accountId, generation)) message(box, error.message, error.code === 403 ? 'warn' : 'error'); }
+  }
+  function renderScheduledRuns(data, accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    const box = document.getElementById('x-budget'); if (!box) return;
+    const runs = data.runs || data.results || [];
+    if (!runs.length) return;
+    box.append(el('h4', { text: '定期生成の運用結果' }));
+    runs.slice(0, 20).forEach(run => box.append(el('div', { className: 'x-row' }, [el('span', { text: `${run.day || run.date || '日次'} · ${run.status || '不明'} · 商品 ${run.productId || '未選択'} · job ${run.jobId || '不明'} · reservation ${run.reservationId || '不明'}` })])));
+  }
+  async function loadScheduledRuns(accountId, generation) {
+    if (!isCurrentScope(accountId, generation)) return;
+    try { const result = await api(`/api/x-affiliate/scheduled-runs?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) renderScheduledRuns(result, accountId, generation); }
+    catch (error) { if (error.code !== 404 && isCurrentScope(accountId, generation)) message(document.getElementById('x-budget') || document.body, `定期生成結果を取得できませんでした: ${error.message}`, 'warn'); }
+  }
   async function loadSettings() {
     const accountId = state.accountId;
     if (!accountId) return;
@@ -1134,15 +1280,14 @@
     document.getElementById('x-products')?.replaceChildren();
     document.getElementById('x-skills')?.replaceChildren();
     document.getElementById('x-drafts')?.replaceChildren();
+    document.getElementById('x-budget')?.replaceChildren();
+    document.getElementById('x-notifications')?.replaceChildren();
     try {
       const result = await api(`/api/x-affiliate/settings?accountId=${encodeURIComponent(accountId)}`);
       if (!isCurrentScope(accountId, generation)) return;
       renderSettings(result, accountId, generation);
       enforceMemberUI();
-      await loadTags(accountId, generation);
-      await loadProducts(accountId, generation);
-      await loadSkills(accountId, generation);
-      await loadDrafts(accountId, generation);
+      await Promise.all([loadTags(accountId, generation), loadProducts(accountId, generation), loadSkills(accountId, generation), loadDrafts(accountId, generation), loadBudget(accountId, generation), loadNotifications(accountId, generation), loadScheduledRuns(accountId, generation)]);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');

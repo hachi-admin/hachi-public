@@ -1384,3 +1384,126 @@ test('L4 comparison shows grouped drafts and review uses the displayed revision'
   const request = requests.find(item => item.path.includes('/drafts/d1/review')); assert.ok(request); const body = JSON.parse(request.options.body); assert.equal(body.expectedRevision, 4); assert.equal(body.entrypoint, 'public');
   const invalidApprove = [...cards[1].querySelectorAll('button')].find(button => button.textContent === '採用'); assert.equal(invalidApprove.disabled, true);
 });
+
+test('L5 budget is account scoped and unknown reservations are visible', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'member', accountIds: ['a1'] } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [], schedule: { enabled: false } } });
+    if (path.includes('/budget')) return json({ monthly: { spentMicroJPY: 2000000, reservedMicroJPY: 1000000, limitMicroJPY: 10000000 }, reservations: [{ status: 'unknown', jobId: 'j1' }] });
+    if (path.includes('/notifications')) return json({ notifications: [] });
+    return json({});
+  };
+  const dom = page('#x_code=l5-budget', true, router, { verifier: 'l5-budget-v' }); await flush(); await selectFirstAccount(dom); await flush();
+  assert.match(dom.window.document.querySelector('#x-budget').textContent, /月次/);
+  assert.match(dom.window.document.querySelector('#x-budget').textContent, /応答不明の予約 1件/);
+  assert.equal(new URL(requests.find(item => item.path.includes('/budget')).path).searchParams.get('accountId'), 'a1');
+});
+
+test('L5 failed notification retry requeues only the notification', async () => {
+  const requests = []; let notificationReads = 0;
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'member', accountIds: ['a1'] } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/notifications')) { notificationReads += 1; return json({ notifications: notificationReads === 1 ? [{ notificationId: 'n1', status: 'failed', attempts: 2, event: 'draft_created' }] : [{ notificationId: 'n1', status: 'queued', attempts: 3, event: 'draft_created' }] }); }
+    if (path.includes('/notification-jobs/n1/retry')) return json({ notification: { notificationId: 'n1', status: 'queued', attempts: 3 } });
+    return json({});
+  };
+  const dom = page('#x_code=l5-notify', true, router, { verifier: 'l5-notify-v' }); await flush(); await selectFirstAccount(dom); await flush();
+  dom.window.document.querySelector('#x-notifications button').click(); await flush();
+  const retry = requests.find(item => item.path.includes('/notification-jobs/n1/retry')); assert.ok(retry);
+  assert.deepEqual(JSON.parse(retry.options.body), { expectedAttempts: 2 });
+  assert.equal(requests.some(item => item.path.endsWith('/generations')), false);
+});
+
+test('L5 schedule setting is admin-only and starts disabled', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.includes('/settings') && options.method === 'PATCH') return json({ settings: { accountId: 'a1', revision: 1, profile: {}, templateRefs: [], schedule: { enabled: false } } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [], schedule: { enabled: false } } });
+    return json({});
+  };
+  const dom = page('#x_code=l5-schedule', true, router, { verifier: 'l5-schedule-v' }); await flush(); await selectFirstAccount(dom); await flush();
+  const schedule = dom.window.document.querySelector('#x-settings [name="scheduleEnabled"]'); assert.ok(schedule); assert.equal(schedule.checked, false);
+  schedule.checked = true; dom.window.document.querySelector('#x-settings form button').click(); await flush();
+  const patch = requests.find(item => item.path.endsWith('/settings') && item.options.method === 'PATCH'); assert.ok(patch); assert.deepEqual(JSON.parse(patch.options.body).patch.schedule, { enabled: true });
+});
+
+test('L5 regeneration preserves instruction on 409 and exposes archive/restore', async () => {
+  const requests = []; const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', state: 'approved', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文' };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'member', accountIds: ['a1'] } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } });
+    if (path.includes('/drafts?')) return json({ drafts: [draft] });
+    if (path.includes('/regenerate')) return json({ error: { message: 'busy' } }, 409);
+    return json({});
+  };
+  const dom = page('#x_code=l5-regen', true, router, { verifier: 'l5-regen-v' }); await flush(); await selectFirstAccount(dom); await flush();
+  const form = dom.window.document.querySelector('.x-regeneration-form'); assert.ok(form); form.elements.instruction.value = 'リンクの説明を短くする';
+  form.querySelector('button').click(); await flush();
+  const request = requests.find(item => item.path.includes('/regenerate')); assert.ok(request); assert.equal(JSON.parse(request.options.body).instruction, 'リンクの説明を短くする');
+  assert.match(form.textContent, /入力は保持しています/);
+  assert.ok([...dom.window.document.querySelectorAll('#x-drafts button')].some(button => button.textContent === '保管'));
+});
+
+test('L5 normal regeneration sends target revision instruction key and shows terminal job', async () => {
+  const requests = []; let reads = 0;
+  const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j1')) return json({ job: { jobId: 'j1', status: 'completed' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'needs_review', skillId: 's', skillVersion: '1', angleId: 'a', revision: reads++ ? 5 : 4, body: reads ? '更新本文' : '元本文', validation: { ok: true } }] }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j1', status: 'queued', estimatedMaxMicroJPY: 10000000 } }); return json({}); };
+  const dom = page('#x_code=normal-regen', true, router, { verifier: 'normal-regen-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = '説明を短くする'; form.querySelector('button').click(); await flush(); const req = requests.find(r => r.path.includes('/regenerate')); const body = JSON.parse(req.options.body); assert.equal(body.expectedRevision, 4); assert.equal(body.instruction, '説明を短くする'); assert.equal(typeof body.idempotencyKey, 'string'); assert.ok(requests.some(r => r.path.endsWith('/generation-jobs/j1'))); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '更新本文');
+});
+
+test('L5 unknown notification remains visible without automatic POST', async () => {
+  const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/notifications')) return json({ notifications: [{ notificationId: 'n', status: 'unknown', attempts: 1 }] }); return json({}); };
+  const dom = page('#x_code=unknown-notify', true, router, { verifier: 'unknown-v' }); await flush(); await selectFirstAccount(dom); await flush(); assert.match(dom.window.document.querySelector('#x-notifications').textContent, /unknown/); assert.equal(requests.some(r => r.path.includes('/notification-jobs/')), false);
+});
+
+test('L5 archived restore preserves card on 429', async () => {
+  const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'archived', revision: 3, body: '保管本文', validation: { ok: true } }] }); if (path.includes('/review')) return json({ error: { message: 'full' } }, 429); return json({}); };
+  const dom = page('#x_code=restore-429', true, router, { verifier: 'restore-v' }); await flush(); await selectFirstAccount(dom); await flush(); const b = [...dom.window.document.querySelectorAll('#x-drafts button')].find(x => x.textContent === '保管から復元'); b.click(); await flush(); assert.ok(requests.some(r => r.path.includes('/review'))); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '保管本文'); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /archived/);
+});
+
+test('L5 member has no schedule checkbox and admin failed save preserves checked input', async () => {
+  const base = (role, requests) => (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role } }); if (path.includes('/settings') && options.method === 'PATCH') return json({ error: { message: 'conflict' } }, 409); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [], schedule: { enabled: false } } }); return json({}); };
+  const member = page('#x_code=member-schedule', true, base('member', []), { verifier: 'member-schedule-v' }); await flush(); await selectFirstAccount(member); await flush(); assert.equal(member.window.document.querySelector('#x-settings [name="scheduleEnabled"]'), null);
+  const requests = []; const admin = page('#x_code=admin-schedule', true, base('admin', requests), { verifier: 'admin-schedule-v' }); await flush(); await selectFirstAccount(admin); await flush(); const input = admin.window.document.querySelector('#x-settings [name="scheduleEnabled"]'); input.checked = true; admin.window.document.querySelector('#x-settings form button').click(); await flush(); assert.equal(input.checked, true);
+});
+
+test('L5 group lock disables review buttons', async () => {
+  const router = (url, options = {}) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 1, body: 'a', validation: { ok: true }, regeneration: { status: 'running', jobId: 'j' } }, { draftId: 'd2', generationGroupId: 'g', variantId: 'v2', state: 'needs_review', revision: 1, body: 'b', validation: { ok: true } }] }); return json({}); };
+  const dom = page('#x_code=group-lock', true, router, { verifier: 'group-lock-v' }); await flush(); await selectFirstAccount(dom); await flush(); assert.equal([...dom.window.document.querySelectorAll('#x-drafts button')].filter(b => b.textContent === '採用').every(b => b.disabled), true);
+});
+
+test('L5 regenerationLock unknown is refreshed from GET and remains visible', async () => {
+  const requests = []; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j-unknown')) return json({ job: { jobId: 'j-unknown', status: 'unknown', errorCode: 'provider_response_unknown' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 2, body: '本文', validation: { ok: true }, regenerationLock: { jobId: 'j-unknown', status: 'unknown' } }] }); return json({}); };
+  const dom = page('#x_code=lock-unknown', true, router, { verifier: 'lock-unknown-v' }); await flush(); await selectFirstAccount(dom); await flush(); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /unknown/); assert.ok(requests.some(path => path.includes('/generation-jobs/j-unknown')));
+});
+
+test('L5 delayed budget enables regeneration without losing edited instruction', async () => {
+  const delayed = deferred(); let budgetCalls = 0; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) { budgetCalls += 1; return delayed.promise; } if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); return json({}); };
+  const dom = page('#x_code=budget-late', true, router, { verifier: 'budget-late-v' }); await flush(); const account = dom.window.document.querySelector('#x-accounts .x-row button'); account.click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); const instruction = form.elements.instruction; instruction.value = '修正意図を保持'; const action = form.querySelector('[data-regeneration-action]'); assert.equal(action.disabled, true); delayed.resolve(json({ operation: { limitMicroJPY: 10000000 } })); await flush(); assert.equal(instruction.value, '修正意図を保持'); assert.equal(action.disabled, false); assert.equal(budgetCalls, 1);
+});
+
+test('L5 account switch ignores delayed budget, job, and scheduled responses from old account', async () => {
+  const delayed = { A: { budget: deferred(), job: deferred(), schedule: deferred() }, B: { budget: deferred(), job: deferred(), schedule: deferred() } }; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); const account = new URL(path, 'https://x').searchParams.get('accountId') || (path.includes('/generation-jobs/') ? (path.includes('A') ? 'A' : 'B') : 'B'); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return delayed[account].budget.promise; if (path.includes('/scheduled-runs')) return delayed[account].schedule.promise; if (path.includes('/generation-jobs/')) return delayed[account].job.promise; if (path.includes('/drafts?')) return json({ drafts: [{ draftId: `${account}-d`, generationGroupId: 'g', variantId: 'v', state: 'needs_review', revision: 1, body: account, validation: { ok: true }, regenerationLock: { jobId: `${account}-job`, status: 'running' } }] }); return json({}); };
+  const dom = page('#x_code=account-delay', true, router, { verifier: 'account-delay-v' }); await flush(); const buttons = dom.window.document.querySelectorAll('#x-accounts .x-row button'); buttons[0].click(); await flush(); buttons[1].click(); await flush(); delayed.A.budget.resolve(json({ operation: { limitMicroJPY: 111 }, marker: 'A' })); delayed.A.job.resolve(json({ job: { jobId: 'A-job', status: 'unknown' } })); delayed.A.schedule.resolve(json({ runs: [{ day: 'A', status: 'A-old' }] })); delayed.B.budget.resolve(json({ operation: { limitMicroJPY: 222 }, marker: 'B' })); delayed.B.job.resolve(json({ job: { jobId: 'B-job', status: 'running' } })); delayed.B.schedule.resolve(json({ runs: [{ day: 'B', status: 'B-current' }] })); await flush(); assert.doesNotMatch(dom.window.document.querySelector('#x-budget').textContent, /A-old|111/); assert.match(dom.window.document.querySelector('#x-budget').textContent, /B-current|222/);
+});
+
+test('L5 failed regeneration keeps the original body and exposes terminal status', async () => {
+  const requests = []; let draftReads = 0; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j-failed', status: 'queued' } }); if (path.includes('/generation-jobs/j-failed')) return json({ job: { jobId: 'j-failed', status: 'failed', errorCode: 'generation_output_invalid' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: draftReads++, body: '元本文', validation: { ok: true } }] }); return json({}); };
+  const dom = page('#x_code=regen-failed', true, router, { verifier: 'regen-failed-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = '短くする'; form.querySelector('[data-regeneration-action]').click(); await flush(); await flush(); await flush(); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '元本文'); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /failed/); assert.ok(requests.some(path => path.includes('/generation-jobs/j-failed')));
+});
+
+test('L5 delayed regenerate response after account switch does not populate the new scope', async () => {
+  const delayed = deferred(); const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); if (path.includes('/regenerate')) return delayed.promise; return json({}); };
+  const dom = page('#x_code=regen-scope', true, router, { verifier: 'regen-scope-v' }); await flush(); const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button'); accounts[0].click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = 'Aの修正'; form.querySelector('[data-regeneration-action]').click(); await flush(); accounts[1].click(); await flush(); delayed.resolve(json({ job: { jobId: 'A-job', status: 'failed' } })); await flush(); await flush(); assert.equal(requests.some(item => item.path.includes('/generation-jobs/A-job')), false); assert.doesNotMatch(dom.window.document.querySelector('#x-drafts').textContent, /A-job/);
+});
