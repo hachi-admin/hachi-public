@@ -1361,8 +1361,12 @@ function _refreshCatPalette(c, preset) {
 function _catPaletteField(c) {
   const p = c.palette;
   if (!p) {
+    /* Two different empty states, and only one of them is a problem. A category set to 自由指定 has
+       no fixed colours *by decision* — its articles range too widely to settle on one look — so
+       saying 「未設定」 there would be nagging about something already answered. */
+    const free = (c.visual || {}).heroPreset === HP_AUTO;
     return `<label class="acard-mapf"><span>配色</span>
-      <span class="cat-palnone">サムネタイトル未指定</span></label>`;
+      <span class="cat-palnone">${free ? '記事ごとに決まる' : 'サムネタイトル未指定'}</span></label>`;
   }
   const from = c.paletteSource === 'preset' ? 'サムネタイトルより' : 'カテゴリ既定';
   return `<label class="acard-mapf"><span>配色</span>
@@ -2175,9 +2179,11 @@ function _visualSection(c, section) {
         <span class="cat-label">サムネタイトルのスタイル</span>
         <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
           onchange="queueCatPreview('${c.id}')">
-          <option value="">自動（記事ごとに選ぶ）</option>
+          <option value="">未設定（要指定）</option>
         </select>
-        <span class="cat-hint">選ぶと、このカテゴリの記事は毎回この装飾で描かれます</span>
+        <span class="cat-hint">原則ここで指定します。選ぶと、このカテゴリの記事は毎回この装飾で描かれ、
+          その配色もこのスタイルのものになります。扱う話題の幅が広くて一つに決められないカテゴリだけ
+          「自由指定」にしてください</span>
       </label>
       <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
            visual.imagePrompt/figurePrompt have been on the category document and honoured by
@@ -2259,18 +2265,31 @@ async function _ensureHeroPresets() {
 // place — hence the element rather than an id derived from the category.
 function _fillCatPresetOptions(catId) { _fillPresetSelect(document.getElementById(`cat-preset-${catId}`)); }
 
+/* The reserved value meaning "this category picks per article on purpose" (HERO_PRESET_AUTO in
+   hachi-core's routes/hero-presets.js, where it is also refused as a real preset id). */
+const HP_AUTO = 'auto';
+
 function _fillPresetSelect(sel) {
   if (!sel) return;
   const want = sel.dataset.selected || '';
   const usable = _heroPresets.filter((p) => p.enabled !== false);
-  sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
+  /* Three options, not two. The rule is that a category pins a style — it publishes one kind of
+     article and should look like one thing — so the empty option is not "automatic", it is
+     "nobody has decided yet", and it says so. 自由指定 is the deliberate version of the same
+     behaviour, stored as a distinct value so the two can be told apart on sight.
+
+     Both end up asking the agent; the pipeline treats them identically. The distinction exists for
+     the operator, not the renderer, which is why it lives in the stored value rather than in any
+     branch that changes what gets drawn. */
+  sel.innerHTML = `<option value=""${want ? '' : ' selected'}>未設定（要指定）</option>`
+    + `<option value="${HP_AUTO}"${want === HP_AUTO ? ' selected' : ''}>自由指定（記事ごとに選ぶ）</option>`
     // Was `名前（templateId）`. A style no longer names a ground, and printing `undefined` in the
     // one control where a magazine pins its lettering is worse than printing nothing.
     + usable.map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
   /* A preset that was pinned and has since been disabled or deleted would otherwise vanish from
      the list and leave the control reading 「自動」 — which is a lie about what is saved, and the
      kind that only surfaces once someone saves the category and silently drops the pin. */
-  if (want && !usable.some((p) => p.id === want)) {
+  if (want && want !== HP_AUTO && !usable.some((p) => p.id === want)) {
     sel.insertAdjacentHTML('beforeend',
       `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
   }
@@ -2489,7 +2508,8 @@ async function restyleCategorySample(id, presetId) {
     }).catch(() => {});
     if (c.visual) c.visual.heroPreset = presetId;
     _refreshCatPalette(c, preset);
-    showToast(presetId ? 'このスタイルに変えました。' : '自動に戻しました。', 'success');
+    showToast(presetId === HP_AUTO ? '記事ごとに選ぶ設定にしました。'
+      : presetId ? 'このスタイルに変えました。' : '未設定に戻しました。', 'success');
   } finally {
     if (host) host.style.opacity = '';
   }
