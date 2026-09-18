@@ -541,7 +541,15 @@ function showToast(msg, type = 'info', duration = 3500) {
 // onConfirm fires when user clicks Confirm; banner auto-removes on dismiss.
 // Returns a cleanup fn in case you need to remove it early.
 function showConfirm(msg, onConfirm, targetEl) {
-  const existing = targetEl?.parentElement?.querySelector('.confirm-banner');
+  /* Scoped to this anchor, not to its whole parent.
+     A tile's parent is the grid holding every other tile, so `parentElement.querySelector` found a
+     banner belonging to a different card — and pressing 却下 on card B while card A had one open
+     dismissed A's and returned, doing nothing to B. */
+  const existing = targetEl?.parentElement
+    ? [...targetEl.parentElement.querySelectorAll('.confirm-banner')]
+      .find((el) => el.previousElementSibling === targetEl || el.nextElementSibling === targetEl
+        || el.parentElement === targetEl)
+    : document.body.querySelector(':scope > .confirm-banner');
   if (existing) { existing.remove(); return () => {}; }
   const banner = document.createElement('div');
   banner.className = 'confirm-banner';
@@ -550,8 +558,22 @@ function showConfirm(msg, onConfirm, targetEl) {
     <button class="act-btn resume" data-confirm>Confirm</button>`;
   banner.querySelector('[data-confirm]').addEventListener('click', () => { banner.remove(); onConfirm(); });
   banner.querySelector('[data-dismiss]').addEventListener('click', () => banner.remove());
-  if (targetEl) targetEl.insertAdjacentElement('afterend', banner);
-  else document.body.appendChild(banner);
+  /* Where the banner goes depends on whether the anchor is pinned.
+   *
+   * 却下 lives only in the detail panel's `.p-actions`, which is `position:sticky; bottom:-22px` —
+   * an action bar that stays over the foot of the scroll area. Inserting `afterend` of it put the
+   * banner *underneath* the thing pinned over that exact spot: created, attached, never visible.
+   * The button appeared to do nothing, every time, which is precisely what was reported.
+   *
+   * The comment on `_catConfirmAnchor` already warned that a misplaced banner is indistinguishable
+   * from a dead button, and the previous fix there corrected the selector without noticing that the
+   * element it now correctly finds is one you cannot place anything after. So the rule is stated as
+   * the general one it is: you cannot put something after an element that is pinned over that spot —
+   * put it before instead. */
+  if (targetEl) {
+    const pinned = ['sticky', 'fixed'].includes(getComputedStyle(targetEl).position);
+    targetEl.insertAdjacentElement(pinned ? 'beforebegin' : 'afterend', banner);
+  } else document.body.appendChild(banner);
   return () => banner.remove();
 }
 
@@ -1209,8 +1231,8 @@ function _renderTopics() {
       ${_catBacklog() ? `<button class="act-card" onclick="backfillCategories()">
         <span class="ac-ico"><i class="ni ni-refresh" aria-hidden="true"></i></span>
         <span class="ac-txt">
-          <span class="ac-title">未設定のカテゴリを埋める <b>${_catBacklog()}</b></span>
-          <span class="ac-desc">サムネタイトルが決まっていないカテゴリにスタイルを割り当て、見本の絵が無いものには絵をつけます。絵の生成は pro 課金なので、一度に処理する件数は絞ってあります。</span>
+          <span class="ac-title">承認済みの未設定を埋める <b>${_catBacklog()}</b></span>
+          <span class="ac-desc">サムネタイトルが決まっていない承認済みカテゴリにスタイルを割り当て、見本の絵が無いものには絵をつけて保存します。絵の生成は pro 課金なので、一度に処理する件数は絞ってあります。</span>
         </span>
       </button>` : ''}
     </div>
@@ -2662,16 +2684,20 @@ async function submitArticleFromUrl() {
    pinned, or no sample drawn — as one number, because they are one backlog to the operator even
    though they cost very differently to clear. */
 function _catBacklog() {
-  return (CATEGORIES || []).filter((c) => c.status !== 'blocked'
+  /* Approved only. A suggested category may still be rejected, and drawing its picture is a
+     pro-tier call — paying to style something that may be thrown away is the wrong default. The
+     approve route now assigns a style and draws a sample itself, so nothing approved from here on
+     joins this backlog; this number is the categories approved before that existed. */
+  return (CATEGORIES || []).filter((c) => c.status === 'active'
     && (!c.visual?.heroPreset || !c.visual?.sampleAt)).length;
 }
 
 async function backfillCategories() {
   const n = _catBacklog();
-  showConfirm(`${n}件が未設定です。一度に最大8件まで、スタイルを割り当てて絵をつけます（絵は pro 課金）。`, async () => {
+  showConfirm(`承認済みのうち${n}件が未設定です。一度に最大8件まで、スタイルを割り当てて絵をつけ、保存します（絵は pro 課金）。`, async () => {
     const res = await fetch(apiUrl('/api/article-categories/backfill'), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 8, withImages: true }),
+      body: JSON.stringify({ limit: 8, withImages: true, status: 'active' }),
     }).catch(() => null);
     if (!res?.ok) { showToast('起動できませんでした', 'error'); return; }
     /* No progress here on purpose: the task posts to Discord as it goes, and a spinner that cannot
