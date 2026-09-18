@@ -12,7 +12,8 @@ const source = fs.readFileSync(new URL('../dash/x-affiliate.js', import.meta.url
 const sharedUiSource = fs.readFileSync(new URL('../shared/ui.js', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../dash/app.js', import.meta.url), 'utf8');
 const indexHtml = fs.readFileSync(new URL('../dash/index.html', import.meta.url), 'utf8');
-const enabledSource = source.replace('const FEATURE_ENABLED = false;', 'const FEATURE_ENABLED = true;');
+const enabledSource = source;
+const disabledSource = source.replace('const FEATURE_ENABLED = true;', 'const FEATURE_ENABLED = false;');
 const doms = [];
 afterEach(() => { while (doms.length) doms.pop().window.close(); });
 
@@ -30,7 +31,7 @@ function page(hash = '', enabled = false, fetchImpl = async () => { throw new Er
   if (options.jwt) window.localStorage.setItem('dash-jwt', options.jwt);
   if (options.verifier) window.sessionStorage.setItem('hachi-x-oauth-verifier', options.verifier);
   if (options.api) window.localStorage.setItem('nogem-api', options.api);
-  window.eval((enabled ? enabledSource : source));
+  window.eval((enabled ? enabledSource : disabledSource));
   doms.push(dom);
   return dom;
 }
@@ -53,7 +54,7 @@ function fullAppPage(hash = '#xentry', fetchImpl = async () => { throw new Error
   if (options.verifier) window.sessionStorage.setItem('hachi-x-oauth-verifier', options.verifier);
   if (options.api) window.localStorage.setItem('nogem-api', options.api);
   window.eval(sharedUiSource);
-  window.eval(options.enabled ? enabledSource : source);
+  window.eval(options.enabled ? enabledSource : disabledSource);
   window.eval(appSource);
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
   doms.push(dom);
@@ -162,7 +163,7 @@ test('full production source X entry keeps legacy dashboard idle while feature i
   assert.equal(new URL(`https://public.example/dash/${scriptSrcs[appScriptIndex]}`).searchParams.get('v'), appBuild);
   const cssRef = [...dom.window.document.querySelectorAll('link[rel="stylesheet"]')].map(link => link.getAttribute('href')).find(ref => ref.startsWith('dashboard.css?'));
   assert.ok(cssRef); assert.ok(Number(new URL(`https://public.example/dash/${cssRef}`).searchParams.get('v')) >= 9);
-  assert.match(source, /const FEATURE_ENABLED = false;/);
+  assert.match(source, /const FEATURE_ENABLED = true;/);
 });
 
 test('full production X page common logout and refresh preserve legacy auth without fetches', async () => {

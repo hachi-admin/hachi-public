@@ -300,7 +300,10 @@ run('_syncHpSummaries on a brand new preset', () => {
     run('styleSpec form renders a real preset', () => {
       const h = formHtml(JSON.stringify({ face:'kaku', scrimMax:0.44, textZone:'left', text:'#FFFFFF' }));
       const n = (h.match(/class="hp-ctl"/g) || []).length;
-      if (n !== 4) throw new Error(`expected 4 controls, got ${n}`);
+      if (n !== 5) throw new Error(`expected 5 controls, got ${n}`);
+      for (const key of ['face', 'scrimMax', 'textZone', 'text']) {
+        if (!h.includes(`<code class="hp-ctl-key">${key}</code>`)) throw new Error(`missing ${key} control`);
+      }
       if (/undefined|NaN|\[object Object\]/.test(h)) throw new Error('leaked a raw value into the markup');
       return `${n} controls`;
     });
