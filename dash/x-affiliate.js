@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const API_ORIGIN = 'https://hachi-core-685554938840.asia-northeast1.run.app';
-  const FEATURE_ENABLED = false; // build-time safe default; production enables this in a reviewed build
+  const FEATURE_ENABLED = true;
   const VERIFIER_KEY = 'hachi-x-oauth-verifier';
   const PROOF_KEY = 'hachi-x-browser-proof';
   const pendingCode = new URLSearchParams(location.hash.slice(1)).get('x_code');
@@ -116,12 +116,15 @@
     if (!FEATURE_ENABLED) { root.append(card('利用停止中', el('p', { className: 'x-muted', text: 'X投稿BOT管理APIは現在無効です。商品登録はローカル検証段階で、実商品取得、Skill、生成、レビュー、通知送信は有効化されていません。' }))); return; }
     if (!xJwt) { root.append(card('ログイン', el('div', {}, [el('p', { className: 'x-muted', text: 'GitHubでX BOT管理へログインしてください。' }), button('GitHubでログイン', login)]))); return; }
     const toolbar = el('div', { className: 'x-toolbar' }, [button('再読み込み', load), button('サインアウト', logout)]); root.append(toolbar);
-    root.append(card('アカウント', el('div', { id: 'x-accounts' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
+    root.append(card('アカウント', el('div', { id: 'x-accounts' }, [
+      el('p', { className: 'x-muted', text: '投稿先ごとの商品・タグ・下書きをまとめる管理枠です。Xへのログイン連携ではありません。' }),
+      el('p', { className: 'x-muted', text: '読み込み中…' }),
+    ])));
     root.append(card('メンバー', el('div', { id: 'x-members' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
     root.append(card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
-    root.append(card('商品（実取得は未接続）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('Skill（合成検証のみ）', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('候補文の生成・比較レビュー（ローカル境界）', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('商品（手入力）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('Skill', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(card('候補文の生成・比較レビュー', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
     root.append(card('プロフィール・テンプレート・通知先・定期', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
     root.append(card('予算・予約状況', el('div', { id: 'x-budget' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
@@ -172,6 +175,7 @@
     const box = document.getElementById('x-accounts');
     if (!box) return;
     box.replaceChildren();
+    box.append(el('p', { className: 'x-muted', text: 'ここで作るアカウントは、投稿先ごとの商品・タグ・下書きをまとめる管理枠です。最初は「メイン」などの表示名で1件作成してください。' }));
     (data.accounts || []).forEach(a => {
       const b = button(`${a.label} (${a.accountId})`, () => {
         if (state.accountId !== a.accountId) { state.importResult = null; state.skillPreview = null; state.budget = null; state.notifications = null; state.generationJobs.clear(); state.draftJobs.clear(); }
@@ -215,7 +219,7 @@
     });
     if (isAdmin()) {
       const f = el('form', { className: 'x-form', 'data-admin-only': 'true' }, [
-        field('表示名', 'text', 'label'),
+        field('管理枠の表示名（例: メイン）', 'text', 'label'),
         el('select', { name: 'market', className: 'form-select' }, [el('option', { text: 'JP', value: 'JP' })]),
         button('アカウントを作成', async e => {
           e.preventDefault();
@@ -1023,10 +1027,10 @@
       box.append(row);
     });
     if (isAdmin()) {
-      const valueField = field('実値（保存後に消去）', 'password', 'value');
+      const valueField = field('Amazonアソシエイトタグ（保存後は非表示）', 'password', 'value');
       const valueInput = valueField.querySelector('input');
       const f = el('form', { className: 'x-form', 'data-admin-only': 'true' }, [
-        field('名前', 'text', 'name'),
+        field('管理用の名前（例: メイン用）', 'text', 'name'),
         valueField,
         button('タグを保存', async e => {
           e.preventDefault();
