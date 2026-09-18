@@ -1228,13 +1228,18 @@ function _renderTopics() {
       ${/* Shown only while there is something to fix. Categories created before the rule existed
             have no サムネタイトル and often no picture; new ones are styled at creation, so once the
             backlog is cleared this button has no reason to occupy the toolbar again. */ ''}
-      ${_catBacklog() ? `<button class="act-card" onclick="backfillCategories()">
+      ${(() => {
+        const b = _catBacklog();
+        if (!b.total) return '';
+        const parts = [b.style ? `スタイル ${b.style}件` : '', b.image ? `絵 ${b.image}件` : ''].filter(Boolean);
+        return `<button class="act-card" onclick="backfillCategories()">
         <span class="ac-ico"><i class="ni ni-refresh" aria-hidden="true"></i></span>
         <span class="ac-txt">
-          <span class="ac-title">承認済みの未設定を埋める <b>${_catBacklog()}</b></span>
-          <span class="ac-desc">サムネタイトルが決まっていない承認済みカテゴリにスタイルを割り当て、見本の絵が無いものには絵をつけて保存します。絵の生成は pro 課金なので、一度に処理する件数は絞ってあります。</span>
+          <span class="ac-title">未設定を埋める <b>${parts.join(' / ')}</b></span>
+          <span class="ac-desc">サムネタイトルが決まっていないカテゴリにスタイルを割り当てます。絵は承認済みのものだけに生成して保存します（pro 課金）。一度に処理する件数は絞ってあります。</span>
         </span>
-      </button>` : ''}
+      </button>`;
+      })()}
     </div>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
@@ -1739,8 +1744,6 @@ function _categoryEditor(c) {
   const lbl = (list, id) => (list || []).find(o => o.id === id)?.label || id || '—';
   const freqLabel = lbl(CAT_META?.frequencies, c.frequency);
 
-  const freqOpts = (CAT_META?.frequencies || []).map(f =>
-    `<option value="${f.id}"${f.id === c.frequency ? ' selected' : ''}>${esc(f.label)}</option>`).join('');
   const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
   const genderOpts = [['any', '男女問わず'], ['male', '男性中心'], ['female', '女性中心']].map(([v, l]) =>
     `<option value="${v}"${v === (t.gender || 'any') ? ' selected' : ''}>${l}</option>`).join('');
@@ -1814,20 +1817,19 @@ function _categoryEditor(c) {
       ${c.promptPrevious && c.promptPrevious !== c.prompt
         ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}`)}
 
-    ${section('記事のかたち',
-      `${lbl(CAT_META?.formats, style.format)} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${lbl(CAT_META?.depths, style.depth)}`, `
-      <div class="cat-grid cat-style neu-well">
-        ${_styleField(c, 'format', '形式', CAT_META?.formats)}
-        ${_styleField(c, 'voice', '語り口', CAT_META?.voices)}
-        ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
-        ${_styleField(c, 'depth', '情報量', CAT_META?.depths)}
-      </div>`)}
-
     ${_visualSection(c, section)}
 
     ${section('動かし方',
-      `${(c.approvalMode ?? 'auto') === 'propose' ? '案を選ぶ' : '自動'} · ${style.enrichQA ? '読者Q&A有' : '読者Q&A無'} · ${style.heroTitle === false ? '画像文字なし' : '画像に文字'}`, `
+      `${(c.approvalMode ?? 'auto') === 'propose' ? '案を選ぶ' : '自動'} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${style.enrichQA ? '読者Q&A有' : '読者Q&A無'} · ${style.heroTitle === false ? '画像文字なし' : '画像に文字'}`, `
+      ${/* The 「記事のかたち」 section used to sit above this one holding 形式・語り口・情報量・ビジュアル.
+            The first three were identical selects over identical options to the quick bar a few
+            pixels higher — the same decision offered twice on one screen, and disagreeing about when
+            it takes effect, since the quick bar saves on change and these waited for 保存. Removing
+            them left a section with one control and a summary line restating it, so the one control
+            moved here: how many pictures an article carries is the same kind of decision as whether
+            to weave in reader questions. Six sections became five. */ ''}
       <div class="cat-run neu-well">
+        ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
         <label class="cat-field"><span>サイクルの開始</span>
           ${sel(`cat-approval-${c.id}`, (CAT_META?.approvalModes || [{ id: 'auto', label: '自動' }, { id: 'propose', label: '案を選ぶ' }])
             .map(o => `<option value="${o.id}"${o.id === (c.approvalMode ?? 'auto') ? ' selected' : ''}>${esc(o.label)}</option>`).join(''))}
@@ -1842,7 +1844,6 @@ function _categoryEditor(c) {
     ${section('読者と頻度',
       `${t.ageMin ?? 25}〜${t.ageMax ?? 45}歳 · ${(t.scale || 'mass') === 'niche' ? 'ニッチ' : 'マス'} · ${freqLabel}`, `
       <div class="cat-grid neu-well">
-        <label class="cat-field"><span>頻度</span>${sel(`cat-freq-${c.id}`, freqOpts)}</label>
         <label class="cat-field"><span>年齢</span><span class="cat-age">
           <input type="number" class="cat-in" id="cat-agemin-${c.id}" value="${t.ageMin ?? 25}" min="10" max="99">
           <span>〜</span>
@@ -2427,13 +2428,13 @@ async function saveCategory(id, { silent = false } = {}) {
     // `prompt` deliberately absent: it is changed by approving a rewrite in Discord, not by 保存.
     // Sending it from here would write back whatever the panel happened to be showing and quietly
     // undo a change approved while this panel was open.
-    frequency: _catVal(`cat-freq-${id}`),
+    /* `frequency`, `format`, `voice` and `depth` are deliberately absent: the quick bar owns them
+       and PATCHes them on change. Leaving them here would be worse than redundant — `_catVal`
+       returns '' for an element that is not on the page, so 保存 would send four empty values and
+       silently undo whatever the quick bar had just set. */
     approvalMode: _catVal(`cat-approval-${id}`),
     style: {
-      format: _catVal(`cat-format-${id}`),
-      voice: _catVal(`cat-voice-${id}`),
       visualDensity: _catVal(`cat-visualDensity-${id}`),
-      depth: _catVal(`cat-depth-${id}`),
       enrichQA: chk('enrichQA'),
       heroTitle: chk('heroTitle'),
     },
@@ -2584,7 +2585,11 @@ async function restyleCategorySample(id, presetId) {
    exist — and `_catVal` returns '' for a missing element, so saving from there would PATCH every
    setting to empty and quietly wipe the category. The form's own presence is the test. */
 async function regenCategorySample(id) {
-  const inEditor = !!document.getElementById(`cat-freq-${id}`);
+  /* Probes a field that is only rendered inside the editor. It used to be `cat-freq`, which the
+     quick bar now owns and which no longer exists in the panel — so this silently became "never in
+     the editor", and pressing 絵を作り直す from the open panel would have regenerated against the
+     *stored* settings rather than the unsaved ones on screen. */
+  const inEditor = !!document.getElementById(`cat-approval-${id}`);
   const btn = document.getElementById(`cat-sample-btn-${id}`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
   try {
@@ -2683,21 +2688,33 @@ async function submitArticleFromUrl() {
 /* How many categories are still undecided. Counts the two states the backfill fixes — no style
    pinned, or no sample drawn — as one number, because they are one backlog to the operator even
    though they cost very differently to clear. */
+/* The two halves of the backlog, counted separately because they cost three orders of magnitude
+   apart and are therefore scoped differently.
+
+   Styling is one agent call: every category that is not 却下 gets it, including suggested ones,
+   where seeing what it would look like is part of deciding whether to approve it. Drawing is a
+   pro-tier generation, so only approved categories qualify — and the approve route draws its own
+   sample now, so an unapproved one gets its picture at the moment it stops being hypothetical.
+
+   Scoping both to approved is what made this button disappear: every approved category already had
+   both, the count was zero, and the control that would have styled the unapproved backlog hid
+   itself. A zero that hides the only evidence of its own reasoning is indistinguishable from a
+   button that does not work. */
 function _catBacklog() {
-  /* Approved only. A suggested category may still be rejected, and drawing its picture is a
-     pro-tier call — paying to style something that may be thrown away is the wrong default. The
-     approve route now assigns a style and draws a sample itself, so nothing approved from here on
-     joins this backlog; this number is the categories approved before that existed. */
-  return (CATEGORIES || []).filter((c) => c.status === 'active'
-    && (!c.visual?.heroPreset || !c.visual?.sampleAt)).length;
+  const live = (CATEGORIES || []).filter((c) => c.status !== 'blocked');
+  return {
+    style: live.filter((c) => !c.visual?.heroPreset).length,
+    image: live.filter((c) => c.status === 'active' && !c.visual?.sampleAt).length,
+    get total() { return this.style + this.image; },
+  };
 }
 
 async function backfillCategories() {
-  const n = _catBacklog();
-  showConfirm(`承認済みのうち${n}件が未設定です。一度に最大8件まで、スタイルを割り当てて絵をつけ、保存します（絵は pro 課金）。`, async () => {
+  const b = _catBacklog();
+  showConfirm(`スタイル未設定 ${b.style}件、承認済みで絵の無いもの ${b.image}件。一度に最大8件まで処理します（絵は pro 課金）。`, async () => {
     const res = await fetch(apiUrl('/api/article-categories/backfill'), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 8, withImages: true, status: 'active' }),
+      body: JSON.stringify({ limit: 8, withImages: true }),
     }).catch(() => null);
     if (!res?.ok) { showToast('起動できませんでした', 'error'); return; }
     /* No progress here on purpose: the task posts to Discord as it goes, and a spinner that cannot
