@@ -1231,12 +1231,13 @@ function _renderTopics() {
       ${(() => {
         const b = _catBacklog();
         if (!b.total) return '';
-        const parts = [b.style ? `スタイル ${b.style}件` : '', b.image ? `絵 ${b.image}件` : ''].filter(Boolean);
+        const parts = [b.style ? `スタイル ${b.style}件` : '', b.recipe ? `レシピ ${b.recipe}件` : '',
+          b.image ? `絵 ${b.image}件` : ''].filter(Boolean);
         return `<button class="act-card" onclick="backfillCategories()">
         <span class="ac-ico"><i class="ni ni-refresh" aria-hidden="true"></i></span>
         <span class="ac-txt">
           <span class="ac-title">未設定を埋める <b>${parts.join(' / ')}</b></span>
-          <span class="ac-desc">サムネタイトルが決まっていないカテゴリにスタイルを割り当てます。絵は承認済みのものだけに生成して保存します（pro 課金）。一度に処理する件数は絞ってあります。</span>
+          <span class="ac-desc">サムネタイトルと絵のレシピが決まっていないカテゴリに割り当てます。合うレシピが無いカテゴリには、新しいレシピを #approvals に提案します。絵は承認済みのものだけに生成して保存します（pro 課金）。一度に処理する件数は絞ってあります。</span>
         </span>
       </button>`;
       })()}
@@ -2909,14 +2910,19 @@ function _catBacklog() {
   const live = (CATEGORIES || []).filter((c) => c.status !== 'blocked');
   return {
     style: live.filter((c) => !c.visual?.heroPreset).length,
+    /* Counted with the style rather than with the picture, because it costs what the style costs —
+       one agent call — and because a category with no recipe gets a different treatment each week,
+       which is the same "decided by nobody" state an unpinned サムネタイトル produces. */
+    recipe: live.filter((c) => !c.visual?.imagePrompt).length,
     image: live.filter((c) => c.status === 'active' && !c.visual?.sampleAt).length,
-    get total() { return this.style + this.image; },
+    get total() { return this.style + this.recipe + this.image; },
   };
 }
 
 async function backfillCategories() {
   const b = _catBacklog();
-  showConfirm(`スタイル未設定 ${b.style}件、承認済みで絵の無いもの ${b.image}件。一度に最大8件まで処理します（絵は pro 課金）。`, async () => {
+  showConfirm(`スタイル未設定 ${b.style}件、レシピ未設定 ${b.recipe}件、承認済みで絵の無いもの ${b.image}件。`
+    + '一度に最大8件まで処理します（絵は pro 課金）。', async () => {
     const res = await fetch(apiUrl('/api/article-categories/backfill'), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit: 8, withImages: true }),
