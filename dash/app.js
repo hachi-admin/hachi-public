@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '37';
+const DASH_BUILD = '38';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1649,19 +1649,24 @@ async function _autoSampleQueue() {
 /* The four the サムネタイトル catalogue compares, kept identical to `_HP_VARIANTS` on purpose: the
    two screens answer the same question about the same styles, and two different sets of four would
    make them unable to be read against each other. */
-/* Four panels, two axes: this category's real headlines, and the two alignments a style can be set
-   in. The alignment variation was removed when the headlines became real — the reasoning was that a
-   category has one alignment, so half the grid demonstrated a layout it would never publish in.
-   That was wrong about what the grid is for: `visual.align` is a setting the operator can change,
-   and the question "would this look better flushed left" is unanswerable without seeing it. With
-   four different headlines there is no longer a duplicated panel, so both axes fit at once. */
+/* Two axes, 短文/長文 × 中央/左 — the same grid `_HP_VARIANTS` uses, and for the same reason.
+ *
+ * This briefly ran as 中央/左/中央/左 on the argument that four *different* real headlines made a
+ * second axis unnecessary. That argument assumed four headlines exist. A category with one published
+ * article has two candidate lines — the article and its own name — so `heads[i % 2]` drew panels 0
+ * and 2 identically and panels 1 and 3 identically, and the tile spent half of itself repeating. Two
+ * rows labelled 中央/左 and 中央/左 also read as the same comparison done twice, which is precisely
+ * what it was.
+ *
+ * Length is the axis worth spending a row on because it is the one the category cannot control: a
+ * style is chosen once, and then every article writes its own headline at whatever length it needs.
+ * A style that holds at eight characters and collapses at forty fails on publication, not here. */
 const _CAT_SHOTS = [
-  { align: 'center', label: '中央' },
-  { align: 'left', label: '左' },
-  { align: 'center', label: '中央' },
-  { align: 'left', label: '左' },
+  { key: 'short', align: 'center', label: '短文・中央' },
+  { key: 'short', align: 'left', label: '短文・左' },
+  { key: 'long', align: 'center', label: '長文・中央' },
+  { key: 'long', align: 'left', label: '長文・左' },
 ];
-const CAT_SHOT_COUNT = _CAT_SHOTS.length;
 
 /**
  * Up to four headlines this category has actually published, most recent first.
@@ -1693,8 +1698,24 @@ function _catHeadlines(c) {
        The thumbnail's own is the right one here, with the words that were actually set apart. */
     add(a.heroTitleText || a.title || a.angle, a.heroEmphasis);
   }
-  add(c.name);
-  return out.slice(0, CAT_SHOT_COUNT).map((h) => (h.emphasis.length ? h : { ...h, emphasis: _guessEmphasis(h.text) }));
+  /* The category's own name is a last resort, not a sample. Set in 48pt it previews a thumbnail that
+     will never exist — `_loadCatThumbInto` says the same thing about the single panel — so it is
+     reached for only when the published back catalogue cannot fill both rows on its own. */
+  if (out.length < 2) add(c.name);
+  return out.map((h) => (h.emphasis.length ? h : { ...h, emphasis: _guessEmphasis(h.text) }));
+}
+
+/* The shortest and the longest of them, which is what the two rows are comparing.
+ *
+ * Picked from the real back catalogue rather than invented, and picked by extremes rather than by
+ * recency: the question is whether the style survives the range this category actually writes in,
+ * and the two ends are the only samples that can answer it. A category with one line answers it with
+ * that line twice, which is honest — there is no range yet to fail at. */
+function _catShotHeads(c) {
+  const heads = _catHeadlines(c);
+  if (!heads.length) { const only = { text: c.name, emphasis: [] }; return { short: only, long: only }; }
+  const byLen = [...heads].sort((a, b) => a.text.length - b.text.length);
+  return { short: byLen[0], long: byLen[byLen.length - 1] };
 }
 
 /**
@@ -1777,19 +1798,20 @@ async function _loadCatShots(id) {
   const grounds = [own, ...(recipe?.samples || []).map((sm) => sm.url).filter(Boolean)]
     .filter(Boolean);
 
-  /* This category's own words, and its own alignment.
-   *
-   * The four no longer vary alignment against each other. They used to, which is why they carried
-   * 中央/左 captions and repeated each headline twice — but a category has one alignment, set once
-   * in its settings, so half the grid was demonstrating a layout it will never publish in. With
-   * four real headlines on four real pictures, each panel is a sample of what this category
-   * actually ships, and the captions named an axis that no longer moves. */
-  const heads = _catHeadlines(c);
+  /* This category's own words, at both ends of the length it writes in. */
+  const picks = _catShotHeads(c);
 
-  for (let i = 0; i < CAT_SHOT_COUNT; i++) {
+  /* The four render in parallel, not one after another.
+   *
+   * They were sequential, and each is a server-side composite — so a tile took four round trips end
+   * to end, a screen of tiles took forty, and the grid filled in visibly one panel at a time. They
+   * have nothing to say to each other: four requests, four separate frames, no shared state. The
+   * lazy observer still decides *when* a tile loads, so this makes a tile that has started finish
+   * in roughly the time its slowest panel takes rather than the sum of all four. */
+  await Promise.all(_CAT_SHOTS.map(async (shot, i) => {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
-    if (!host) continue;
-    const head = heads.length ? heads[i % heads.length] : { text: c.name, emphasis: [] };
+    if (!host) return;
+    const head = picks[shot.key];
     try {
       const body = JSON.stringify({
         photoUrl: grounds.length ? grounds[i % grounds.length] : '',
@@ -1798,7 +1820,7 @@ async function _loadCatShots(id) {
            to full width. Overriding `align` alone is not enough: a style that confines type to the
            left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
            panel is showing. */
-        styleSpec: { ...(preset?.styleSpec || {}), align: _CAT_SHOTS[i].align, textZone: '', zoneWidth: 1 },
+        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: '', zoneWidth: 1 },
         width: 420,
         categoryId: id,
         visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
@@ -1827,7 +1849,7 @@ async function _loadCatShots(id) {
        * states around it. */
       let res = await draw();
       if (!res?.ok) { await new Promise((r) => setTimeout(r, 400)); res = await draw(); }
-      if (!res?.ok) { host.innerHTML = '<div class="acard-shot-fail">見本を作れませんでした</div>'; continue; }
+      if (!res?.ok) { host.innerHTML = '<div class="acard-shot-fail">見本を作れませんでした</div>'; return; }
       const url = URL.createObjectURL(await res.blob());
       /* Reuse the element and swap its src, rather than removing and appending.
          Removing first leaves the frame empty for a frame or two on a restyle — a second, smaller
@@ -1844,9 +1866,9 @@ async function _loadCatShots(id) {
         URL.revokeObjectURL(img.src);
       }
       img.src = url;
-      img.alt = `${c.name} の見本 ${i + 1}`;
+      img.alt = `${c.name} の見本 ${shot.label}`;
     } catch { /* one dead panel is not worth failing the other three over */ }
-  }
+  }));
 }
 
 async function _loadCatThumbInto(id) {
