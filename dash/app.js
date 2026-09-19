@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '39';
+const DASH_BUILD = '40';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1526,7 +1526,7 @@ function _categoryTile(c) {
           frame holds its aspect ratio so nothing reflows when the renders land. */ ''}
     ${v.sampleUrl || v.imagePrompt
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
-           ${_CAT_SHOTS.map((sh, i) =>
+           ${_catShots(c).map((sh, i) =>
              `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
              ><figcaption>${esc(sh.label)}${sh.align === (v.align || 'center') ? '（このカテゴリの設定）' : ''}</figcaption></figure>`).join('')}
          </div>`
@@ -1718,6 +1718,22 @@ function _catShotHeads(c) {
   return { short: byLen[0], long: byLen[byLen.length - 1] };
 }
 
+/* Two panels when there is only one headline to set, four when there are two.
+ *
+ * A category that has published nothing has exactly one line available — its own name — so the 2×2
+ * grid drew it four times and captioned half of them 長文, which names a comparison that is not
+ * happening. A repeated panel is worse than a missing one: it reads as the grid being broken, and it
+ * spends four renders to show one thing. Length is the axis that disappears when there is only one
+ * line, so the length row goes with it and alignment stays. */
+function _catShots(c) {
+  const { short, long } = _catShotHeads(c);
+  if (short.text !== long.text) return _CAT_SHOTS;
+  return [
+    { key: 'short', align: 'center', label: '中央' },
+    { key: 'short', align: 'left', label: '左' },
+  ];
+}
+
 /**
  * Which words to set apart, when the article did not record it.
  *
@@ -1806,6 +1822,7 @@ async function _loadCatShots(id) {
 
   /* This category's own words, at both ends of the length it writes in. */
   const picks = _catShotHeads(c);
+  const shots = _catShots(c);
 
   /* The four render in parallel, not one after another.
    *
@@ -1814,7 +1831,7 @@ async function _loadCatShots(id) {
    * have nothing to say to each other: four requests, four separate frames, no shared state. The
    * lazy observer still decides *when* a tile loads, so this makes a tile that has started finish
    * in roughly the time its slowest panel takes rather than the sum of all four. */
-  await Promise.all(_CAT_SHOTS.map(async (shot, i) => {
+  await Promise.all(shots.map(async (shot, i) => {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
     if (!host) return;
     const head = picks[shot.key];
@@ -1825,11 +1842,22 @@ async function _loadCatShots(id) {
         /* The alignment under test wins over whatever the style sets, and the text zone is opened
            to full width. Overriding `align` alone is not enough: a style that confines type to the
            left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
-           panel is showing. */
-        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: '', zoneWidth: 1 },
+           panel is showing.
+
+           `textZone: ''` here was rejected — `validateStyleSpec` logs `"textZone" has an unusable
+           value: ""` and drops the key — so the zone was never actually opened. 'full' is the value
+           the サムネタイトル catalogue passes, and the one the vocabulary accepts. */
+        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: 'full', zoneWidth: undefined },
         width: 420,
         categoryId: id,
-        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
+        /* Set on both keys, because `visual` is the one that decides.
+         *
+         * `resolveTemplate` reads `visual?.align` first and only falls back to the template's own
+         * (`hero-templates.js:1267`), so a category whose stored `visual.align` reached this route
+         * would silently outrank the alignment under test. Sending it explicitly removes that
+         * possibility. `styleSpec.align` is kept because it is a real key that does reach `t.align`
+         * — measured, not assumed — and the two are read by different code on different paths. */
+        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '', align: shot.align },
         /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
            publishing path, so what these panels show is what the pipeline would draw — a preview
            that composes its own lines is a preview of a different renderer. */
