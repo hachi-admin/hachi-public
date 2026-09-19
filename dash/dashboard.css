@@ -264,6 +264,13 @@ header{margin:12px;padding:10px 16px}
   border-radius:8px;font-size:11px;color:var(--txt);
 }
 .confirm-banner button{font-size:11px;padding:4px 10px}
+/* No anchor to sit next to: pin it over the viewport instead of at the end of the document. */
+.confirm-banner.floating{
+  position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+  z-index:900;max-width:min(560px,calc(100vw - 32px));
+  background:color-mix(in srgb,var(--red) 14%,var(--surf));
+  box-shadow:var(--sh-md);
+}
 
 /* Live Discord channel chips */
 .live-ch-chip{

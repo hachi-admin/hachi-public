@@ -569,11 +569,21 @@ function showConfirm(msg, onConfirm, targetEl) {
    * from a dead button, and the previous fix there corrected the selector without noticing that the
    * element it now correctly finds is one you cannot place anything after. So the rule is stated as
    * the general one it is: you cannot put something after an element that is pinned over that spot —
-   * put it before instead. */
+   * put it before instead.
+   *
+   * An anchorless banner has the same defect wearing different clothes. Appending a plain block to
+   * `document.body` puts it after the whole dashboard — the bottom of a long scrolling document,
+   * which is nowhere the operator is looking. It cost a second report ("2回押したけど特に変更なし"):
+   * the first press creates it offscreen, the second hits the duplicate check and removes it, so a
+   * pair of presses is create-unseen then delete-unseen and the task is never started. Anchorless
+   * means pinned to the viewport, not appended to the end of the page. */
   if (targetEl) {
     const pinned = ['sticky', 'fixed'].includes(getComputedStyle(targetEl).position);
     targetEl.insertAdjacentElement(pinned ? 'beforebegin' : 'afterend', banner);
-  } else document.body.appendChild(banner);
+  } else {
+    banner.classList.add('floating');
+    document.body.appendChild(banner);
+  }
   return () => banner.remove();
 }
 
