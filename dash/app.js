@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '41';
+const DASH_BUILD = '42';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1834,7 +1834,18 @@ async function _loadCatShots(id) {
     try {
       const body = JSON.stringify({
         photoUrl: grounds.length ? grounds[i % grounds.length] : '',
-        templateId: v.template || HP_PREVIEW_GROUND,
+        /* The preset's own template, not a photo one, when the category names none.
+         *
+         * This read `v.template || HP_PREVIEW_GROUND`, and `HP_PREVIEW_GROUND` is `photo_scrim` — so
+         * for every category that had not overridden its template (eight of eleven in production)
+         * the panel previewed a *photo* template, while the publishing path resolves
+         * `visual.template || preset.templateId` and gets `light_flat` or `dark_flat`. Those
+         * discard the picture entirely and set the headline on a flat ground: `usesPhoto: false` is
+         * their design. So the tile was showing a composition the category will never publish, over
+         * a photograph it will never use — a large part of why these panels did not answer the
+         * question they exist for. Same precedence as `generateCategorySample`; the constant is the
+         * last resort, for a category with neither. */
+        templateId: v.template || preset?.templateId || HP_PREVIEW_GROUND,
         /* The category's own alignment, not a varied one — this grid no longer tests that axis.
            The text zone is still opened to full width: a style that confines type to the left 56%
            would be previewing a column rather than the frame. `textZone: ''` used to be passed here
