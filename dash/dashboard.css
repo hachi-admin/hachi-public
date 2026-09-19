@@ -2376,11 +2376,6 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-mapf>span{font-size:9px;color:var(--m2);font-weight:600}
 .acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
 .acard-map .cat-quick{justify-self:start;white-space:nowrap}
-/* One control, not four. The bar was a two-column grid because it carried サムネタイトル・見出しの絵・
-   本文中の絵・配色; the three that were tuning moved to the detail panel and 配色 was never a control
-   at all. A single field has no columns to balance, so it spans instead of sitting in a half-width
-   cell with dead space beside it. */
-.acard-map-min{grid-template-columns:1fr}
 
 /* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
 .hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}

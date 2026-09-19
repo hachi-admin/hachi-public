@@ -1398,20 +1398,20 @@ function _catTileMapBar(c, v) {
         <option value="">自動</option>
       </select>
     </label>`;
-  /* The picture button is back on every tile.
+  /* No picture button.
    *
-   * It was removed from approved cards on the reasoning that re-rolling a picture you already have
-   * is tuning, and tuning belongs behind the click. That was wrong about where the judgement
-   * happens: the picture is the largest thing on the card and the thing being judged, so the
-   * control that changes it belongs where it is being looked at. It says what it costs instead. */
-  const pic = `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
-      onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>`;
-  if (c.status !== 'active') {
-    return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">${pic}</div>`;
-  }
+   * It existed for a decision nobody has to make any longer: approving draws a sample once, and
+   * changing the style or the colour redraws it once, because a picture is composed *for* the
+   * combination that will be laid over it. What was left for the button was re-rolling a picture
+   * that already matches — a pro-tier call buying a different picture rather than a better one.
+   *
+   * The two selects are the decisions that remain: which lettering, and which kind of picture. Both
+   * are free to change here — the lettering re-renders over the photograph already stored, and the
+   * recipe only decides what the *next* generation produces. */
+  if (c.status !== 'active') return '';
   return `<div class="acard-map" onclick="event.stopPropagation()">
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
-    ${pic}
+    ${row('img', '絵のレシピ', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
   </div>`;
 }
 
@@ -1451,7 +1451,15 @@ async function setCategoryRecipe(id, field, value) {
   if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
   const c = (CATEGORIES || []).find((x) => x.id === id);
   if (c?.visual) c.visual[field] = value;
-  showToast(value ? '固定しました。次に絵を作るときから使われます。' : '自動に戻しました。', 'success');
+  /* The four panels borrow their pictures from the chosen recipe's stored samples, so changing the
+     recipe changes what they are drawn over — and "what does this recipe look like" is exactly the
+     question being asked at the moment of choosing. Free: the samples already exist and only the
+     lettering is re-rendered. */
+  if (field === 'imagePrompt') { _catThumbDone.delete(id); _loadCatShots(id); }
+  const recipe = value ? _imagePrompts.find((r) => r.id === value) : null;
+  showToast(value
+    ? `${recipe?.name || value} に固定しました。次に絵を作るときから使われます。`
+    : '自動に戻しました。', 'success');
 }
 
 function _categoryTile(c) {
@@ -1622,6 +1630,10 @@ const _CAT_SHOTS = [
   { key: 'long', align: 'left', label: '長文・左' },
 ];
 
+/* Each panel gets the next picture in the set, so the four vary on both axes at once — layout and
+   ground. Pairing them rather than showing a 4×4 matrix is the compromise a tile can hold: sixteen
+   panels would answer more precisely and nobody would read them. */
+
 /* Headlines to set, when the category has no sample title of its own. Two lengths, because length
    is half of what these four panels exist to test — a style that holds a six-character claim and
    collapses on a twenty-four-character one is the failure that only shows up after publication. */
@@ -1670,7 +1682,24 @@ async function _loadCatShots(id) {
   if (!c || !grid) return;
   const v = c.visual || {};
   await _ensureHeroPresets();
+  await _ensureImagePrompts();
   const preset = _heroPresets.find((p) => p.id === v.heroPreset);
+
+  /* Four different pictures, not one picture four times.
+   *
+   * The question these panels answer is whether the lettering survives the pictures this category
+   * will actually get, and one photograph cannot answer it — a style that reads beautifully on a
+   * dark alley and vanishes on a bright interior looks perfect here and fails on publication.
+   *
+   * The variety is already paid for: every 絵のレシピ keeps `samples` in Firestore — three ordinary
+   * subjects (人物 / 風景 / もの), generated once per recipe and shared by every category using it.
+   * So the set is this category's own photograph plus its recipe's samples, and no new generation
+   * happens. A category whose recipe is 自動 has no samples to borrow and falls back to repeating
+   * its own, which is the old behaviour rather than a broken one. */
+  const recipe = v.imagePrompt ? _imagePrompts.find((r) => r.id === v.imagePrompt) : null;
+  const own = v.samplePhotoUrl || v.sampleUrl || '';
+  const grounds = [own, ...(recipe?.samples || []).map((sm) => sm.url).filter(Boolean)]
+    .filter(Boolean);
 
   for (const [i, sh] of _CAT_SHOTS.entries()) {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
@@ -1680,7 +1709,7 @@ async function _loadCatShots(id) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ..._authHeaders() },
         body: JSON.stringify({
-          photoUrl: v.samplePhotoUrl || v.sampleUrl || '',
+          photoUrl: grounds.length ? grounds[i % grounds.length] : '',
           templateId: v.template || HP_PREVIEW_GROUND,
           /* The alignment under test wins over whatever the style sets, and the text zone is opened
              to full width — a style that confines type to the left 56% would otherwise make 「中央」
@@ -2457,8 +2486,14 @@ function _fillCatImagePromptOptionsFor(selId, kind) {
   if (!sel) return;
   const want = sel.dataset.selected || '';
   const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === kind);
+  /* A recipe's name says almost nothing about what it produces — 「夜の路地」 could be anything —
+     and every recipe already keeps three generated samples in Firestore for exactly this. A
+     <select> cannot carry an image, so the option text stays text and the picture is shown by the
+     panels below, which draw over the chosen recipe's samples. The count is printed here so an
+     operator can see which recipes have been sampled at all. */
+  const shots = (r) => ((r.samples || []).length ? ` ・見本${r.samples.length}` : '');
   sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
-    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}</option>`).join('');
+    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}${shots(r)}</option>`).join('');
   if (want && !usable.some((r) => r.id === want)) {
     sel.insertAdjacentHTML('beforeend',
       `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
