@@ -1499,10 +1499,10 @@ function _categoryTile(c) {
           generated picture stays one generated picture; only the lettering is re-rendered. */ ''}
     ${v.sampleUrl
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
-           ${_CAT_SHOTS.map((sh, i) => `<figure class="acard-shot" data-variant="${i}"
-             ><div class="acard-shot-img"><img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} ${esc(sh.label)}" loading="lazy"
-               onclick="event.stopPropagation();_openLightbox(this.src,'${esc(c.name)} — ${esc(sh.label)}')"></div
-             ><figcaption>${esc(sh.label)}</figcaption></figure>`).join('')}
+           ${Array.from({ length: CAT_SHOT_COUNT }, (_, i) => `<figure class="acard-shot" data-variant="${i}"
+             ><div class="acard-shot-img"><img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} の見本 ${i + 1}" loading="lazy"
+               onclick="event.stopPropagation();_openLightbox(this.src,'${esc(c.name)}')"></div
+             ></figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1623,27 +1623,34 @@ async function _autoSampleQueue() {
 /* The four the サムネタイトル catalogue compares, kept identical to `_HP_VARIANTS` on purpose: the
    two screens answer the same question about the same styles, and two different sets of four would
    make them unable to be read against each other. */
-const _CAT_SHOTS = [
-  { key: 'short', align: 'center', label: '短文・中央' },
-  { key: 'short', align: 'left', label: '短文・左' },
-  { key: 'long', align: 'center', label: '長文・中央' },
-  { key: 'long', align: 'left', label: '長文・左' },
-];
+const CAT_SHOT_COUNT = 4;
 
-/* Each panel gets the next picture in the set, so the four vary on both axes at once — layout and
-   ground. Pairing them rather than showing a 4×4 matrix is the compromise a tile can hold: sixteen
-   panels would answer more precisely and nobody would read them. */
-
-/* Headlines to set, when the category has no sample title of its own. Two lengths, because length
-   is half of what these four panels exist to test — a style that holds a six-character claim and
-   collapses on a twenty-four-character one is the failure that only shows up after publication. */
-const _CAT_SHOT_LINES = {
-  short: [{ text: '結論から言う', scale: 1.15, indent: 0 }],
-  long: [
-    { text: '知らないまま続けていると', scale: 0.72, indent: 0 },
-    { text: '確実に損をする理由', scale: 1.15, indent: 0 },
-  ],
-};
+/**
+ * Up to four headlines this category has actually published, most recent first.
+ *
+ * The panels used to set two invented lines — 「結論から言う」 and 「知らないまま続けていると
+ * 確実に損をする理由」 — chosen to be one short and one long, then repeated across the pair that
+ * varied alignment. Two faults at once: the words belonged to no category in particular, so a
+ * 怪異譚 stream previewed in the voice of a productivity post; and the top two panels were
+ * word-for-word identical, which is two quarters of the tile spent saying the same thing.
+ *
+ * `_loadCatThumbInto` already solved this for the single thumbnail and said why in a comment — a
+ * category name set in 48pt previews a thumbnail that will never exist. The four panels simply were
+ * not using it. The articles list is already loaded for this page, so this costs nothing.
+ */
+function _catHeadlines(c) {
+  const seen = new Set();
+  const out = [];
+  const add = (t) => {
+    const v = String(t ?? '').trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v); out.push(v);
+  };
+  add(c.visual?.sampleTitle);
+  for (const a of (CAT_ARTICLES || [])) if (a.categoryId === c.id) add(a.title || a.angle);
+  add(c.name);
+  return out.slice(0, CAT_SHOT_COUNT);
+}
 
 function _observeCatThumbs() {
   _catThumbObserver?.disconnect();
@@ -1701,7 +1708,16 @@ async function _loadCatShots(id) {
   const grounds = [own, ...(recipe?.samples || []).map((sm) => sm.url).filter(Boolean)]
     .filter(Boolean);
 
-  for (const [i, sh] of _CAT_SHOTS.entries()) {
+  /* This category's own words, and its own alignment.
+   *
+   * The four no longer vary alignment against each other. They used to, which is why they carried
+   * 中央/左 captions and repeated each headline twice — but a category has one alignment, set once
+   * in its settings, so half the grid was demonstrating a layout it will never publish in. With
+   * four real headlines on four real pictures, each panel is a sample of what this category
+   * actually ships, and the captions named an axis that no longer moves. */
+  const heads = _catHeadlines(c);
+
+  for (let i = 0; i < CAT_SHOT_COUNT; i++) {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
     if (!host) continue;
     try {
@@ -1711,20 +1727,14 @@ async function _loadCatShots(id) {
         body: JSON.stringify({
           photoUrl: grounds.length ? grounds[i % grounds.length] : '',
           templateId: v.template || HP_PREVIEW_GROUND,
-          /* The alignment under test wins over whatever the style sets, and the text zone is opened
-             to full width — a style that confines type to the left 56% would otherwise make 「中央」
-             mean "centred inside that column", which is a lie about what the panel is showing. */
-          styleSpec: { ...(preset?.styleSpec || {}), align: sh.align, textZone: '', zoneWidth: 1 },
+          styleSpec: preset?.styleSpec || {},
           width: 420,
           categoryId: id,
-          visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
-          lines: _CAT_SHOT_LINES[sh.key],
-          /* Which phrase carries the claim. Without it the mask comes out empty and every panel
-             draws as flat type — so the emphasis colour, which is a third of the palette and the
-             part most worth judging, would be the one part these panels could not show. The
-             biggest line is the claim by construction: that is what the scale means. */
-          emphasis: [_CAT_SHOT_LINES[sh.key].reduce((b2, l) => ((l.scale ?? 1) > (b2.scale ?? 0) ? l : b2)).text],
-          article: v.sampleTitle || c.name,
+          visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
+          /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
+             publishing path, so what these panels show is what the pipeline would draw — a preview
+             that composes its own lines is a preview of a different renderer. */
+          article: heads.length ? heads[i % heads.length] : c.name,
         }),
       }).catch(() => null);
       if (!res?.ok) continue;
