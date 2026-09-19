@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '36';
+const DASH_BUILD = '37';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1507,16 +1507,24 @@ function _categoryTile(c) {
           the question a category's look actually has to survive — its titles are written per article
           and vary in exactly those two ways.
 
-          No image generation. All four are the *stored* photograph with type redrawn over it through
+          No image generation. All four are existing pictures with type redrawn over them through
           /api/hero-presets/preview, which is the same free path the preset cards use. The one
-          generated picture stays one generated picture; only the lettering is re-rendered. */ ''}
+          generated picture stays one generated picture; only the lettering is re-rendered.
+
+          Shown for any category with a 絵のレシピ, not only one that has bought a picture. The grounds
+          are this category's own sample *plus* its recipe's three stored samples, so a recipe is on
+          its own enough to fill four frames — and gating on `sampleUrl` meant the single category
+          that had never had a picture generated fell back to one title-only panel, which looked like
+          the grid was broken for it rather than like a category without a photograph. Four real
+          headlines on the recipe's own pictures is a better answer to "what will this look like"
+          than one headline on a synthetic ground, and it costs the same: nothing. */ ''}
     ${/* Empty frames, not a stand-in picture.
           Each panel used to be painted with the stored composite and then replaced by its own
           render, so four wrong images appeared and were swapped out one at a time — the flash was
           not a loading artefact but a picture that was never going to be correct, shown on purpose.
           `.hp-shot-img` on the サムネタイトル cards has always started empty for this reason. The
           frame holds its aspect ratio so nothing reflows when the renders land. */ ''}
-    ${v.sampleUrl
+    ${v.sampleUrl || v.imagePrompt
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
            ${_CAT_SHOTS.map((sh, i) =>
              `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
