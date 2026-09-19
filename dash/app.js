@@ -1645,15 +1645,46 @@ const CAT_SHOT_COUNT = 4;
 function _catHeadlines(c) {
   const seen = new Set();
   const out = [];
-  const add = (t) => {
+  const add = (t, emph) => {
     const v = String(t ?? '').trim();
     if (!v || seen.has(v)) return;
-    seen.add(v); out.push(v);
+    seen.add(v);
+    out.push({ text: v, emphasis: (emph || []).filter((e) => v.includes(e)) });
   };
   add(c.visual?.sampleTitle);
-  for (const a of (CAT_ARTICLES || [])) if (a.categoryId === c.id) add(a.title || a.angle);
+  for (const a of (CAT_ARTICLES || [])) {
+    if (a.categoryId !== c.id) continue;
+    /* `heroTitleText` is the headline that was set into the picture; `title` is the article's, and
+       they differ whenever a hero_title was written or an approved headline replaced the writer's.
+       The thumbnail's own is the right one here, with the words that were actually set apart. */
+    add(a.heroTitleText || a.title || a.angle, a.heroEmphasis);
+  }
   add(c.name);
-  return out.slice(0, CAT_SHOT_COUNT);
+  return out.slice(0, CAT_SHOT_COUNT).map((h) => (h.emphasis.length ? h : { ...h, emphasis: _guessEmphasis(h.text) }));
+}
+
+/**
+ * Which words to set apart, when the article did not record it.
+ *
+ * Only articles published after `heroEmphasis` started being stored carry the real answer, and a
+ * category's back catalogue does not. Without *something* every panel draws as flat type, and the
+ * emphasis colour — a third of the palette, and the part of a combination most worth judging — is
+ * the one thing these panels cannot show.
+ *
+ * Stated as a rule rather than tuned: Japanese thumbnail headlines put the claim after a 「：」 or
+ * inside 「」 often enough that reaching for those two is explainable, and anything it does not
+ * match is left flat rather than guessed at. A wrong highlight would misrepresent the style, which
+ * is worse than no highlight — so this only fires when the title says where the break is.
+ */
+function _guessEmphasis(title) {
+  const quoted = title.match(/[「『]([^」』]{2,14})[」』]/);
+  if (quoted) return [quoted[1]];
+  const split = title.split(/[：:]/);
+  if (split.length > 1) {
+    const tail = split.at(-1).trim();
+    if (tail.length >= 2 && tail.length <= 18) return [tail];
+  }
+  return [];
 }
 
 function _observeCatThumbs() {
@@ -1724,6 +1755,7 @@ async function _loadCatShots(id) {
   for (let i = 0; i < CAT_SHOT_COUNT; i++) {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
     if (!host) continue;
+    const head = heads.length ? heads[i % heads.length] : { text: c.name, emphasis: [] };
     try {
       const res = await fetch(apiUrl('/api/hero-presets/preview'), {
         method: 'POST',
@@ -1738,7 +1770,10 @@ async function _loadCatShots(id) {
           /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
              publishing path, so what these panels show is what the pipeline would draw — a preview
              that composes its own lines is a preview of a different renderer. */
-          article: heads.length ? heads[i % heads.length] : c.name,
+          article: head.text,
+          /* The words that were set apart when this headline shipped. Without them the mask comes
+             out empty and the panel draws flat, which hides the emphasis colour entirely. */
+          emphasis: head.emphasis,
         }),
       }).catch(() => null);
       if (!res?.ok) continue;
