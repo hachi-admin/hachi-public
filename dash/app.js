@@ -2653,8 +2653,14 @@ async function restyleCategorySample(id, presetId) {
     _refreshCatPalette(c, preset);
     _catThumbDone.delete(id);
     await _loadCatShots(id);
+    /* Says that the picture is coming, because it is: the server queues a re-draw when the pinned
+       style changes — the stored picture was composed for the previous palette. The four panels
+       above update immediately (type over the old photograph, free); the photograph itself lands
+       about half a minute later and appears on the next load. Not saying so would leave the
+       operator judging a combination against a picture chosen for a different one. */
     showToast(presetId === HP_AUTO ? '記事ごとに選ぶ設定にしました。'
-      : presetId ? 'このスタイルに変えました。' : '未設定に戻しました。', 'success');
+      : presetId ? 'このスタイルに変えました。新しい配色に合わせて絵を描き直しています（30秒ほど）。'
+        : '未設定に戻しました。', 'success');
   } finally {
     if (grid) grid.style.opacity = '';
   }
