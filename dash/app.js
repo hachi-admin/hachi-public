@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '35';
+const DASH_BUILD = '36';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1235,22 +1235,14 @@ function _renderTopics() {
           <span class="ac-desc">記事や動画の URL を渡すと、その内容を踏まえた考察記事を1本だけ書きます。カテゴリには属しません。</span>
         </span>
       </button>
-      ${/* Shown only while there is something to fix. Categories created before the rule existed
-            have no サムネタイトル and often no picture; new ones are styled at creation, so once the
-            backlog is cleared this button has no reason to occupy the toolbar again. */ ''}
-      ${(() => {
-        const b = _catBacklog();
-        if (!b.total) return '';
-        const parts = [b.style ? `スタイル ${b.style}件` : '', b.recipe ? `レシピ ${b.recipe}件` : '',
-          b.image ? `絵 ${b.image}件` : ''].filter(Boolean);
-        return `<button class="act-card" onclick="backfillCategories()">
-        <span class="ac-ico"><i class="ni ni-refresh" aria-hidden="true"></i></span>
-        <span class="ac-txt">
-          <span class="ac-title">未設定を埋める <b>${parts.join(' / ')}</b></span>
-          <span class="ac-desc">サムネタイトルと絵のレシピが決まっていないカテゴリに割り当てます。合うレシピが無いカテゴリには、新しいレシピを #approvals に提案します。絵は承認済みのものだけに生成して保存します（pro 課金）。一度に処理する件数は絞ってあります。</span>
-        </span>
-      </button>`;
-      })()}
+      ${/* 未設定を埋める used to stand here, and does not any more.
+            It existed because the eleven categories predating the styling rule had no サムネタイトル and
+            no 絵のレシピ, and a toolbar button was the way to fix them in bulk. That backlog is gone —
+            the styles and recipes are assigned, and new categories are styled at creation — so the
+            button's whole remaining job was to keep a count on screen. A count is not a reason to
+            press anything, and the number it showed was the *image* backlog, which the button could
+            only reduce by spending a pro-tier call per row. Per-category redraw lives in the tile and
+            the detail panel, where the row being charged for is the one you are looking at. */ ''}
     </div>
     <div class="cat-toolbar-views" role="tablist">
       <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
@@ -1791,30 +1783,43 @@ async function _loadCatShots(id) {
     if (!host) continue;
     const head = heads.length ? heads[i % heads.length] : { text: c.name, emphasis: [] };
     try {
-      const res = await fetch(apiUrl('/api/hero-presets/preview'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-        body: JSON.stringify({
-          photoUrl: grounds.length ? grounds[i % grounds.length] : '',
-          templateId: v.template || HP_PREVIEW_GROUND,
-          /* The alignment under test wins over whatever the style sets, and the text zone is opened
-             to full width. Overriding `align` alone is not enough: a style that confines type to the
-             left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
-             panel is showing. */
-          styleSpec: { ...(preset?.styleSpec || {}), align: _CAT_SHOTS[i].align, textZone: '', zoneWidth: 1 },
-          width: 420,
-          categoryId: id,
-          visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
-          /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
-             publishing path, so what these panels show is what the pipeline would draw — a preview
-             that composes its own lines is a preview of a different renderer. */
-          article: head.text,
-          /* The words that were set apart when this headline shipped. Without them the mask comes
-             out empty and the panel draws flat, which hides the emphasis colour entirely. */
-          emphasis: head.emphasis,
-        }),
+      const body = JSON.stringify({
+        photoUrl: grounds.length ? grounds[i % grounds.length] : '',
+        templateId: v.template || HP_PREVIEW_GROUND,
+        /* The alignment under test wins over whatever the style sets, and the text zone is opened
+           to full width. Overriding `align` alone is not enough: a style that confines type to the
+           left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
+           panel is showing. */
+        styleSpec: { ...(preset?.styleSpec || {}), align: _CAT_SHOTS[i].align, textZone: '', zoneWidth: 1 },
+        width: 420,
+        categoryId: id,
+        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
+        /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
+           publishing path, so what these panels show is what the pipeline would draw — a preview
+           that composes its own lines is a preview of a different renderer. */
+        article: head.text,
+        /* The words that were set apart when this headline shipped. Without them the mask comes
+           out empty and the panel draws flat, which hides the emphasis colour entirely. */
+        emphasis: head.emphasis,
+      });
+      const draw = () => fetch(apiUrl('/api/hero-presets/preview'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() }, body,
       }).catch(() => null);
-      if (!res?.ok) continue;
+      /* A panel that fails is retried once, and if it fails again it says so.
+       *
+       * `continue` used to be the whole handling, which left one empty grey frame among three drawn
+       * ones. An empty frame is also what "no picture yet" looks like, so a transient render failure
+       * was indistinguishable from a real state — and it read as the feature half-working rather
+       * than as one request that lost. Which panel blanks moves between reloads, which is the shape
+       * of a transient failure rather than a bad headline: a tile is four renders, a scrolled page
+       * is forty-plus, and they are all asking one service for a fresh composite.
+       *
+       * So: retried, because that is what a transient failure deserves; and labelled when the retry
+       * fails too, because a silent void is the one outcome that cannot be told apart from the
+       * states around it. */
+      let res = await draw();
+      if (!res?.ok) { await new Promise((r) => setTimeout(r, 400)); res = await draw(); }
+      if (!res?.ok) { host.innerHTML = '<div class="acard-shot-fail">見本を作れませんでした</div>'; continue; }
       const url = URL.createObjectURL(await res.blob());
       /* Reuse the element and swap its src, rather than removing and appending.
          Removing first leaves the frame empty for a frame or two on a restyle — a second, smaller
@@ -2929,71 +2934,6 @@ async function submitArticleFromUrl() {
   }).catch(() => null);
   document.getElementById('article-url-modal')?.remove();
   showToast(res?.ok ? '記事を書き始めました。完成すると #articles に投稿されます。' : '起動に失敗しました', res?.ok ? 'success' : 'error');
-}
-
-/* How many categories are still undecided. Counts the two states the backfill fixes — no style
-   pinned, or no sample drawn — as one number, because they are one backlog to the operator even
-   though they cost very differently to clear. */
-/* The two halves of the backlog, counted separately because they cost three orders of magnitude
-   apart and are therefore scoped differently.
-
-   Styling is one agent call: every category that is not 却下 gets it, including suggested ones,
-   where seeing what it would look like is part of deciding whether to approve it. Drawing is a
-   pro-tier generation, so only approved categories qualify — and the approve route draws its own
-   sample now, so an unapproved one gets its picture at the moment it stops being hypothetical.
-
-   Scoping both to approved is what made this button disappear: every approved category already had
-   both, the count was zero, and the control that would have styled the unapproved backlog hid
-   itself. A zero that hides the only evidence of its own reasoning is indistinguishable from a
-   button that does not work. */
-function _catBacklog() {
-  const live = (CATEGORIES || []).filter((c) => c.status !== 'blocked');
-  return {
-    style: live.filter((c) => !c.visual?.heroPreset).length,
-    /* Counted with the style rather than with the picture, because it costs what the style costs —
-       one agent call — and because a category with no recipe gets a different treatment each week,
-       which is the same "decided by nobody" state an unpinned サムネタイトル produces. */
-    recipe: live.filter((c) => !c.visual?.imagePrompt).length,
-    image: live.filter((c) => c.status === 'active' && !c.visual?.sampleAt).length,
-    get total() { return this.style + this.recipe + this.image; },
-  };
-}
-
-async function backfillCategories() {
-  const b = _catBacklog();
-  showConfirm(`スタイル未設定 ${b.style}件、レシピ未設定 ${b.recipe}件、承認済みで絵の無いもの ${b.image}件。`
-    + '一度に最大8件まで処理します（絵は pro 課金）。', async () => {
-    const res = await fetch(apiUrl('/api/article-categories/backfill'), {
-      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 8, withImages: true }),
-    }).catch(() => null);
-    if (!res?.ok) { showToast('起動できませんでした', 'error'); return; }
-    const { taskId } = await res.json().catch(() => ({}));
-    showToast('埋めはじめました。終わったらここに結果を出します。', 'success');
-    /* Watched, not assumed.
-     *
-     * This used to say "reload in a while" and stop, on the reasoning that a spinner which cannot
-     * see the task would be inventing a state. True — so the task is now readable, and this reads
-     * it. The state it was hiding turned out to matter: the recipe picker declines when nothing in
-     * the catalogue fits, which is a correct answer that assigns nothing and leaves every select
-     * still reading 自動. From the screen, that was indistinguishable from a button that never
-     * fired. */
-    if (!taskId) return;
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      const st = await fetch(apiUrl(`/api/article-categories/backfill/${taskId}`), { headers: _authHeaders() })
-        .then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      if (!st || st.status === 'running' || st.status === 'pending') continue;
-      if (st.status === 'completed') {
-        showToast(`終わりました — ${st.result || '変更なし'}`, 'success');
-        await _loadTopics();
-      } else {
-        showToast(`失敗しました: ${st.error || st.status}`, 'error');
-      }
-      return;
-    }
-    showToast('まだ動いています。しばらくしてから再読み込みしてください。', 'info');
-  });
 }
 
 async function scoutTopicsNow() {

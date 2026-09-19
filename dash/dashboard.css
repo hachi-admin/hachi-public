@@ -2375,6 +2375,10 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-shot figcaption{font-size:8.5px;color:var(--m2);text-align:center;padding:3px 2px;letter-spacing:.02em}
 /* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
 .acard-thumb.is-empty{opacity:.4}
+/* Quiet, but not absent. An empty panel reads as "no picture yet", which is a real state this is
+   not — so a failed render says which one it is, in type small enough not to compete with the three
+   panels that worked. */
+.acard-shot-fail{font-size:9px;color:var(--m2);text-align:center;padding:0 6px;line-height:1.4}
 /* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width
    tile; the button takes the last slot on its own. */
 /* minmax(0,1fr), not 1fr. A grid track's automatic minimum is its content's min-content width, and
