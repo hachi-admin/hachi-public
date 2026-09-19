@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '34';
+const DASH_BUILD = '35';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1468,9 +1468,19 @@ async function setCategoryRecipe(id, field, value) {
      lettering is re-rendered. */
   if (field === 'imagePrompt') { _catThumbDone.delete(id); _loadCatShots(id); }
   const recipe = value ? _imagePrompts.find((r) => r.id === value) : null;
+  /* Says "描き直しています", not "次から使われます". The server queues a redraw on this field the
+     moment it changes — but only for a category that already has a picture, and only when the new
+     value actually pins something, so the message has to be true of the case in hand rather than of
+     the feature in general. Clearing back to 自動 pins nothing and redraws nothing. */
+  const redrawing = value && c?.visual?.sampleAt;
   showToast(value
-    ? `${recipe?.name || value} に固定しました。次に絵を作るときから使われます。`
+    ? `${recipe?.name || value} に固定しました。${redrawing ? '絵を描き直しています（30秒ほど）。' : '次に絵を作るときから使われます。'}`
     : '自動に戻しました。', 'success');
+  /* Telling someone a picture is being redrawn and then never showing it is the same defect as a
+     button that appears to do nothing — so the promise collects itself. One late refresh, not a
+     poll: the task is a single image call with a known rough duration, and there is no per-task
+     endpoint for this path to watch. */
+  if (redrawing) setTimeout(() => { _catThumbDone.delete(id); _loadTopics(); }, 35000);
 }
 
 function _categoryTile(c) {
@@ -2800,7 +2810,27 @@ async function restyleCategorySample(id, presetId) {
    Only when it is open. This is also called from the category list, where none of those fields
    exist — and `_catVal` returns '' for a missing element, so saving from there would PATCH every
    setting to empty and quietly wipe the category. The form's own presence is the test. */
+/* Redrawing with the recipe it already has is the one redraw worth asking about.
+ *
+ * Changing the recipe redraws by itself — the server watches `visual.imagePrompt` and queues the
+ * task, because picking a different recipe *is* the request for a different picture and there is no
+ * reading under which someone chooses one and wants the old image kept. Pressing this button is the
+ * other case: same recipe, same settings, spend a pro-tier call to roll the dice again. That is a
+ * choice rather than a consequence, so it is the one that stops to ask, and the question names the
+ * recipe so "the same one" is a fact on screen rather than something to remember. */
 async function regenCategorySample(id) {
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  const rid = c?.visual?.imagePrompt;
+  const recipe = rid ? (_imagePrompts.find((r) => r.id === rid)?.name || rid) : null;
+  showConfirm(
+    `${recipe ? `レシピ「${recipe}」` : '自動のレシピ'}のまま、絵を作り直します。`
+    + '内容は変わります（pro 課金・30秒ほど）。',
+    () => _regenCategorySampleNow(id),
+    document.getElementById(`cat-sample-btn-${id}`) ?? undefined,
+  );
+}
+
+async function _regenCategorySampleNow(id) {
   /* Probes a field that is only rendered inside the editor. It used to be `cat-freq`, which the
      quick bar now owns and which no longer exists in the panel — so this silently became "never in
      the editor", and pressing 絵を作り直す from the open panel would have regenerated against the
