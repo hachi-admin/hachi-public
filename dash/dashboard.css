@@ -2342,6 +2342,27 @@ body:has(.mob-more-sheet.open) .page-area{
 
 /* The merged sample in the list, plus the two controls that change it in place. */
 .acard-thumb.is-sample{background:none}
+/* The category tile's four panels. Same geometry and the same four labels as .hp-shot-grid on the
+   サムネタイトル cards, because the two screens are asking the same question about the same styles and
+   two different layouts would stop them being readable against each other.
+   Bleeds to the tile edges like the single thumbnail it replaced, so the picture is still the
+   largest thing on the card. */
+.acard-shots{
+  display:grid;grid-template-columns:1fr 1fr;
+  margin:-14px -12px 4px;border-radius:12px 12px 0 0;overflow:hidden;
+}
+.acard-shot{
+  margin:0;display:flex;flex-direction:column;background:var(--bg);
+  border-left:1px solid var(--div);border-top:1px solid var(--div);
+}
+.acard-shot:nth-child(odd){border-left:none}
+.acard-shot:nth-child(-n+2){border-top:none}
+.acard-shot-img{
+  aspect-ratio:1280/670;background:color-mix(in srgb,var(--m) 8%,transparent);
+  display:flex;align-items:center;justify-content:center;
+}
+.acard-shot-img img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.acard-shot figcaption{font-size:8.5px;color:var(--m2);text-align:center;padding:3px 2px;letter-spacing:.02em}
 /* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
 .acard-thumb.is-empty{opacity:.4}
 /* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width

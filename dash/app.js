@@ -1398,17 +1398,20 @@ function _catTileMapBar(c, v) {
         <option value="">自動</option>
       </select>
     </label>`;
+  /* The picture button is back on every tile.
+   *
+   * It was removed from approved cards on the reasoning that re-rolling a picture you already have
+   * is tuning, and tuning belongs behind the click. That was wrong about where the judgement
+   * happens: the picture is the largest thing on the card and the thing being judged, so the
+   * control that changes it belongs where it is being looked at. It says what it costs instead. */
+  const pic = `<button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
+      onclick="regenCategorySample('${esc(c.id)}')">${v.sampleAt ? '絵を作り直す' : '絵をつける'}</button>`;
   if (c.status !== 'active') {
-    /* Nothing at all once there is a picture: the card is already showing everything the 承認 /
-       削除 decision needs, and those two buttons live in the footer. */
-    if (v.sampleAt) return '';
-    return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">
-      <button class="cat-quick" title="このカテゴリの絵のレシピで画像を1枚生成します（pro課金）"
-        onclick="regenCategorySample('${esc(c.id)}')">絵をつける</button>
-    </div>`;
+    return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">${pic}</div>`;
   }
-  return `<div class="acard-map acard-map-min" onclick="event.stopPropagation()">
+  return `<div class="acard-map" onclick="event.stopPropagation()">
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
+    ${pic}
   </div>`;
 }
 
@@ -1477,10 +1480,21 @@ function _categoryTile(c) {
           paid sample made. Gating it that way is why this list showed format icons and nothing
           else. What it draws is what this category would actually get: its pinned style if it has
           one, the template's own treatment if it does not. */ ''}
+    ${/* Four panels, the same four the サムネタイトル catalogue shows: 短文・中央 / 短文・左 /
+          長文・中央 / 長文・左. A single thumbnail answers "is there a picture"; it does not answer
+          "does this style hold up when the headline is long, or when it is flushed left", which is
+          the question a category's look actually has to survive — its titles are written per article
+          and vary in exactly those two ways.
+
+          No image generation. All four are the *stored* photograph with type redrawn over it through
+          /api/hero-presets/preview, which is the same free path the preset cards use. The one
+          generated picture stays one generated picture; only the lettering is re-rendered. */ ''}
     ${v.sampleUrl
-      ? `<div class="acard-thumb is-sample">
-           <img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} のサムネ見本" loading="lazy"
-             onclick="event.stopPropagation();_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
+      ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
+           ${_CAT_SHOTS.map((sh, i) => `<figure class="acard-shot" data-variant="${i}"
+             ><div class="acard-shot-img"><img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} ${esc(sh.label)}" loading="lazy"
+               onclick="event.stopPropagation();_openLightbox(this.src,'${esc(c.name)} — ${esc(sh.label)}')"></div
+             ><figcaption>${esc(sh.label)}</figcaption></figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1598,6 +1612,27 @@ async function _autoSampleQueue() {
   } finally { _autoSampleRunning = false; }
 }
 
+/* The four the サムネタイトル catalogue compares, kept identical to `_HP_VARIANTS` on purpose: the
+   two screens answer the same question about the same styles, and two different sets of four would
+   make them unable to be read against each other. */
+const _CAT_SHOTS = [
+  { key: 'short', align: 'center', label: '短文・中央' },
+  { key: 'short', align: 'left', label: '短文・左' },
+  { key: 'long', align: 'center', label: '長文・中央' },
+  { key: 'long', align: 'left', label: '長文・左' },
+];
+
+/* Headlines to set, when the category has no sample title of its own. Two lengths, because length
+   is half of what these four panels exist to test — a style that holds a six-character claim and
+   collapses on a twenty-four-character one is the failure that only shows up after publication. */
+const _CAT_SHOT_LINES = {
+  short: [{ text: '結論から言う', scale: 1.15, indent: 0 }],
+  long: [
+    { text: '知らないまま続けていると', scale: 0.72, indent: 0 },
+    { text: '確実に損をする理由', scale: 1.15, indent: 0 },
+  ],
+};
+
 function _observeCatThumbs() {
   _catThumbObserver?.disconnect();
   _catThumbDone.clear();
@@ -1605,11 +1640,70 @@ function _observeCatThumbs() {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
       _catThumbObserver.unobserve(e.target);
-      const id = e.target.dataset.catThumb;
-      if (id && !_catThumbDone.has(id)) { _catThumbDone.add(id); _loadCatThumbInto(id); }
+      const id = e.target.dataset.catThumb ?? e.target.dataset.catShots;
+      if (!id || _catThumbDone.has(id)) continue;
+      _catThumbDone.add(id);
+      if (e.target.dataset.catShots) _loadCatShots(id);
+      else _loadCatThumbInto(id);
     }
   }, { rootMargin: '250px' });
-  document.querySelectorAll('#page-articles [data-cat-thumb]').forEach((el) => _catThumbObserver.observe(el));
+  document.querySelectorAll('#page-articles [data-cat-thumb],#page-articles [data-cat-shots]')
+    .forEach((el) => _catThumbObserver.observe(el));
+}
+
+/**
+ * Redraw a category's four panels over the picture it already has.
+ *
+ * Lazy and in sequence, for the same reason the preset grid is: each panel is a server-side render,
+ * and a screen of categories scrolling into view at once would open dozens of connections from a
+ * phone. The renders are individually cheap and the queue is what keeps them that way — the
+ * overheating reported earlier came from doing this without one.
+ *
+ * Nothing here generates an image. `samplePhotoUrl` is the bare photograph kept beside the
+ * composite precisely so type can be re-set over it for free; if it is missing the stored composite
+ * is used as the ground, which is worse (type over type) but still costs nothing and still answers
+ * the layout question.
+ */
+async function _loadCatShots(id) {
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  const grid = document.querySelector(`#page-articles .acard-shots[data-cat-shots="${CSS.escape(id)}"]`);
+  if (!c || !grid) return;
+  const v = c.visual || {};
+  await _ensureHeroPresets();
+  const preset = _heroPresets.find((p) => p.id === v.heroPreset);
+
+  for (const [i, sh] of _CAT_SHOTS.entries()) {
+    const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
+    if (!host) continue;
+    try {
+      const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+        body: JSON.stringify({
+          photoUrl: v.samplePhotoUrl || v.sampleUrl || '',
+          templateId: v.template || HP_PREVIEW_GROUND,
+          /* The alignment under test wins over whatever the style sets, and the text zone is opened
+             to full width — a style that confines type to the left 56% would otherwise make 「中央」
+             mean "centred inside that column", which is a lie about what the panel is showing. */
+          styleSpec: { ...(preset?.styleSpec || {}), align: sh.align, textZone: '', zoneWidth: 1 },
+          width: 420,
+          categoryId: id,
+          visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
+          lines: _CAT_SHOT_LINES[sh.key],
+          /* Which phrase carries the claim. Without it the mask comes out empty and every panel
+             draws as flat type — so the emphasis colour, which is a third of the palette and the
+             part most worth judging, would be the one part these panels could not show. The
+             biggest line is the claim by construction: that is what the scale means. */
+          emphasis: [_CAT_SHOT_LINES[sh.key].reduce((b2, l) => ((l.scale ?? 1) > (b2.scale ?? 0) ? l : b2)).text],
+          article: v.sampleTitle || c.name,
+        }),
+      }).catch(() => null);
+      if (!res?.ok) continue;
+      const url = URL.createObjectURL(await res.blob());
+      const img = host.querySelector('img');
+      if (img) { img.src = url; img.dataset.full = url; }
+    } catch { /* one dead panel is not worth failing the other three over */ }
+  }
 }
 
 async function _loadCatThumbInto(id) {
@@ -2540,39 +2634,29 @@ function revertCategoryPrompt(id) {
  * what was just chosen rather than reverting to the old composite on the next load. */
 async function restyleCategorySample(id, presetId) {
   const c = (CATEGORIES || []).find((x) => x.id === id);
-  const host = document.querySelector(`.acard[data-id="${CSS.escape(id)}"] .acard-thumb img`);
   if (!c) return;
-  await _ensureHeroPresets();
-  const preset = _heroPresets.find((p) => p.id === presetId);
-  const v = c.visual || {};
-  if (host) host.style.opacity = '.4';
+  /* All four panels, not one thumbnail. Changing the style is the one thing these four exist to
+     let you compare, so redrawing a single frame would answer the question the tile stopped
+     asking. `_loadCatShots` re-renders them in sequence over the picture already stored. */
+  const grid = document.querySelector(`.acard[data-id="${CSS.escape(id)}"] .acard-shots`);
+  if (grid) grid.style.opacity = '.4';
   try {
-    const res = await fetch(apiUrl('/api/hero-presets/preview'), {
-      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        photoUrl: v.samplePhotoUrl || '',
-        templateId: v.template || preset?.templateId || 'photo_scrim',
-        styleSpec: preset?.styleSpec || {},
-        width: 640,
-        categoryId: id,
-        visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
-        article: v.sampleTitle || c.name,
-      }),
-    }).catch(() => null);
-    if (!res?.ok) { showToast('描き直せませんでした', 'error'); return; }
-    const url = URL.createObjectURL(await res.blob());
-    if (host) host.src = url;
-    // The pin itself is the durable part; the picture follows from it on the next full render.
-    await fetch(apiUrl(`/api/article-categories/${id}`), {
+    await _ensureHeroPresets();
+    const preset = _heroPresets.find((p) => p.id === presetId);
+    // The pin is the durable part; the panels follow from it.
+    const res = await fetch(apiUrl(`/api/article-categories/${id}`), {
       method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ visual: { heroPreset: presetId } }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
     if (c.visual) c.visual.heroPreset = presetId;
     _refreshCatPalette(c, preset);
+    _catThumbDone.delete(id);
+    await _loadCatShots(id);
     showToast(presetId === HP_AUTO ? '記事ごとに選ぶ設定にしました。'
       : presetId ? 'このスタイルに変えました。' : '未設定に戻しました。', 'success');
   } finally {
-    if (host) host.style.opacity = '';
+    if (grid) grid.style.opacity = '';
   }
 }
 
