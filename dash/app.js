@@ -2928,9 +2928,31 @@ async function backfillCategories() {
       body: JSON.stringify({ limit: 8, withImages: true }),
     }).catch(() => null);
     if (!res?.ok) { showToast('起動できませんでした', 'error'); return; }
-    /* No progress here on purpose: the task posts to Discord as it goes, and a spinner that cannot
-       see the task would be inventing a state it does not know. Reloading is the honest refresh. */
-    showToast('埋めはじめました。絵の生成に少し時間がかかります。しばらくしてから再読み込みしてください。', 'success');
+    const { taskId } = await res.json().catch(() => ({}));
+    showToast('埋めはじめました。終わったらここに結果を出します。', 'success');
+    /* Watched, not assumed.
+     *
+     * This used to say "reload in a while" and stop, on the reasoning that a spinner which cannot
+     * see the task would be inventing a state. True — so the task is now readable, and this reads
+     * it. The state it was hiding turned out to matter: the recipe picker declines when nothing in
+     * the catalogue fits, which is a correct answer that assigns nothing and leaves every select
+     * still reading 自動. From the screen, that was indistinguishable from a button that never
+     * fired. */
+    if (!taskId) return;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const st = await fetch(apiUrl(`/api/article-categories/backfill/${taskId}`), { headers: _authHeaders() })
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (!st || st.status === 'running' || st.status === 'pending') continue;
+      if (st.status === 'completed') {
+        showToast(`終わりました — ${st.result || '変更なし'}`, 'success');
+        await _loadTopics();
+      } else {
+        showToast(`失敗しました: ${st.error || st.status}`, 'error');
+      }
+      return;
+    }
+    showToast('まだ動いています。しばらくしてから再読み込みしてください。', 'info');
   });
 }
 
