@@ -1505,8 +1505,9 @@ function _categoryTile(c) {
           frame holds its aspect ratio so nothing reflows when the renders land. */ ''}
     ${v.sampleUrl
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
-           ${Array.from({ length: CAT_SHOT_COUNT }, (_, i) =>
-             `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div></figure>`).join('')}
+           ${_CAT_SHOTS.map((sh, i) =>
+             `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
+             ><figcaption>${esc(sh.label)}${sh.align === (v.align || 'center') ? '（このカテゴリの設定）' : ''}</figcaption></figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1627,7 +1628,19 @@ async function _autoSampleQueue() {
 /* The four the サムネタイトル catalogue compares, kept identical to `_HP_VARIANTS` on purpose: the
    two screens answer the same question about the same styles, and two different sets of four would
    make them unable to be read against each other. */
-const CAT_SHOT_COUNT = 4;
+/* Four panels, two axes: this category's real headlines, and the two alignments a style can be set
+   in. The alignment variation was removed when the headlines became real — the reasoning was that a
+   category has one alignment, so half the grid demonstrated a layout it would never publish in.
+   That was wrong about what the grid is for: `visual.align` is a setting the operator can change,
+   and the question "would this look better flushed left" is unanswerable without seeing it. With
+   four different headlines there is no longer a duplicated panel, so both axes fit at once. */
+const _CAT_SHOTS = [
+  { align: 'center', label: '中央' },
+  { align: 'left', label: '左' },
+  { align: 'center', label: '中央' },
+  { align: 'left', label: '左' },
+];
+const CAT_SHOT_COUNT = _CAT_SHOTS.length;
 
 /**
  * Up to four headlines this category has actually published, most recent first.
@@ -1763,10 +1776,14 @@ async function _loadCatShots(id) {
         body: JSON.stringify({
           photoUrl: grounds.length ? grounds[i % grounds.length] : '',
           templateId: v.template || HP_PREVIEW_GROUND,
-          styleSpec: preset?.styleSpec || {},
+          /* The alignment under test wins over whatever the style sets, and the text zone is opened
+             to full width. Overriding `align` alone is not enough: a style that confines type to the
+             left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
+             panel is showing. */
+          styleSpec: { ...(preset?.styleSpec || {}), align: _CAT_SHOTS[i].align, textZone: '', zoneWidth: 1 },
           width: 420,
           categoryId: id,
-          visual: { accent: v.accent || '', align: v.align || '', eyebrow: v.eyebrow || '' },
+          visual: { accent: v.accent || '', eyebrow: v.eyebrow || '' },
           /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
              publishing path, so what these panels show is what the pipeline would draw — a preview
              that composes its own lines is a preview of a different renderer. */

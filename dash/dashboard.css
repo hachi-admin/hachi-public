@@ -2362,9 +2362,10 @@ body:has(.mob-more-sheet.open) .page-area{
   display:flex;align-items:center;justify-content:center;
 }
 .acard-shot-img img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
-/* No captions. They named the axis each panel varied on — 短文・中央 and the rest — and the panels
-   no longer vary on it: a category has one alignment, so four real headlines on four real pictures
-   is what these are, and labelling them would be labelling a distinction that is not there. */
+/* The caption names the alignment the panel is set in, and marks which of the two is this
+   category's own setting — otherwise the grid shows a layout the category will never publish in
+   without saying which one that is. */
+.acard-shot figcaption{font-size:8.5px;color:var(--m2);text-align:center;padding:3px 2px;letter-spacing:.02em}
 /* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
 .acard-thumb.is-empty{opacity:.4}
 /* Three pinnable mappings and, when it applies, the generate button. Two across on a full-width
