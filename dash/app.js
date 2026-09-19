@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '38';
+const DASH_BUILD = '39';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1782,21 +1782,27 @@ async function _loadCatShots(id) {
   await _ensureImagePrompts();
   const preset = _heroPresets.find((p) => p.id === v.heroPreset);
 
-  /* Four different pictures, not one picture four times.
+  /* This category's own picture under all four, when it has one.
    *
-   * The question these panels answer is whether the lettering survives the pictures this category
-   * will actually get, and one photograph cannot answer it — a style that reads beautifully on a
-   * dark alley and vanishes on a bright interior looks perfect here and fails on publication.
+   * These panels briefly cycled four different grounds — the category's picture plus its recipe's
+   * three stored samples — on the argument that a style reading well on a dark alley and vanishing
+   * on a bright interior should be caught here rather than on publication. True as far as it goes,
+   * but the samples are generic: one set per recipe, generated once and shared by every category
+   * using it, of 人物 / 風景 / もの that belong to no category in particular. Three quarters of a tile
+   * showing pictures this category will never publish is not a harder test, it is a different
+   * subject — and it made the grid unreadable as an answer to the question actually being asked,
+   * which is whether *this* headline is legible on *this* picture.
    *
-   * The variety is already paid for: every 絵のレシピ keeps `samples` in Firestore — three ordinary
-   * subjects (人物 / 風景 / もの), generated once per recipe and shared by every category using it.
-   * So the set is this category's own photograph plus its recipe's samples, and no new generation
-   * happens. A category whose recipe is 自動 has no samples to borrow and falls back to repeating
-   * its own, which is the old behaviour rather than a broken one. */
+   * So the ground is held constant and only the type moves, which is exactly what the サムネタイトル
+   * catalogue does with `_HP_VARIANTS`: one background, 短文/長文 × 中央/左. One variable at a time.
+   * The recipe's samples remain the fallback for a category that has never had a picture generated —
+   * there, a borrowed ground is strictly better than a synthetic one, and it is at least drawn in
+   * the treatment this category is pinned to. */
   const recipe = v.imagePrompt ? _imagePrompts.find((r) => r.id === v.imagePrompt) : null;
   const own = v.samplePhotoUrl || v.sampleUrl || '';
-  const grounds = [own, ...(recipe?.samples || []).map((sm) => sm.url).filter(Boolean)]
-    .filter(Boolean);
+  const grounds = own
+    ? [own]
+    : (recipe?.samples || []).map((sm) => sm.url).filter(Boolean);
 
   /* This category's own words, at both ends of the length it writes in. */
   const picks = _catShotHeads(c);
