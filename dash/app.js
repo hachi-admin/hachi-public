@@ -1497,12 +1497,16 @@ function _categoryTile(c) {
           No image generation. All four are the *stored* photograph with type redrawn over it through
           /api/hero-presets/preview, which is the same free path the preset cards use. The one
           generated picture stays one generated picture; only the lettering is re-rendered. */ ''}
+    ${/* Empty frames, not a stand-in picture.
+          Each panel used to be painted with the stored composite and then replaced by its own
+          render, so four wrong images appeared and were swapped out one at a time — the flash was
+          not a loading artefact but a picture that was never going to be correct, shown on purpose.
+          `.hp-shot-img` on the サムネタイトル cards has always started empty for this reason. The
+          frame holds its aspect ratio so nothing reflows when the renders land. */ ''}
     ${v.sampleUrl
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
-           ${Array.from({ length: CAT_SHOT_COUNT }, (_, i) => `<figure class="acard-shot" data-variant="${i}"
-             ><div class="acard-shot-img"><img src="${esc(v.sampleUrl)}" alt="${esc(c.name)} の見本 ${i + 1}" loading="lazy"
-               onclick="event.stopPropagation();_openLightbox(this.src,'${esc(c.name)}')"></div
-             ></figure>`).join('')}
+           ${Array.from({ length: CAT_SHOT_COUNT }, (_, i) =>
+             `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div></figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1739,8 +1743,22 @@ async function _loadCatShots(id) {
       }).catch(() => null);
       if (!res?.ok) continue;
       const url = URL.createObjectURL(await res.blob());
-      const img = host.querySelector('img');
-      if (img) { img.src = url; img.dataset.full = url; }
+      /* Reuse the element and swap its src, rather than removing and appending.
+         Removing first leaves the frame empty for a frame or two on a restyle — a second, smaller
+         version of the flash this whole change is about. The click handler reads `img.src` when it
+         fires rather than closing over the URL, so it stays correct across swaps. */
+      let img = host.querySelector('img');
+      if (!img) {
+        img = document.createElement('img');
+        img.loading = 'lazy';
+        img.addEventListener('click', (e) => { e.stopPropagation(); _openLightbox(img.src, c.name); });
+        host.appendChild(img);
+      } else if (img.src.startsWith('blob:')) {
+        // Ours, and about to be unreachable. Left unrevoked these accumulate for the whole session.
+        URL.revokeObjectURL(img.src);
+      }
+      img.src = url;
+      img.alt = `${c.name} の見本 ${i + 1}`;
     } catch { /* one dead panel is not worth failing the other three over */ }
   }
 }
