@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '40';
+const DASH_BUILD = '41';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1528,7 +1528,7 @@ function _categoryTile(c) {
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
            ${_catShots(c).map((sh, i) =>
              `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
-             ><figcaption>${esc(sh.label)}${sh.align === (v.align || 'center') ? '（このカテゴリの設定）' : ''}</figcaption></figure>`).join('')}
+             >${sh.label ? `<figcaption>${esc(sh.label)}</figcaption>` : ''}</figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1646,26 +1646,26 @@ async function _autoSampleQueue() {
   } finally { _autoSampleRunning = false; }
 }
 
-/* The four the サムネタイトル catalogue compares, kept identical to `_HP_VARIANTS` on purpose: the
-   two screens answer the same question about the same styles, and two different sets of four would
-   make them unable to be read against each other. */
-/* Two axes, 短文/長文 × 中央/左 — the same grid `_HP_VARIANTS` uses, and for the same reason.
+/* One axis: 短文 / 長文, on this category's own picture and its own alignment.
  *
- * This briefly ran as 中央/左/中央/左 on the argument that four *different* real headlines made a
- * second axis unnecessary. That argument assumed four headlines exist. A category with one published
- * article has two candidate lines — the article and its own name — so `heads[i % 2]` drew panels 0
- * and 2 identically and panels 1 and 3 identically, and the tile spent half of itself repeating. Two
- * rows labelled 中央/左 and 中央/左 also read as the same comparison done twice, which is precisely
- * what it was.
+ * The alignment axis is gone, and it was measured out rather than argued out. `resolveTemplate`
+ * honours the override — three different spec shapes all resolved to `left` when asked directly — so
+ * 中央/左 was being rendered faithfully and *still* produced two panels that looked the same.
+ * Japanese headlines at thumbnail size are set to very near the full width of the frame, and a line
+ * that fills its zone lands in the same place whether it is centred or flushed left. A variable that
+ * cannot move the picture is not worth half the grid.
  *
- * Length is the axis worth spending a row on because it is the one the category cannot control: a
- * style is chosen once, and then every article writes its own headline at whatever length it needs.
- * A style that holds at eight characters and collapses at forty fails on publication, not here. */
+ * Length is the axis that does move it, and the one the category cannot control: a style is pinned
+ * once, then every article writes its own headline at whatever length it needs. A style that holds
+ * at eight characters and collapses at forty fails on publication, not here.
+ *
+ * So two panels, not four. The grid was four because the サムネタイトル catalogue is four — but that
+ * screen varies alignment over a *synthetic* ground with short sample lines, where the axis is
+ * plainly visible. Copying its shape without the conditions that made it informative is how this
+ * ended up showing one picture four times. */
 const _CAT_SHOTS = [
-  { key: 'short', align: 'center', label: '短文・中央' },
-  { key: 'short', align: 'left', label: '短文・左' },
-  { key: 'long', align: 'center', label: '長文・中央' },
-  { key: 'long', align: 'left', label: '長文・左' },
+  { key: 'short', label: '短文' },
+  { key: 'long', label: '長文' },
 ];
 
 /**
@@ -1718,20 +1718,16 @@ function _catShotHeads(c) {
   return { short: byLen[0], long: byLen[byLen.length - 1] };
 }
 
-/* Two panels when there is only one headline to set, four when there are two.
+/* One panel when there is only one headline to set, two when the category writes at two lengths.
  *
- * A category that has published nothing has exactly one line available — its own name — so the 2×2
- * grid drew it four times and captioned half of them 長文, which names a comparison that is not
- * happening. A repeated panel is worse than a missing one: it reads as the grid being broken, and it
- * spends four renders to show one thing. Length is the axis that disappears when there is only one
- * line, so the length row goes with it and alignment stays. */
+ * A category that has published nothing has exactly one line available — its own name — and drawing
+ * it twice under the captions 短文 and 長文 names a comparison that is not happening. A repeated
+ * panel is worse than a missing one: it reads as the grid being broken, and it buys two renders to
+ * show one thing. The single panel spans the full width, so the tile does not show a half-empty
+ * row either. */
 function _catShots(c) {
   const { short, long } = _catShotHeads(c);
-  if (short.text !== long.text) return _CAT_SHOTS;
-  return [
-    { key: 'short', align: 'center', label: '中央' },
-    { key: 'short', align: 'left', label: '左' },
-  ];
+  return short.text === long.text ? [{ key: 'short', label: '' }] : _CAT_SHOTS;
 }
 
 /**
@@ -1824,13 +1820,13 @@ async function _loadCatShots(id) {
   const picks = _catShotHeads(c);
   const shots = _catShots(c);
 
-  /* The four render in parallel, not one after another.
+  /* The panels render in parallel, not one after another.
    *
-   * They were sequential, and each is a server-side composite — so a tile took four round trips end
-   * to end, a screen of tiles took forty, and the grid filled in visibly one panel at a time. They
-   * have nothing to say to each other: four requests, four separate frames, no shared state. The
-   * lazy observer still decides *when* a tile loads, so this makes a tile that has started finish
-   * in roughly the time its slowest panel takes rather than the sum of all four. */
+   * They were sequential, and each is a server-side composite — so a tile took a round trip per
+   * panel and the grid filled in visibly one at a time. They have nothing to say to each other:
+   * separate requests, separate frames, no shared state. The lazy observer still decides *when* a
+   * tile loads; this only means a tile that has started finishes in roughly the time its slowest
+   * panel takes rather than the sum of them. */
   await Promise.all(shots.map(async (shot, i) => {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
     if (!host) return;
@@ -1839,25 +1835,18 @@ async function _loadCatShots(id) {
       const body = JSON.stringify({
         photoUrl: grounds.length ? grounds[i % grounds.length] : '',
         templateId: v.template || HP_PREVIEW_GROUND,
-        /* The alignment under test wins over whatever the style sets, and the text zone is opened
-           to full width. Overriding `align` alone is not enough: a style that confines type to the
-           left 56% makes 「中央」 mean "centred inside that column", which is a lie about what the
-           panel is showing.
-
-           `textZone: ''` here was rejected — `validateStyleSpec` logs `"textZone" has an unusable
-           value: ""` and drops the key — so the zone was never actually opened. 'full' is the value
-           the サムネタイトル catalogue passes, and the one the vocabulary accepts. */
-        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: 'full', zoneWidth: undefined },
+        /* The category's own alignment, not a varied one — this grid no longer tests that axis.
+           The text zone is still opened to full width: a style that confines type to the left 56%
+           would be previewing a column rather than the frame. `textZone: ''` used to be passed here
+           and was rejected outright (`validateStyleSpec`: "unusable value"), so the zone was never
+           actually opened; 'full' is the value the vocabulary accepts. */
+        styleSpec: { ...(preset?.styleSpec || {}), align: v.align || undefined, textZone: 'full', zoneWidth: undefined },
         width: 420,
         categoryId: id,
-        /* Set on both keys, because `visual` is the one that decides.
-         *
-         * `resolveTemplate` reads `visual?.align` first and only falls back to the template's own
-         * (`hero-templates.js:1267`), so a category whose stored `visual.align` reached this route
-         * would silently outrank the alignment under test. Sending it explicitly removes that
-         * possibility. `styleSpec.align` is kept because it is a real key that does reach `t.align`
-         * — measured, not assumed — and the two are read by different code on different paths. */
-        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '', align: shot.align },
+        /* Sent on both keys because `resolveTemplate` reads `visual?.align` first and only falls
+           back to the template's own (`hero-templates.js:1267`). Both now carry the category's
+           setting, so whichever one wins, the panel previews what this category publishes in. */
+        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '', align: v.align || '' },
         /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
            publishing path, so what these panels show is what the pipeline would draw — a preview
            that composes its own lines is a preview of a different renderer. */

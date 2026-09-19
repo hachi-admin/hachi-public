@@ -2364,14 +2364,18 @@ body:has(.mob-more-sheet.open) .page-area{
 }
 .acard-shot:nth-child(odd){border-left:none}
 .acard-shot:nth-child(-n+2){border-top:none}
+/* A category with one headline gets one panel, and a half-empty row would read as a render that
+   failed. Spans both columns instead. */
+.acard-shot:only-child{grid-column:1 / -1}
 .acard-shot-img{
   aspect-ratio:1280/670;background:color-mix(in srgb,var(--m) 8%,transparent);
   display:flex;align-items:center;justify-content:center;
 }
 .acard-shot-img img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
-/* The caption names the alignment the panel is set in, and marks which of the two is this
-   category's own setting — otherwise the grid shows a layout the category will never publish in
-   without saying which one that is. */
+/* The caption names which end of the category's headline range the panel is showing. It used to
+   name the alignment as well, back when the grid varied that — it no longer does, because a
+   Japanese headline set to the full width of the frame lands in the same place centred or flushed
+   left, so the caption was the only place the difference existed. */
 .acard-shot figcaption{font-size:8.5px;color:var(--m2);text-align:center;padding:3px 2px;letter-spacing:.02em}
 /* A render that failed. The frame stays so the grid does not reflow mid-scroll. */
 .acard-thumb.is-empty{opacity:.4}
