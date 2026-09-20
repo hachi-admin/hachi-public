@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '42';
+const DASH_BUILD = '43';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1528,7 +1528,7 @@ function _categoryTile(c) {
       ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
            ${_catShots(c).map((sh, i) =>
              `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
-             >${sh.label ? `<figcaption>${esc(sh.label)}</figcaption>` : ''}</figure>`).join('')}
+             >${sh.label ? `<figcaption>${esc(sh.label)}${sh.align === (v.align || 'center') ? '（この設定）' : ''}</figcaption>` : ''}</figure>`).join('')}
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
@@ -1646,26 +1646,27 @@ async function _autoSampleQueue() {
   } finally { _autoSampleRunning = false; }
 }
 
-/* One axis: 短文 / 長文, on this category's own picture and its own alignment.
+/* Four panels, two axes — the same grid `_HP_VARIANTS` compares, for the same reason.
  *
- * The alignment axis is gone, and it was measured out rather than argued out. `resolveTemplate`
- * honours the override — three different spec shapes all resolved to `left` when asked directly — so
- * 中央/左 was being rendered faithfully and *still* produced two panels that looked the same.
- * Japanese headlines at thumbnail size are set to very near the full width of the frame, and a line
- * that fills its zone lands in the same place whether it is centred or flushed left. A variable that
- * cannot move the picture is not worth half the grid.
+ * The alignment axis was dropped once, on evidence: `resolveTemplate` honoured the override and the
+ * panels still looked identical. The measurement was right and the conclusion was wrong. The
+ * catalogue makes the axis visible by zeroing every line's `indent` before it renders
+ * (`app.js`: `raw.map((l) => ({ ...l, indent: 0 }))`), because a per-line horizontal step is a
+ * second thing moving the type sideways and it swamps the one under test. This grid was sending
+ * whole titles with the server free to break them where it liked, so there was nothing holding the
+ * two panels apart. With authored lines and the indents flattened, 中央 and 左 differ.
  *
- * Length is the axis that does move it, and the one the category cannot control: a style is pinned
- * once, then every article writes its own headline at whatever length it needs. A style that holds
- * at eight characters and collapses at forty fails on publication, not here.
+ * Length is still the axis the category cannot control — a style is pinned once, then every article
+ * writes its own headline at whatever length it needs — so it keeps a row.
  *
- * So two panels, not four. The grid was four because the サムネタイトル catalogue is four — but that
- * screen varies alignment over a *synthetic* ground with short sample lines, where the axis is
- * plainly visible. Copying its shape without the conditions that made it informative is how this
- * ended up showing one picture four times. */
+ * Two of the four preview an alignment this category will not publish in. That is the point: the
+ * grid is where the layout is decided, and 「左に寄せたらどうなるか」 is unanswerable without seeing
+ * it. The caption marks which one is the category's own setting. */
 const _CAT_SHOTS = [
-  { key: 'short', label: '短文' },
-  { key: 'long', label: '長文' },
+  { key: 'short', align: 'center', label: '短文・中央' },
+  { key: 'short', align: 'left', label: '短文・左' },
+  { key: 'long', align: 'center', label: '長文・中央' },
+  { key: 'long', align: 'left', label: '長文・左' },
 ];
 
 /**
@@ -1725,9 +1726,39 @@ function _catShotHeads(c) {
  * panel is worse than a missing one: it reads as the grid being broken, and it buys two renders to
  * show one thing. The single panel spans the full width, so the tile does not show a half-empty
  * row either. */
+/* The category's own authored copy, when it has been written.
+ *
+ * `visual.sampleLines` is written by `hero-style` from the category's definition, readers and
+ * palette — the same call that pins its サムネタイトル. It exists so these panels stop depending on
+ * whether the pipeline has run: a category with nothing published used to show one panel, and one
+ * with a single article showed the same words twice under two different captions. The copy is
+ * authored lines rather than a title string, so the line breaks are decided once and both this
+ * screen and the stored composite draw the same words.
+ *
+ * Indents flattened, as the catalogue does: a per-line horizontal step moves the type sideways and
+ * would swamp the alignment the panel exists to compare. */
+function _catSampleLines(c, key) {
+  const raw = c?.visual?.sampleLines?.[key];
+  if (!Array.isArray(raw) || raw.length < 2) return null;
+  return {
+    lines: raw.map((l) => ({ ...l, indent: 0 })),
+    emphasis: (c.visual.sampleEmphasis?.[key] ?? []).filter(Boolean).slice(0, 2),
+  };
+}
+
+/* Four panels when the copy exists, and the old article-derived pair when it does not.
+ *
+ * Kept rather than replaced outright: a category styled before `sampleLines` existed has none yet,
+ * and four empty frames read as a broken grid where two real ones read as what they are. The
+ * backfill fills the gap on its own, so this fallback shrinks to nothing without anyone acting. */
 function _catShots(c) {
+  if (_catSampleLines(c, 'short') && _catSampleLines(c, 'long')) return _CAT_SHOTS;
   const { short, long } = _catShotHeads(c);
-  return short.text === long.text ? [{ key: 'short', label: '' }] : _CAT_SHOTS;
+  if (short.text === long.text) return [{ key: 'short', align: c.visual?.align || 'center', label: '' }];
+  return [
+    { key: 'short', align: c.visual?.align || 'center', label: '短文' },
+    { key: 'long', align: c.visual?.align || 'center', label: '長文' },
+  ];
 }
 
 /**
@@ -1819,6 +1850,10 @@ async function _loadCatShots(id) {
   /* This category's own words, at both ends of the length it writes in. */
   const picks = _catShotHeads(c);
   const shots = _catShots(c);
+  /* Authored copy if the category has it, the article-derived pair otherwise. Resolved once per
+     tile rather than per panel: two panels share each length, and re-deriving would be two chances
+     to disagree with itself. */
+  const authored = { short: _catSampleLines(c, 'short'), long: _catSampleLines(c, 'long') };
 
   /* The panels render in parallel, not one after another.
    *
@@ -1831,6 +1866,7 @@ async function _loadCatShots(id) {
     const host = grid.querySelector(`.acard-shot[data-variant="${i}"] .acard-shot-img`);
     if (!host) return;
     const head = picks[shot.key];
+    const set = authored[shot.key];
     try {
       const body = JSON.stringify({
         photoUrl: grounds.length ? grounds[i % grounds.length] : '',
@@ -1846,25 +1882,30 @@ async function _loadCatShots(id) {
          * question they exist for. Same precedence as `generateCategorySample`; the constant is the
          * last resort, for a category with neither. */
         templateId: v.template || preset?.templateId || HP_PREVIEW_GROUND,
-        /* The category's own alignment, not a varied one — this grid no longer tests that axis.
-           The text zone is still opened to full width: a style that confines type to the left 56%
-           would be previewing a column rather than the frame. `textZone: ''` used to be passed here
-           and was rejected outright (`validateStyleSpec`: "unusable value"), so the zone was never
-           actually opened; 'full' is the value the vocabulary accepts. */
-        styleSpec: { ...(preset?.styleSpec || {}), align: v.align || undefined, textZone: 'full', zoneWidth: undefined },
+        /* The alignment under test, not the category's own — this panel exists to compare them.
+           The text zone is opened to full width too: a style that confines type to the left 56%
+           makes 「中央」 mean "centred inside that column", which is a lie about what is shown.
+           `textZone: ''` used to be passed here and was rejected outright (`validateStyleSpec`:
+           "unusable value"), so the zone was never actually opened; 'full' is what the vocabulary
+           accepts. */
+        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: 'full', zoneWidth: undefined },
         width: 420,
         categoryId: id,
-        /* Sent on both keys because `resolveTemplate` reads `visual?.align` first and only falls
-           back to the template's own (`hero-templates.js:1267`). Both now carry the category's
-           setting, so whichever one wins, the panel previews what this category publishes in. */
-        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '', align: v.align || '' },
-        /* `article`, not hand-built `lines`. The server wraps a title exactly as it does on the
-           publishing path, so what these panels show is what the pipeline would draw — a preview
-           that composes its own lines is a preview of a different renderer. */
-        article: head.text,
-        /* The words that were set apart when this headline shipped. Without them the mask comes
-           out empty and the panel draws flat, which hides the emphasis colour entirely. */
-        emphasis: head.emphasis,
+        /* On both keys, and `visual` is the one that decides: `resolveTemplate` reads
+           `visual?.align` first and only falls back to the template's own
+           (`hero-templates.js:1267`). Sending the category's own here would let it outrank the
+           variant, and all four panels would come out in one alignment again. */
+        visual: { accent: v.accent || '', eyebrow: v.eyebrow || '', align: shot.align },
+        /* Authored lines when the category has its own copy: the breaks are decided once and the
+           stored composite draws the same words, so the tile and the saved sample cannot disagree.
+           `article` is the fallback — the server breaks a bare title exactly as it does at publish
+           time, which is the right second choice but not the same words twice. */
+        ...(set ? { lines: set.lines } : { article: head.text }),
+        /* The phrase set apart. Without it the mask comes out empty and the panel draws flat,
+           hiding the emphasis colour — a third of the palette, and the part most worth judging.
+           With authored lines the server derives nothing on its own (`hero-presets.js:953-958`
+           returns `[]` rather than guessing), so this is the only way it arrives. */
+        emphasis: set ? set.emphasis : head.emphasis,
       });
       const draw = () => fetch(apiUrl('/api/hero-presets/preview'), {
         method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() }, body,
