@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '43';
+const DASH_BUILD = '44';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1842,7 +1842,15 @@ async function _loadCatShots(id) {
    * there, a borrowed ground is strictly better than a synthetic one, and it is at least drawn in
    * the treatment this category is pinned to. */
   const recipe = v.imagePrompt ? _imagePrompts.find((r) => r.id === v.imagePrompt) : null;
-  const own = v.samplePhotoUrl || v.sampleUrl || '';
+  /* The bare picture only — never the finished composite.
+   *
+   * This read `samplePhotoUrl || sampleUrl`, and `sampleUrl` is the *stored thumbnail*: a picture
+   * with a headline already drawn on it. Used as a ground it got a second headline drawn over the
+   * first, so a category whose bare picture was missing — which is every category drawn while it
+   * was on a flat, text-only style — previewed its copy twice, overlapping. There is no reading
+   * under which that is better than no ground: a synthetic backdrop previews the type honestly,
+   * and two headlines on top of each other previews nothing. */
+  const own = v.samplePhotoUrl || '';
   const grounds = own
     ? [own]
     : (recipe?.samples || []).map((sm) => sm.url).filter(Boolean);
