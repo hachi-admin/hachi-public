@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '48';
+const DASH_BUILD = '50';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4895,7 +4895,11 @@ function _imagePromptCard(r) {
       <div class="hp-card-chips">
         <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
-        <span class="cat-chip">${esc(_IP_SOURCE[r.sourceMode] || r.sourceMode || '')}</span>
+        <select class="cat-in" style="font-size:10px;padding:2px 6px;width:auto" title="絵の出所。web/web_then_styliseは記事の生成時に実写真を探します"
+          onchange="_setImagePromptSourceMode('${esc(r.id)}',this.value)" onclick="event.stopPropagation()">
+          ${Object.entries(_IP_SOURCE).map(([v, label]) =>
+            `<option value="${v}"${r.sourceMode === v ? ' selected' : ''}>${esc(label)}</option>`).join('')}
+        </select>
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
         ${r.isSystem ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>' : ''}
       </div>
@@ -4954,6 +4958,17 @@ async function _toggleImagePrompt(id, currentlyOff) {
   if (!res?.ok) { showToast('切り替えに失敗しました', 'error'); return; }
   showToast(currentlyOff ? '有効にしました。' : '無効にしました。記事の生成時に選ばれなくなります。', 'success');
   _loadImagePrompts();
+}
+
+async function _setImagePromptSourceMode(id, sourceMode) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceMode }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('絵の出所を変更できませんでした', 'error'); _loadImagePrompts(); return; }
+  showToast(`絵の出所を「${esc(_IP_SOURCE[sourceMode] || sourceMode)}」にしました`, 'success');
+  const r = (_imagePrompts || []).find((x) => x.id === id);
+  if (r) r.sourceMode = sourceMode; // avoid a full reload moving the operator's scroll position
 }
 
 async function _deleteImagePrompt(id) {

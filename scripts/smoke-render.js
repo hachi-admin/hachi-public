@@ -83,7 +83,7 @@ const sandbox = {
    how this suite went quietly red: the editor grew helpers, these lists did not, and thirteen
    checks reported a missing name instead of the behaviour they were written to catch. */
 const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB',
-  '_hpNum','_hpIsStopList',
+  '_hpNum','_hpIsStopList','_IP_KIND','_IP_SOURCE',
   'HP_CORE_KEYS','HP_GROUND_KEYS','HP_QUICK_KEYS','HP_DEAD_WITH_LINES','HP_VARIANT_LABEL',
   'HP_ROLE_LABELS','HP_SPLIT_LABELS','HP_SPLIT_SWATCH','HP_LINE_BLANK_ENUMS',
   'HP_VARIANT_KEYS','HP_VARIANT_LABELS'];
@@ -91,7 +91,8 @@ const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRow
   // Helpers the editor renderers call, listed for the same reason as the consts above.
   '_hpTypeOf','_hpStrokesCoreCtl','_hpGlowCoreCtl','_hpGroundNotice','_hpHighlightCtl','_hpPathAttr','_hpUnionCtl','_hpVariantMatches',
   '_hpObjectFields','_hpObjectAddRow','_hpArrayCtl','_hpStopListCtl',
-  '_hpRunEditor','_hpRunFlatText','_hpRunExistingRange'];
+  '_hpRunEditor','_hpRunFlatText','_hpRunExistingRange',
+  '_presetApproval','_imagePromptCard'];
 
 let code = '';
 let missing = 0;
@@ -264,6 +265,27 @@ run('_syncHpSummaries on a brand new preset', () => {
   const got = ['hp-sum-basic','hp-sum-style','hp-sum-example'].map(domText);
   if (got.some(v => !v)) throw new Error(`an empty form must still say something: ${got.join(' | ')}`);
   return got.join(' | ');
+});
+
+run('_imagePromptCard renders a sourceMode select for every recipe, offering all three modes', () => {
+  const out = api._imagePromptCard({
+    id: 'film-still-painterly', name: '実写スチル・絵画調変換', kind: 'hero', sourceMode: 'web_then_stylise',
+    description: 'テスト', keywords: ['映画'], samples: [], isSystem: true,
+  });
+  if (!/<select[^>]*onchange="_setImagePromptSourceMode\('film-still-painterly',this\.value\)"/.test(out)) {
+    throw new Error('expected a sourceMode <select> wired to _setImagePromptSourceMode');
+  }
+  for (const mode of ['ai', 'web', 'web_then_stylise']) {
+    if (!new RegExp(`<option value="${mode}"`).test(out)) throw new Error(`missing option for sourceMode "${mode}"`);
+  }
+  if (!/<option value="web_then_stylise"[^>]* selected/.test(out)) {
+    throw new Error('the recipe\'s current sourceMode must be the selected option');
+  }
+  return out;
+});
+
+run('_imagePromptCard survives a recipe missing sourceMode/samples/keywords entirely', () => {
+  return api._imagePromptCard({ id: 'bare', kind: 'hero' });
 });
 
 /* The generated styleSpec controls.
