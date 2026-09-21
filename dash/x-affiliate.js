@@ -254,13 +254,22 @@
     const box = document.getElementById('x-accounts');
     if (!box) return;
     box.replaceChildren();
-    box.append(el('p', { className: 'x-muted', text: 'ここで作るアカウントは、投稿先ごとの商品・タグ・下書きをまとめる管理枠です。最初は「メイン」などの表示名で1件作成してください。' }));
+    box.append(el('p', { className: 'x-muted', text: 'ここで作るアカウントは、投稿先ごとの商品・タグ・下書きをまとめる管理枠です。1件だけ登録されている場合は自動で選択されます。' }));
     (data.accounts || []).forEach(a => {
       const b = button(`${a.label} (${a.accountId})`, () => {
         if (state.accountId !== a.accountId) { state.importResult = null; state.skillPreview = null; state.budget = null; state.notifications = null; state.generationJobs.clear(); state.draftJobs.clear(); }
         state.accountId = a.accountId;
+        document.querySelectorAll('#x-accounts .x-account-select').forEach(item => {
+          const selected = item.dataset.accountId === state.accountId;
+          item.classList.toggle('selected', selected);
+          item.setAttribute('aria-pressed', String(selected));
+        });
         loadSettings();
       });
+      b.classList.add('x-account-select');
+      b.dataset.accountId = a.accountId;
+      b.setAttribute('aria-pressed', String(state.accountId === a.accountId));
+      if (state.accountId === a.accountId) b.classList.add('selected');
       const row = el('div', { className: 'x-row' }, [
         b,
         el('span', { className: 'x-muted', text: `${a.market} · ${a.enabled === false ? '停止' : '有効'}` }),
@@ -340,6 +349,7 @@
     const box = document.getElementById('x-members');
     if (!box) return;
     box.replaceChildren();
+    box.append(el('p', { className: 'x-muted', text: 'X投稿BOTを使えるGitHubユーザーの権限設定です。adminはアカウント・メンバー・タグなどを管理し、memberは担当accountの登録・編集・候補文レビューを行います。' }));
     (data.members || []).forEach(m => {
       const row = el('div', { className: 'x-row' }, [
         el('span', { text: `${m.memberId} · ${m.status}` }),
@@ -1383,7 +1393,10 @@
       const c = await api('/api/x-affiliate/context');
       if (!xJwt || state.loadGeneration !== loadGeneration) return;
       state.context = c;
-      renderAccounts({ accounts: c.accounts || [] }, loadGeneration);
+      const accounts = c.accounts || [];
+      if (state.accountId && !accounts.some(account => account.accountId === state.accountId)) state.accountId = '';
+      if (!state.accountId && accounts.length === 1) state.accountId = accounts[0].accountId;
+      renderAccounts({ accounts }, loadGeneration);
       renderLinkCard();
       if (c.member?.role === 'admin') {
         const members = await api('/api/x-affiliate/members');

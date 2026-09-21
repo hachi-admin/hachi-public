@@ -78,7 +78,7 @@ const flush = async () => {
 async function selectFirstAccount(dom) {
   const button = dom.window.document.querySelector('#x-accounts .x-row button');
   assert.ok(button);
-  button.click();
+  if (button.getAttribute('aria-pressed') !== 'true') button.click();
   await flush();
 }
 
@@ -330,6 +330,27 @@ test('member UI hides admin controls and omits reviewChannelRef from settings PA
   const body = JSON.parse(patchRequest.options.body);
   assert.deepEqual(Object.keys(body.patch).sort(), ['profile', 'templateRefs']);
   assert.equal('reviewChannelRef' in body.patch, false);
+});
+
+test('a sole registered account is selected and loaded automatically', async () => {
+  const requests = [];
+  const router = (url) => {
+    const path = String(url);
+    requests.push(path);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'only-account', label: 'メイン', market: 'JP', enabled: true }], member: { role: 'member', accountIds: ['only-account'] } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'only-account', revision: 1, profile: {}, templateRefs: [] } });
+    return json({});
+  };
+  const dom = page('#x_code=single-account', true, router, { verifier: 'single-account-v' });
+  await flush();
+  const accountButton = dom.window.document.querySelector('#x-accounts .x-account-select');
+  assert.ok(accountButton);
+  assert.equal(accountButton.getAttribute('aria-pressed'), 'true');
+  assert.equal(accountButton.classList.contains('selected'), true);
+  assert.ok(requests.some(path => path.includes('/settings?accountId=only-account')));
+  assert.ok(dom.window.document.querySelector('#x-settings form'));
+  assert.doesNotMatch(dom.window.document.querySelector('#x-products').textContent, /アカウントを選択してください/);
 });
 
 test('account switching clears the previously rendered settings and tags forms', async () => {
@@ -1556,7 +1577,7 @@ test('L5 regenerationLock unknown is refreshed from GET and remains visible', as
 
 test('L5 delayed budget enables regeneration without losing edited instruction', async () => {
   const delayed = deferred(); let budgetCalls = 0; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) { budgetCalls += 1; return delayed.promise; } if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); return json({}); };
-  const dom = page('#x_code=budget-late', true, router, { verifier: 'budget-late-v' }); await flush(); const account = dom.window.document.querySelector('#x-accounts .x-row button'); account.click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); const instruction = form.elements.instruction; instruction.value = '修正意図を保持'; const action = form.querySelector('[data-regeneration-action]'); assert.equal(action.disabled, true); delayed.resolve(json({ operation: { limitMicroJPY: 10000000 } })); await flush(); assert.equal(instruction.value, '修正意図を保持'); assert.equal(action.disabled, false); assert.equal(budgetCalls, 1);
+  const dom = page('#x_code=budget-late', true, router, { verifier: 'budget-late-v' }); await flush(); const account = dom.window.document.querySelector('#x-accounts .x-row button'); if (account.getAttribute('aria-pressed') !== 'true') account.click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); const instruction = form.elements.instruction; instruction.value = '修正意図を保持'; const action = form.querySelector('[data-regeneration-action]'); assert.equal(action.disabled, true); delayed.resolve(json({ operation: { limitMicroJPY: 10000000 } })); await flush(); assert.equal(instruction.value, '修正意図を保持'); assert.equal(action.disabled, false); assert.equal(budgetCalls, 1);
 });
 
 test('L5 account switch ignores delayed budget, job, and scheduled responses from old account', async () => {
