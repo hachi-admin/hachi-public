@@ -1,5 +1,5 @@
 /* global sessionStorage, TextEncoder */
-/* X affiliate administration. Deliberately isolated from the Note dashboard auth. */
+/* X affiliate administration. Uses the verified dashboard identity to mint an isolated X session. */
 (function () {
   'use strict';
   const API_ORIGIN = 'https://hachi-core-685554938840.asia-northeast1.run.app';
@@ -10,6 +10,9 @@
   if (pendingCode) history.replaceState({}, '', location.pathname + location.search + '#xentry');
   let xJwt = '';
   let browserProof = '';
+  let sessionTimer = 0;
+  let sharedAuthPending = false;
+  let sharedAuthError = '';
   const PANEL_DEFINITIONS = [
     { id: 'products', label: '商品登録' },
     { id: 'templates', label: 'テンプレート' },
@@ -55,6 +58,8 @@
     return body;
   }
   function logout() {
+    if (sessionTimer) clearTimeout(sessionTimer);
+    sessionTimer = 0;
     state.generation += 1;
     state.loadGeneration += 1;
     state.context = null;
@@ -170,7 +175,13 @@
     root.replaceChildren();
     root.append(el('div', { className: 'page-hd' }, [el('div', {}, [el('div', { className: 'page-title', text: 'X投稿BOT 管理' }), el('div', { className: 'page-sub', text: 'アカウント・商品・Skill・メンバー・タグ・投稿設定' })]) ]));
     if (!FEATURE_ENABLED) { root.append(card('利用停止中', el('p', { className: 'x-muted', text: 'X投稿BOT管理APIは現在無効です。商品登録はローカル検証段階で、実商品取得、Skill、生成、レビュー、通知送信は有効化されていません。' }))); return; }
-    if (!xJwt) { root.append(card('ログイン', el('div', {}, [el('p', { className: 'x-muted', text: 'GitHubでX BOT管理へログインしてください。' }), button('GitHubでログイン', login)]))); return; }
+    if (!xJwt) {
+      const text = sharedAuthPending ? 'サイトのログイン情報を引き継いでいます…' : (sharedAuthError || 'サイトへの再ログインが必要です。');
+      const children = [el('p', { className: 'x-muted', text })];
+      if (!sharedAuthPending) children.push(button('サイトへ再ログイン', login));
+      root.append(card('ログイン', el('div', {}, children)));
+      return;
+    }
     const toolbar = el('div', { className: 'x-toolbar' }, [button('再読み込み', load), button('サインアウト', logout)]); root.append(toolbar);
     root.append(sectionNavigation());
     root.append(sectionPanel('account', [
@@ -1390,9 +1401,26 @@
       if (root && xJwt && state.loadGeneration === loadGeneration) message(root, x.message, x.code === 'disabled' ? 'warn' : 'error');
     }
   }
-  async function login() { if (!FEATURE_ENABLED) return; const verifier = random(); sessionStorage.setItem(VERIFIER_KEY, verifier); const ch = await challenge(verifier); const u = `${API_ORIGIN}/auth/x-login?challenge=${encodeURIComponent(ch)}&return=${encodeURIComponent(location.origin + location.pathname)}`; location.assign(u); }
-  async function callback() { const code = pendingCode; if (!code || !FEATURE_ENABLED) return; const verifier = sessionStorage.getItem(VERIFIER_KEY); sessionStorage.removeItem(VERIFIER_KEY); if (!verifier) return; const r = await fetch(`${API_ORIGIN}/api/x-auth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, verifier }) }); if (!r.ok) throw new Error('X認証コードを交換できませんでした'); const d = await r.json(); xJwt = d.token || d.jwt || ''; browserProof = verifier; sessionStorage.setItem(PROOF_KEY, verifier); try { const p = JSON.parse(atob(xJwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); setTimeout(logout, Math.max(0, p.exp * 1000 - Date.now())); } catch { logout(); throw new Error('認証トークンが不正です'); } }
-  function boot() { const root = document.getElementById('page-x-affiliate'); if (!root) return; const entry = document.getElementById('x-affiliate-entry'); const mobile = document.getElementById('x-affiliate-mobile-entry'); const open = () => { window._dashInvalidate?.(); location.hash = 'xentry'; render(root); root.scrollIntoView?.({ block: 'start' }); }; entry?.addEventListener('click', open); mobile?.addEventListener('click', open); if (location.hash.startsWith('#xentry')) render(root); callback().then(() => { if (xJwt && location.hash.startsWith('#xentry')) render(root); }).catch(e => { if (location.hash.startsWith('#xentry')) message(root, e.message, 'error'); }); }
+  function installSession(token, proof) { xJwt = token; browserProof = proof; sessionStorage.setItem(PROOF_KEY, proof); try { const p = JSON.parse(atob(xJwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); if (sessionTimer) clearTimeout(sessionTimer); sessionTimer = setTimeout(logout, Math.max(0, p.exp * 1000 - Date.now())); } catch { logout(); throw new Error('認証トークンが不正です'); } }
+  function dashboardIdentityToken() { const token = localStorage.getItem('dash-jwt') || ''; try { const p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); if (/^[1-9][0-9]*$/.test(String(p.githubUserId || ''))) return token; const avatar = new URL(String(p.avatar || '')); return avatar.protocol === 'https:' && avatar.hostname === 'avatars.githubusercontent.com' && /^\/u\/[1-9][0-9]*$/.test(avatar.pathname) ? token : ''; } catch { return ''; } }
+  async function exchangeDashboardSession() {
+    if (!FEATURE_ENABLED || xJwt || pendingCode || sharedAuthPending) return;
+    const dashboardJwt = dashboardIdentityToken();
+    if (!dashboardJwt) { sharedAuthError = '現在のログイン情報は旧形式です。サイトへ一度だけ再ログインしてください。'; return; }
+    sharedAuthPending = true; sharedAuthError = '';
+    const root = document.getElementById('page-x-affiliate'); if (root && location.hash.startsWith('#xentry')) render(root);
+    const proof = random();
+    try {
+      const r = await fetch(`${API_ORIGIN}/api/x-auth/dashboard-exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dashboardJwt}` }, body: JSON.stringify({ proof }) });
+      let body = {}; try { body = await r.json(); } catch {}
+      if (!r.ok) throw new Error(r.status === 403 ? 'このアカウントはX投稿BOTのメンバーに登録されていません。' : 'サイトへ再ログインしてください。');
+      installSession(body.token || body.jwt || '', proof);
+    } finally { sharedAuthPending = false; }
+  }
+  async function login() { if (!FEATURE_ENABLED) return; location.assign(`${API_ORIGIN}/auth/login?return=${encodeURIComponent(location.origin + location.pathname + '#xentry')}`); }
+  async function callback() { const code = pendingCode; if (!code || !FEATURE_ENABLED) return; const verifier = sessionStorage.getItem(VERIFIER_KEY); sessionStorage.removeItem(VERIFIER_KEY); if (!verifier) return; const r = await fetch(`${API_ORIGIN}/api/x-auth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, verifier }) }); if (!r.ok) throw new Error('X認証コードを交換できませんでした'); const d = await r.json(); installSession(d.token || d.jwt || '', verifier); }
+  async function authenticate() { if (pendingCode) await callback(); else await exchangeDashboardSession(); }
+  function boot() { const root = document.getElementById('page-x-affiliate'); if (!root) return; const entry = document.getElementById('x-affiliate-entry'); const mobile = document.getElementById('x-affiliate-mobile-entry'); const open = () => { window._dashInvalidate?.(); location.hash = 'xentry'; render(root); exchangeDashboardSession().then(() => { if (location.hash.startsWith('#xentry')) render(root); }).catch(e => { sharedAuthError = e.message; if (location.hash.startsWith('#xentry')) render(root); }); root.scrollIntoView?.({ block: 'start' }); }; entry?.addEventListener('click', open); mobile?.addEventListener('click', open); if (location.hash.startsWith('#xentry')) render(root); authenticate().then(() => { if (location.hash.startsWith('#xentry')) render(root); }).catch(e => { sharedAuthError = e.message; if (location.hash.startsWith('#xentry')) render(root); }); }
   window.HachiXAffiliate = { api, login, logout, challenge, cleanFragment, isActive: () => location.hash.startsWith('#xentry'), setActive: syncNavigation, refresh: () => { const r = document.getElementById('page-x-affiliate'); if (r) render(r); }, signOut: logout };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 }());

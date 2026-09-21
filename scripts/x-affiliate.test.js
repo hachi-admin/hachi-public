@@ -21,6 +21,10 @@ function jwt(exp = Math.floor(Date.now() / 1000) + 3600) {
   const enc = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   return `${enc({ alg: 'none' })}.${enc({ sub: 'x-user', exp })}.sig`;
 }
+function dashboardJwt(githubUserId = '42', exp = Math.floor(Date.now() / 1000) + 3600) {
+  const enc = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${enc({ alg: 'HS256' })}.${enc({ sub: 'hachi-admin', githubUserId, role: 'admin', exp })}.sig`;
+}
 function page(hash = '', enabled = false, fetchImpl = async () => { throw new Error('unexpected fetch'); }, options = {}) {
   const dom = new JSDOM(indexHtml, { url: `https://public.example/dash/${hash}`, runScripts: 'outside-only' });
   const { window } = dom;
@@ -95,10 +99,39 @@ test('OFF: login never navigates or calls the network', async () => {
   assert.equal(calls, 0);
 });
 
-test('enabled unauthenticated entry renders a GitHub login button', async () => {
+test('enabled unauthenticated entry asks for the site login', async () => {
   const dom = page('#xentry', true, () => json({ accounts: [], members: [] }));
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /GitHubでログイン/);
+  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /サイトへ再ログイン/);
+});
+
+test('dashboard login is exchanged automatically without another GitHub OAuth', async () => {
+  const requests = [];
+  const exchangedToken = jwt();
+  const dom = page('#xentry', true, (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).endsWith('/dashboard-exchange')) return json({ token: exchangedToken });
+    if (String(url).endsWith('/context')) return json({ apiVersion: 'x-affiliate/v1', accounts: [], member: { role: 'member' } });
+    return json({});
+  }, { jwt: dashboardJwt() });
+  await flush();
+  const exchange = requests.find(request => request.url.endsWith('/dashboard-exchange'));
+  assert.ok(exchange);
+  assert.equal(exchange.options.headers.Authorization, `Bearer ${dom.window.localStorage.getItem('dash-jwt')}`);
+  assert.match(exchange.options.body, /"proof":"[a-f0-9]{64}"/);
+  const context = requests.find(request => request.url.endsWith('/context'));
+  assert.ok(context);
+  assert.equal(context.options.headers.Authorization, `Bearer ${exchangedToken}`);
+  assert.equal(dom.window.localStorage.getItem('dash-jwt'), dashboardJwt());
+});
+
+test('the existing dashboard session can use its signed GitHub avatar identity', async () => {
+  const enc = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const existing = `${enc({ alg: 'HS256' })}.${enc({ sub: 'hachi-admin', avatar: 'https://avatars.githubusercontent.com/u/42?v=4', role: 'admin', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  const requests = [];
+  page('#xentry', true, (url) => { requests.push(String(url)); return String(url).endsWith('/dashboard-exchange') ? json({ token: jwt() }) : json({ apiVersion: 'x-affiliate/v1', accounts: [], member: { role: 'member' } }); }, { jwt: existing });
+  await flush();
+  assert.ok(requests.some(url => url.endsWith('/dashboard-exchange')));
 });
 
 test('enabled callback exchanges against fixed origin with verifier proof', async () => {
@@ -445,7 +478,7 @@ test('logout invalidates pending context and settings responses', async () => {
   pendingContext.resolve(json({ accounts: [{ accountId: 'A', label: '遅いA' }], member: { role: 'admin' } }));
   pendingSettings.resolve(json({ settings: { accountId: 'A', revision: 9, profile: { tone: '遅い設定' }, templateRefs: [] } }));
   await flush();
-  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /GitHubでログイン/);
+  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /サイトへ再ログイン/);
   assert.equal(dom.window.document.querySelector('#x-accounts'), null);
   assert.equal(dom.window.document.querySelector('#x-settings form'), null);
   assert.doesNotMatch(dom.window.document.getElementById('page-x-affiliate').textContent, /遅いA|遅い設定/);
@@ -658,7 +691,7 @@ test('logout clears X password but preserves a password outside X page, and form
   dom.window.HachiXAffiliate.logout();
   assert.equal(xPassword.value, '');
   assert.equal(outside.value, 'keep-me');
-  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /GitHubでログイン/);
+  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /サイトへ再ログイン/);
 });
 
 test('digest completion after account switch does not send stale tag write', async () => {
@@ -921,7 +954,7 @@ test('logout invalidates delayed link status without restoring challenge data', 
   dom.window.HachiXAffiliate.logout();
   pendingStatus.resolve(json({ status: 'discord_confirmed', revision: 1, discordDisplay: 'Late#4', discordUserId: 'late' }));
   await flush();
-  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /GitHubでログイン/);
+  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /サイトへ再ログイン/);
   assert.doesNotMatch(dom.window.document.getElementById('page-x-affiliate').textContent, /nonce-logout|Late#4/);
 });
 
@@ -956,7 +989,7 @@ test('logout invalidates delayed finalize without clearing the new login state o
   dom.window.HachiXAffiliate.logout();
   pendingFinalize.resolve(json({ status: 'active', discordUserId: 'late-finalize', revision: 2 }));
   await flush();
-  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /GitHubでログイン/);
+  assert.match(dom.window.document.getElementById('page-x-affiliate').textContent, /サイトへ再ログイン/);
   assert.doesNotMatch(dom.window.document.getElementById('page-x-affiliate').textContent, /Late#5|late-finalize|nonce-finalize-logout/);
   assert.equal(contextReads, contextBeforeResolve);
 });
