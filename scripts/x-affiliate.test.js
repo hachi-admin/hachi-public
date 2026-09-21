@@ -232,6 +232,38 @@ test('X entry activates its page and mobile entry uses the same route', async ()
   assert.equal(dom.window.location.hash, '#xentry');
 });
 
+test('authenticated X entry groups management cards into X-only category tabs', async () => {
+  const dom = page('#x_code=tabs', true, url => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [], member: { role: 'member' } });
+    return json({});
+  }, { verifier: 'tabs-v' });
+  await flush();
+  const root = dom.window.document.getElementById('page-x-affiliate');
+  const tabs = [...root.querySelectorAll('.x-section-tab')];
+  assert.deepEqual(tabs.map(tab => tab.textContent), ['商品登録', 'テンプレート', '投稿・レビュー', '運用状況', 'アカウント設定']);
+  assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
+  assert.equal(root.querySelector('#x-panel-products').hidden, false);
+  assert.equal(root.querySelector('#x-panel-account').hidden, true);
+  assert.ok(root.querySelector('#x-panel-account #x-accounts'));
+  assert.ok(root.querySelector('#x-panel-products #x-products'));
+  assert.ok(root.querySelector('#x-panel-templates #x-skills'));
+  assert.ok(root.querySelector('#x-panel-review #x-drafts'));
+  assert.ok(root.querySelector('#x-panel-operations #x-budget'));
+  assert.ok(root.querySelector('#x-panel-operations #x-notifications'));
+  tabs[4].click();
+  assert.equal(root.querySelector('#x-panel-products').hidden, true);
+  assert.equal(root.querySelector('#x-panel-account').hidden, false);
+  assert.equal(tabs[4].getAttribute('aria-selected'), 'true');
+});
+
+test('X category tabs are not rendered outside an authenticated X BOT view', async () => {
+  const dom = page('', true);
+  await flush();
+  assert.equal(dom.window.document.querySelector('.x-section-tabs'), null);
+});
+
 test('member UI hides admin controls and omits reviewChannelRef from settings PATCH', async () => {
   const requests = [];
   const router = (url, options = {}) => {
