@@ -1455,7 +1455,34 @@
     const reservations = data.reservations || [];
     const unknown = reservations.filter(item => item.status === 'unknown' || item.state === 'unknown').concat(data.unknownJobs || []);
     if (unknown.length) rows.push(el('p', { className: 'x-status', text: `応答不明の予約 ${unknown.length}件。照合まで保持されています。` }));
-    unknown.forEach(item => { const id = item.jobId || item.reservationId; if (id) rows.push(el('div', { className: 'x-row' }, [el('span', { className: 'x-muted', text: `照合ID: ${id}${item.reservationId && item.jobId ? ` · job ${item.jobId} · reservation ${item.reservationId}` : ''}` })])); });
+    unknown.forEach(item => {
+      const id = item.jobId || item.reservationId; if (!id) return;
+      const row = el('div', { className: 'x-row' }, [el('span', { className: 'x-muted', text: `照合ID: ${id}${item.reservationId && item.jobId ? ` · job ${item.jobId} · reservation ${item.reservationId}` : ''}` })]);
+      if (isAdmin() && item.jobId && item.reservationId) {
+        const details = el('div', { className: 'x-muted', text: '外部プロバイダの状態は確認できません。ここでは内部予約の整合性を確認します。' });
+        const check = button('状態を確認', async () => {
+          if (!beginWrite(check)) return; check.disabled = true;
+          try { const result = await api(`/api/x-affiliate/generation-recoveries/${encodeURIComponent(item.jobId)}?accountId=${encodeURIComponent(accountId)}`); const observedAllowed = result.allowedResolutions?.some(option => option.id === 'settle_observed' && option.enabled); const observedOption = resolutionSelect.querySelector('[value="settle_observed"]'); if (observedOption) observedOption.disabled = !observedAllowed; details.textContent = `内部整合性: ${result.internalConsistency?.unknown && result.internalConsistency?.holdPresent ? '復旧待ち' : '要確認'} · 外部状態: 確認不可`; details.dataset.kind = 'ok'; }
+          catch (error) { details.textContent = error.message; details.dataset.kind = 'error'; }
+          finally { check.disabled = false; endWrite(check); }
+        });
+        const resolutionSelect = el('select', { name: 'resolution', className: 'form-select' }, [['settle_max_unknown', '不明のまま予約最大額で精算'], ['settle_observed', '保存済みの確認済み使用量で精算'], ['not_sent', '未送信として解放（証跡必須）']].map(([value, label]) => el('option', { value, text: label })));
+        const resolution = el('label', { className: 'x-field' }, [el('span', { text: '解消方法' }), resolutionSelect]);
+        const reason = field('理由', 'text', 'reason', '', '外部ログや運用判断を記録');
+        const evidence = field('証跡参照', 'text', 'evidenceRef', '', 'not_sent の場合は必須');
+        const form = el('form', { className: 'x-inline-form' }, [resolution, reason, evidence]);
+        const submit = button('照合・復旧', async () => {
+          if (!beginWrite(form)) return; submit.disabled = true;
+          const selected = form.querySelector('[name="resolution"]')?.value || 'settle_max_unknown';
+          const basePayload = { accountId, jobId: item.jobId, reservationId: item.reservationId, resolution: selected, reason: form.querySelector('[name="reason"]')?.value || '', evidenceRef: form.querySelector('[name="evidenceRef"]')?.value || undefined, expectedJobRevision: item.revision };
+          try { const current = await api(`/api/x-affiliate/generation-recoveries/${encodeURIComponent(item.jobId)}?accountId=${encodeURIComponent(accountId)}`); basePayload.expectedJobRevision = current.job.revision; const idempotencyKey = await keyFor(form, basePayload); const payload = { ...basePayload, idempotencyKey }; await api('/api/x-affiliate/generation-recoveries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); clearRetry(form); message(box, '予約を照合して解消しました。予算と未レビュー枠を再読み込みします。', 'ok'); await loadBudget(accountId, generation); }
+          catch (error) { message(box, error.message, 'error'); }
+          finally { submit.disabled = false; endWrite(form); }
+        });
+        row.append(el('div', { className: 'x-recovery-actions' }, [check, details, form, submit]));
+      }
+      rows.push(row);
+    });
     const alerts = data.alerts || [];
     alerts.forEach(alert => rows.push(el('p', { className: 'x-status', text: typeof alert === 'string' ? alert : (alert.message || alert.code || '予算アラート') })));
     if (!rows.length) rows.push(el('p', { className: 'x-muted', text: '予算情報はありません' }));
