@@ -13,7 +13,14 @@
   let sessionTimer = 0;
   let sharedAuthPending = false;
   let sharedAuthError = '';
-  let state = { context: null, accountId: '', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  const PANEL_DEFINITIONS = [
+    { id: 'products', label: '商品登録' },
+    { id: 'templates', label: 'テンプレート' },
+    { id: 'review', label: '投稿・レビュー' },
+    { id: 'operations', label: '運用状況' },
+    { id: 'account', label: 'アカウント設定' },
+  ];
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -57,6 +64,7 @@
     state.loadGeneration += 1;
     state.context = null;
     state.accountId = '';
+    state.activePanel = 'products';
     state.linkGeneration += 1;
     state.previewGeneration += 1;
     state.link = null;
@@ -112,6 +120,54 @@
   function selectField(label, name, value, options) { const select = el('select', { name, className: 'form-select' }, options.map(option => el('option', { text: option, value: option }))); select.value = value; return el('label', { className: 'x-field' }, [el('span', { text: label }), select]); }
   function button(text, fn, disabled) { const b = el('button', { className: 'act-btn', type: 'button', disabled }); b.textContent = text; b.addEventListener('click', fn); return b; }
   function card(title, content) { return el('article', { className: 'x-card' }, [el('h3', { text: title }), content]); }
+  function activatePanel(panelId, focus = false) {
+    if (!PANEL_DEFINITIONS.some(panel => panel.id === panelId)) return;
+    state.activePanel = panelId;
+    const root = document.getElementById('page-x-affiliate');
+    if (!root) return;
+    root.querySelectorAll('.x-section-tab').forEach(tab => {
+      const active = tab.dataset.panel === panelId;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      if (active && focus) tab.focus();
+    });
+    root.querySelectorAll('.x-section-panel').forEach(panel => { panel.hidden = panel.dataset.panel !== panelId; });
+  }
+  function sectionNavigation() {
+    const tabs = PANEL_DEFINITIONS.map(panel => {
+      const tab = el('button', {
+        className: 'x-section-tab',
+        type: 'button',
+        role: 'tab',
+        id: `x-tab-${panel.id}`,
+        'aria-controls': `x-panel-${panel.id}`,
+        'data-panel': panel.id,
+        text: panel.label,
+      });
+      tab.addEventListener('click', () => activatePanel(panel.id));
+      tab.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const current = PANEL_DEFINITIONS.findIndex(item => item.id === panel.id);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? PANEL_DEFINITIONS.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + PANEL_DEFINITIONS.length) % PANEL_DEFINITIONS.length;
+        activatePanel(PANEL_DEFINITIONS[next].id, true);
+      });
+      return tab;
+    });
+    return el('div', { className: 'x-section-tabs', role: 'tablist', 'aria-label': 'X BOT管理メニュー' }, tabs);
+  }
+  function sectionPanel(panelId, children) {
+    const panel = el('section', {
+      className: 'x-section-panel',
+      role: 'tabpanel',
+      id: `x-panel-${panelId}`,
+      'aria-labelledby': `x-tab-${panelId}`,
+      'data-panel': panelId,
+    }, children);
+    panel.hidden = panelId !== state.activePanel;
+    return panel;
+  }
   function render(root) {
     syncNavigation(true);
     document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
@@ -127,19 +183,31 @@
       return;
     }
     const toolbar = el('div', { className: 'x-toolbar' }, [button('再読み込み', load), button('サインアウト', logout)]); root.append(toolbar);
-    root.append(card('アカウント', el('div', { id: 'x-accounts' }, [
-      el('p', { className: 'x-muted', text: '投稿先ごとの商品・タグ・下書きをまとめる管理枠です。Xへのログイン連携ではありません。' }),
-      el('p', { className: 'x-muted', text: '読み込み中…' }),
-    ])));
-    root.append(card('メンバー', el('div', { id: 'x-members' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
-    root.append(card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])));
-    root.append(card('商品（手入力）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('Skill', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('候補文の生成・比較レビュー', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])));
-    root.append(card('プロフィール・テンプレート・通知先・定期', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('予算・予約状況', el('div', { id: 'x-budget' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
-    root.append(card('通知状況', el('div', { id: 'x-notifications' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])));
+    root.append(sectionNavigation());
+    root.append(sectionPanel('account', [
+      card('アカウント', el('div', { id: 'x-accounts' }, [
+        el('p', { className: 'x-muted', text: '投稿先ごとの商品・タグ・下書きをまとめる管理枠です。Xへのログイン連携ではありません。' }),
+        el('p', { className: 'x-muted', text: '読み込み中…' }),
+      ])),
+      card('タグ（実値は保存後に消去）', el('div', { id: 'x-tags' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+      card('Discord連携', el('div', { id: 'x-link' }, [el('p', { className: 'x-muted', text: '本人連携状態を確認中…' })])),
+      card('メンバー', el('div', { id: 'x-members' }, [el('p', { className: 'x-muted', text: '読み込み中…' })])),
+    ]));
+    root.append(sectionPanel('products', [
+      card('商品（手入力）', el('div', { id: 'x-products' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+    ]));
+    root.append(sectionPanel('templates', [
+      card('プロフィール・テンプレート・通知先・定期', el('div', { id: 'x-settings' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+      card('テンプレート・Skill', el('div', { id: 'x-skills' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+    ]));
+    root.append(sectionPanel('review', [
+      card('候補文の生成・比較レビュー', el('div', { id: 'x-drafts' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+    ]));
+    root.append(sectionPanel('operations', [
+      card('予算・予約状況', el('div', { id: 'x-budget' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+      card('通知状況', el('div', { id: 'x-notifications' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+    ]));
+    activatePanel(state.activePanel);
     renderLinkCard();
     load();
   }
