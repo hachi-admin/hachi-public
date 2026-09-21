@@ -1157,6 +1157,67 @@ test('product import sends at most the entered rows, shows partial results, and 
   assert.deepEqual(JSON.parse(retryRequest.options.body), { rowIds: [1, 2], expectedRevision: 0 });
 });
 
+test('product cards link to the canonical URL and product picker explains IDs', async () => {
+  const product = { productId: 'JP-B012345678', asin: 'B012345678', name: '卓上ライト', canonicalUrl: 'https://www.amazon.co.jp/dp/B012345678', catalogStatus: 'available', revision: 2, features: ['角度調整可能'], tags: ['デスク'] };
+  const router = (url) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'admin' } });
+    if (path.endsWith('/members')) return json({ members: [] });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 1, enabled: true, scheduleEnabled: false, operatorNote: '' }, readiness: { missing: [] } }] });
+    if (path.includes('/tags')) return json({ tags: [] });
+    if (path.includes('/skills')) return json({ skills: [], candidates: [] });
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=product-link', true, router, { verifier: 'product-link-v' });
+  await flush();
+  const link = dom.window.document.querySelector('.x-product-link');
+  assert.equal(link.href, product.canonicalUrl);
+  assert.equal(link.target, '_blank');
+  assert.match(link.rel, /noopener/);
+  const picker = dom.window.document.querySelector('#x-drafts [name="productPicker"]');
+  assert.ok(picker);
+  assert.match(picker.options[0].textContent, /卓上ライト/);
+  assert.match(picker.options[0].textContent, /B012345678/);
+  assert.match(picker.options[0].textContent, /JP-B012345678/);
+  picker.options[0].selected = true;
+  picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.equal(dom.window.document.querySelector('#x-drafts [name="productIds"]').value, 'JP-B012345678');
+});
+
+test('CSV product import accepts ASIN, manual facts, source and product tags', async () => {
+  const requests = [];
+  const product = { productId: 'JP-B012345678', asin: 'B012345678', name: '', canonicalUrl: 'https://www.amazon.co.jp/dp/B012345678', catalogStatus: 'input_pending', revision: 0, features: [], tags: [] };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 0, enabled: true, scheduleEnabled: false, operatorNote: '' }, readiness: { missing: ['name', 'features', 'source'] } }] });
+    if (path.endsWith('/imports') && options.method === 'POST') return json({ importId: 'i1', status: 'needs_completion', revision: 0, rows: [{ row: 1, status: 'needs_completion', productId: product.productId }] });
+    if (path.endsWith('/products/JP-B012345678') && options.method === 'PATCH') return json({ product: { ...product, revision: 1 } });
+    return json({});
+  };
+  const dom = page('#x_code=product-csv', true, router, { verifier: 'product-csv-v' });
+  await flush();
+  const file = { text: async () => 'asin,name,features,source,tags\nB012345678,卓上ライト,角度調整可能|高さ調整,商品ページで確認,デスク|照明' };
+  const input = dom.window.document.querySelector('.x-product-csv-import input[type="file"]');
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+  dom.window.document.querySelector('.x-product-csv-import button').click();
+  await flush();
+  const imported = requests.find(request => request.path.endsWith('/imports') && request.options.method === 'POST');
+  assert.ok(imported);
+  assert.deepEqual(JSON.parse(imported.options.body).urls, ['https://www.amazon.co.jp/dp/B012345678']);
+  const patch = requests.find(request => request.path.endsWith('/products/JP-B012345678') && request.options.method === 'PATCH');
+  assert.ok(patch);
+  const body = JSON.parse(patch.options.body);
+  assert.deepEqual(body.fields.tags, ['デスク', '照明']);
+  assert.deepEqual(body.fields.features, ['角度調整可能', '高さ調整']);
+  assert.equal(body.sourceNote, '商品ページで確認');
+});
+
 test('product editor binds both revisions, sends only changed manual fields, and preserves input on conflict', async () => {
   const requests = [];
   const item = { product: { productId: 'JP-B012345678', asin: 'B012345678', name: '取得名', features: ['特徴A'], catalogStatus: 'available', revision: 4 }, accountProduct: { accountId: 'A', productId: 'JP-B012345678', enabled: true, operatorNote: '旧メモ', revision: 7 }, readiness: { missing: [], ready: true } };

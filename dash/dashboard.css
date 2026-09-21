@@ -2224,6 +2224,8 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product{padding:13px;background:var(--bg);border-radius:12px;box-shadow:var(--sh-press)}
 .x-product-head{display:flex;flex-direction:column;gap:3px}
 .x-product-head strong{font-size:13px;color:var(--txt)}
+.x-product-link{display:block;overflow-wrap:anywhere;font-size:11px;color:var(--acc);text-decoration:underline}
+.x-generation-form .x-field select[multiple]{min-height:74px}
 .x-skill-list{display:grid;gap:12px;margin-top:14px}
 .x-skill details,.x-skill-decisions{margin-top:10px}
 .x-skill summary,.x-skill-decisions summary{cursor:pointer;font-size:12px;color:var(--txt)}

@@ -20,7 +20,7 @@
     { id: 'operations', label: '運用状況' },
     { id: 'account', label: 'アカウント設定' },
   ];
-  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), productCatalog: [], settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -76,6 +76,7 @@
     state.notifications = null;
     state.importResult = null;
     state.skillPreview = null;
+    state.productCatalog = [];
     state.skillDrafts.clear();
     state.generationJobs.clear(); state.draftJobs.clear();
     retryState = new WeakMap();
@@ -212,6 +213,64 @@
     load();
   }
   const formData = form => Object.fromEntries(new FormData(form).entries());
+  function splitCsvList(value) {
+    return String(value || '').split(/\r?\n|[|;、]/).map(item => item.trim()).filter(Boolean);
+  }
+  function csvField(row, names) {
+    for (const name of names) {
+      const value = row[name];
+      if (value !== undefined && String(value).trim()) return String(value).trim();
+    }
+    return '';
+  }
+  function parseCsv(text) {
+    const rows = []; let row = []; let value = ''; let quoted = false;
+    const source = String(text || '').replace(/^\uFEFF/, '');
+    for (let index = 0; index < source.length; index += 1) {
+      const char = source[index]; const next = source[index + 1];
+      if (char === '"' && quoted && next === '"') { value += '"'; index += 1; continue; }
+      if (char === '"') { quoted = !quoted; continue; }
+      if (!quoted && (char === ',' || char === '\t')) { row.push(value); value = ''; continue; }
+      if (!quoted && (char === '\n' || char === '\r')) {
+        if (char === '\r' && next === '\n') index += 1;
+        row.push(value); value = '';
+        if (row.some(cell => String(cell).trim())) rows.push(row);
+        row = []; continue;
+      }
+      value += char;
+    }
+    row.push(value);
+    if (row.some(cell => String(cell).trim())) rows.push(row);
+    if (rows.length < 2) throw new Error('CSVは見出し行とデータ行を1行以上入力してください');
+    const headers = rows.shift().map(header => String(header).trim().toLowerCase());
+    if (!headers.some(header => ['url', '商品url', 'amazonurl', 'asin'].includes(header))) throw new Error('CSVには url または asin 列が必要です');
+    return rows.map(cells => Object.fromEntries(headers.map((header, column) => [header, String(cells[column] || '').trim()])));
+  }
+  function csvRows(text) {
+    return parseCsv(text).map((row, index) => {
+      const asin = csvField(row, ['asin']);
+      let url = csvField(row, ['url', '商品url', 'amazonurl']);
+      if (!url && /^[A-Za-z0-9]{10}$/.test(asin)) url = `https://www.amazon.co.jp/dp/${asin}`;
+      if (!url) throw new Error(`${index + 2}行目: url または10桁の asin が必要です`);
+      const fields = {};
+      const name = csvField(row, ['name', '商品名']); if (name) fields.name = name;
+      const features = splitCsvList(csvField(row, ['features', 'feature', '特徴'])); if (features.length) fields.features = features;
+      const facts = splitCsvList(csvField(row, ['facts', 'fact', '事実'])).map(item => {
+        const separator = item.indexOf('|') >= 0 ? item.indexOf('|') : item.indexOf(':');
+        if (separator < 1 || separator === item.length - 1) throw new Error(`${index + 2}行目: facts は「種類 | 内容」で入力してください`);
+        return { type: item.slice(0, separator).trim(), value: item.slice(separator + 1).trim() };
+      });
+      if (facts.length) fields.facts = facts;
+      const tags = splitCsvList(csvField(row, ['tags', 'tag', 'タグ'])); if (tags.length) fields.tags = tags;
+      const sourceNote = csvField(row, ['source', 'sourcenote', '確認元', 'ソース']);
+      if (Object.keys(fields).length && !sourceNote) throw new Error(`${index + 2}行目: 手入力項目には source（確認元・理由）が必要です`);
+      const enabled = csvField(row, ['enabled', '利用']);
+      if (enabled) fields.enabled = !['0', 'false', 'no', 'off', '停止'].includes(enabled.toLowerCase());
+      const scheduleEnabled = csvField(row, ['scheduleenabled', '定期生成']);
+      if (scheduleEnabled) fields.scheduleEnabled = ['1', 'true', 'yes', 'on', '有効'].includes(scheduleEnabled.toLowerCase());
+      return { rowNumber: index + 2, url, fields, sourceNote };
+    });
+  }
   function invalidateSkillPreview() {
     state.previewGeneration += 1;
     state.skillPreview = null;
@@ -470,6 +529,9 @@
   function renderProducts(data, accountId, generation) {
     const box = document.getElementById('x-products');
     if (!box || !isCurrentScope(accountId, generation)) return;
+    state.productCatalog = data.products || [];
+    const draftForm = document.querySelector('#x-drafts .x-generation-form');
+    if (draftForm) syncProductPicker(draftForm.querySelector('[name="productPicker"]'), draftForm.querySelector('[name="productIds"]'));
     invalidateSkillPreview();
     box.replaceChildren();
     const importForm = el('form', { className: 'x-form x-product-import' }, [
@@ -497,6 +559,51 @@
       }),
     ]);
     box.append(importForm);
+    const csvFile = el('input', { name: 'csvFile', className: 'form-input', type: 'file', accept: '.csv,text/csv' });
+    const csvForm = el('form', { className: 'x-form x-product-csv-import' }, [
+      el('p', { className: 'x-muted', text: 'CSV列: url または asin, name, features, facts, source, tags, enabled, scheduleEnabled。features/tagsは「|」区切り、factsは「種類 | 内容」を複数入力します。商品ごとのtagsは管理用ラベルです。Amazonアソシエイト追跡タグはアカウント設定で管理します。' }),
+      el('label', { className: 'x-field' }, [el('span', { text: '商品CSV（UTF-8）' }), csvFile]),
+      button('CSVを取り込む', async event => {
+        event.preventDefault();
+        if (!csvFile.files?.[0] || !csvForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(csvForm)) return;
+        try {
+          const rows = csvRows(await csvFile.files[0].text());
+          if (rows.length > 200) throw new Error('CSVは一度に200行まで取り込めます');
+          const imported = []; const failures = [];
+          for (let offset = 0; offset < rows.length; offset += 20) {
+            const chunk = rows.slice(offset, offset + 20);
+            const result = await api('/api/x-affiliate/imports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, urls: chunk.map(row => row.url), clientRequestId: random() }) });
+            (result.rows || []).forEach(item => {
+              const row = chunk[item.row - 1];
+              if (!row) return;
+              if (item.productId) imported.push({ row, productId: item.productId });
+              else failures.push(`${row.rowNumber}行目: ${item.errorCode || item.status}`);
+            });
+          }
+          let catalog = []; let cursor = '';
+          do {
+            const query = new URLSearchParams({ accountId }); if (cursor) query.set('cursor', cursor);
+            const page = await api(`/api/x-affiliate/products?${query}`); catalog.push(...(page.products || [])); cursor = page.nextCursor || '';
+          } while (cursor);
+          let patched = 0;
+          for (const item of imported) {
+            const current = catalog.find(candidate => candidate.product?.productId === item.productId);
+            if (!current || !Object.keys(item.row.fields).length) continue;
+            await api(`/api/x-affiliate/products/${encodeURIComponent(item.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: current.product.revision, expectedAccountRevision: current.accountProduct?.revision, fields: item.row.fields, sourceNote: item.row.sourceNote }) });
+            patched += 1;
+          }
+          clearRetry(csvForm); endWrite(csvForm);
+          if (isCurrentScope(accountId, generation)) {
+            message(csvForm, `${imported.length}件を受付、${patched}件にCSVの項目を反映しました${failures.length ? `。未取込 ${failures.length}件: ${failures.join(' / ')}` : '。'}`, failures.length ? 'warn' : 'success');
+            await loadProducts(accountId, generation);
+          }
+        } catch (error) {
+          endWrite(csvForm);
+          if (csvForm.isConnected && isCurrentScope(accountId, generation)) message(csvForm, error.message, 'error');
+        }
+      }),
+    ]);
+    box.append(csvForm);
     if (state.importResult?.accountId === accountId) box.append(importResult(state.importResult.result, accountId, generation));
     const filter = el('form', { className: 'x-inline-form x-product-filter' }, [
       field('商品名・ASIN検索', 'search', 'q'),
@@ -519,11 +626,13 @@
         el('div', { className: 'x-product-head' }, [
           el('strong', { text: product.name || '商品名未入力' }),
           el('span', { className: 'x-muted', text: `${product.asin || 'ASIN不明'} · ${product.catalogStatus || '不明'} · 不足: ${missing} · 手修正: ${overridden}` }),
+          ...(product.canonicalUrl ? [el('a', { className: 'x-product-link', href: product.canonicalUrl, target: '_blank', rel: 'noopener noreferrer', text: product.canonicalUrl })] : []),
         ]),
       ]);
       const edit = el('form', { className: 'x-form' }, [
         field('商品名', 'text', 'name', product.name || ''),
         field('特徴（1行1件）', 'textarea', 'features', (product.features || []).join('\n')),
+        field('商品タグ（管理用・カンマ区切り）', 'text', 'tags', (product.tags || []).join(', ')),
         field('追加の確認済み事実（種類 | 内容、1行1件。name=商品名、category/classification=分類、feature=特徴、size=サイズ、audience=対象、comparison=比較軸、placement=設置場所、object=対象物、brand=ブランド、price=価格、availability=在庫、sale=セール）', 'textarea', 'facts', (product.facts || []).map(fact => `${fact.type} | ${fact.value}`).join('\n'), 'audience | 狭い机で使いたい人\ncomparison | 同じ条件でAは100g、参照Bは150g\nplacement | 卓上'),
         field('運用メモ', 'text', 'operatorNote', accountProduct.operatorNote || ''),
           checkbox('このaccountで利用', 'enabled', accountProduct.enabled !== false),
@@ -547,6 +656,8 @@
           const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on', scheduleEnabled: values.scheduleEnabled === 'on' };
           if ((values.name || '') !== (product.name || '')) fields.name = values.name || null;
           if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
+          const tags = splitCsvList(values.tags);
+          if (JSON.stringify(tags) !== JSON.stringify(product.tags || [])) fields.tags = tags.length ? tags : null;
           const currentFacts = (product.facts || []).map(({ factId, ...fact }) => fact);
           if (JSON.stringify(facts.map(({ factId, ...fact }) => fact)) !== JSON.stringify(currentFacts)) fields.facts = facts.length ? facts : null;
           try {
@@ -782,12 +893,35 @@
       if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
     }
   }
+  function syncProductPicker(select, input) {
+    if (!select || !input) return;
+    const selected = new Set(String(input.value || '').split(',').map(value => value.trim()).filter(Boolean));
+    select.replaceChildren();
+    if (!state.productCatalog.length) {
+      select.append(el('option', { text: '商品登録後に選択できます', value: '' }));
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    state.productCatalog.forEach(item => {
+      const product = item.product || {};
+      const option = el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ${product.asin || 'ASIN不明'} · ID: ${product.productId}` });
+      option.selected = selected.has(product.productId);
+      select.append(option);
+    });
+  }
   function renderDrafts(data, accountId, generation) {
     const box = document.getElementById('x-drafts');
     if (!box || !isCurrentScope(accountId, generation)) return;
     box.replaceChildren(el('p', { className: 'x-muted', text: '候補は人が確認して採用します。生成・再生成は予算を消費します。' }));
+    const productIdField = field('対象商品ID（カンマ区切り・1〜3件）', 'text', 'productIds', null, '下の一覧から選ぶと自動入力');
+    const productIdInput = productIdField.querySelector('[name="productIds"]');
+    const productPicker = el('select', { name: 'productPicker', className: 'form-select', multiple: 'multiple', size: String(Math.min(5, Math.max(2, state.productCatalog.length))) });
+    const productPickerField = el('label', { className: 'x-field' }, [el('span', { text: '商品一覧から選択（最大3件）' }), productPicker]);
     const generateForm = el('form', { className: 'x-form x-generation-form' }, [
-      field('商品ID（カンマ区切り・1〜3件）', 'text', 'productIds'),
+      productIdField,
+      productPickerField,
+      el('p', { className: 'x-muted', text: '商品IDは画面内部の識別子です。商品名・ASIN・IDが一覧に表示されるので、通常は一覧から選択してください。' }),
       selectField('候補数', 'requestedVariantCount', '3', ['1', '2', '3']),
       button('候補を生成', async event => {
         event.preventDefault();
@@ -805,6 +939,16 @@
         }
       }),
     ]);
+    syncProductPicker(productPicker, productIdInput);
+    productPicker.addEventListener('change', () => {
+      const selected = [...productPicker.selectedOptions].map(option => option.value).filter(Boolean);
+      if (selected.length > 3) {
+        productPicker.selectedOptions[productPicker.selectedOptions.length - 1].selected = false;
+        return;
+      }
+      productIdInput.value = selected.join(',');
+    });
+    productIdInput.addEventListener('input', () => syncProductPicker(productPicker, productIdInput));
     box.append(generateForm);
     const groups = new Map();
     (data.drafts || []).forEach(draft => { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); });
@@ -1367,6 +1511,7 @@
     const accountId = state.accountId;
     if (!accountId) return;
     const generation = ++state.generation;
+    state.productCatalog = [];
     invalidateSkillPreview();
     document.getElementById('x-settings')?.replaceChildren();
     document.getElementById('x-tags')?.replaceChildren();
