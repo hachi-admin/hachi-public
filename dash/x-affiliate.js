@@ -216,6 +216,9 @@
   function splitCsvList(value) {
     return String(value || '').split(/\r?\n|[|;、]/).map(item => item.trim()).filter(Boolean);
   }
+  function splitTagList(value) {
+    return String(value || '').split(/\r?\n|[,|;、]/).map(item => item.trim()).filter(Boolean);
+  }
   function csvField(row, names) {
     for (const name of names) {
       const value = row[name];
@@ -261,7 +264,7 @@
         return { type: item.slice(0, separator).trim(), value: item.slice(separator + 1).trim() };
       });
       if (facts.length) fields.facts = facts;
-      const tags = splitCsvList(csvField(row, ['tags', 'tag', 'タグ'])); if (tags.length) fields.tags = tags;
+      const tags = splitTagList(csvField(row, ['tags', 'tag', 'タグ'])); if (tags.length) fields.tags = tags;
       const sourceNote = csvField(row, ['source', 'sourcenote', '確認元', 'ソース']);
       if (Object.keys(fields).length && !sourceNote) throw new Error(`${index + 2}行目: 手入力項目には source（確認元・理由）が必要です`);
       const enabled = csvField(row, ['enabled', '利用']);
@@ -561,7 +564,7 @@
     box.append(importForm);
     const csvFile = el('input', { name: 'csvFile', className: 'form-input', type: 'file', accept: '.csv,text/csv' });
     const csvForm = el('form', { className: 'x-form x-product-csv-import' }, [
-      el('p', { className: 'x-muted', text: 'CSV列: url または asin, name, features, facts, source, tags, enabled, scheduleEnabled。features/tagsは「|」区切り、factsは「種類 | 内容」を複数入力します。商品ごとのtagsは管理用ラベルです。Amazonアソシエイト追跡タグはアカウント設定で管理します。' }),
+      el('p', { className: 'x-muted', text: 'CSV列: url または asin, name, features, facts, source, tags, enabled, scheduleEnabled。featuresは「|」区切り、tagsは「|」またはカンマ区切り、factsは「種類 | 内容」を複数入力します。商品ごとのtagsは管理用ラベルです。Amazonアソシエイト追跡タグはアカウント設定で管理します。' }),
       el('label', { className: 'x-field' }, [el('span', { text: '商品CSV（UTF-8）' }), csvFile]),
       button('CSVを取り込む', async event => {
         event.preventDefault();
@@ -585,11 +588,13 @@
             const query = new URLSearchParams({ accountId }); if (cursor) query.set('cursor', cursor);
             const page = await api(`/api/x-affiliate/products?${query}`); catalog.push(...(page.products || [])); cursor = page.nextCursor || '';
           } while (cursor);
-          let patched = 0;
+          let patched = 0; const patchedIds = new Set();
           for (const item of imported) {
+            if (patchedIds.has(item.productId)) { failures.push(`${item.row.rowNumber}行目: 同じ商品がCSV内で重複しています`); continue; }
             const current = catalog.find(candidate => candidate.product?.productId === item.productId);
             if (!current || !Object.keys(item.row.fields).length) continue;
             await api(`/api/x-affiliate/products/${encodeURIComponent(item.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: current.product.revision, expectedAccountRevision: current.accountProduct?.revision, fields: item.row.fields, sourceNote: item.row.sourceNote }) });
+            patchedIds.add(item.productId);
             patched += 1;
           }
           clearRetry(csvForm); endWrite(csvForm);
@@ -656,7 +661,7 @@
           const fields = { operatorNote: values.operatorNote || null, enabled: values.enabled === 'on', scheduleEnabled: values.scheduleEnabled === 'on' };
           if ((values.name || '') !== (product.name || '')) fields.name = values.name || null;
           if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
-          const tags = splitCsvList(values.tags);
+          const tags = splitTagList(values.tags);
           if (JSON.stringify(tags) !== JSON.stringify(product.tags || [])) fields.tags = tags.length ? tags : null;
           const currentFacts = (product.facts || []).map(({ factId, ...fact }) => fact);
           if (JSON.stringify(facts.map(({ factId, ...fact }) => fact)) !== JSON.stringify(currentFacts)) fields.facts = facts.length ? facts : null;
