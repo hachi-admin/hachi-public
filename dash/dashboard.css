@@ -2212,6 +2212,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-inline-form .x-check .form-input{width:auto}
 .x-link-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;letter-spacing:.04em;color:var(--txt);user-select:text}
 .x-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--div);font-size:12px;color:var(--txt)}
+.x-account-select.selected{background:var(--acc);color:#fff;box-shadow:var(--sh-press)}
 .x-muted{font-size:11px;color:var(--m2);line-height:1.6}
 .x-status{padding:8px 10px;border-radius:8px;font-size:12px;color:var(--txt);background:var(--bg)}
 .x-status[data-kind="error"]{color:var(--error)}
