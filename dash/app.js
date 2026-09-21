@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '50';
+const DASH_BUILD = '51';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1891,12 +1891,18 @@ async function _loadCatShots(id) {
          * last resort, for a category with neither. */
         templateId: v.template || preset?.templateId || HP_PREVIEW_GROUND,
         /* The alignment under test, not the category's own — this panel exists to compare them.
-           The text zone is opened to full width too: a style that confines type to the left 56%
-           makes 「中央」 mean "centred inside that column", which is a lie about what is shown.
-           `textZone: ''` used to be passed here and was rejected outright (`validateStyleSpec`:
-           "unusable value"), so the zone was never actually opened; 'full' is what the vocabulary
-           accepts. */
-        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align, textZone: 'full', zoneWidth: undefined },
+         *
+         * `textZone` used to be forced to 'full' here, on the reasoning that a style confining type
+         * to the left 56% made 「中央」 mean "centred inside that column", which read as a lie about
+         * what was shown. That reasoning predates the textZone split actually cropping the
+         * photograph (hero-title.js) — before it, `textZone: left/right` only moved the type, so
+         * widening it to `full` was a harmless normalisation. Now it hides the split entirely: a
+         * category pinned to `photo-split-column` previewed as full-bleed photo in every panel here
+         * while actually publishing a spread. The tile's whole purpose is "what will this category
+         * actually look like" (see the comment on `acard-shots` above), and a preview that cannot
+         * show its own split answers that question wrong. Left as the preset's own `textZone` now;
+         * only `align` is the axis under comparison. */
+        styleSpec: { ...(preset?.styleSpec || {}), align: shot.align },
         width: 420,
         categoryId: id,
         /* On both keys, and `visual` is the one that decides: `resolveTemplate` reads
