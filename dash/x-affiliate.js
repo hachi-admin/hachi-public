@@ -1439,7 +1439,8 @@
     }
     const job = notice.job || {};
     const label = job.status === 'completed' ? '生成完了' : job.status === 'failed' ? '生成失敗' : job.status === 'unknown' ? '生成結果を確認できません' : `生成状態: ${job.status || '不明'}`;
-    const details = [label, `${notice.draftCount}案`, job.jobId ? `job ${job.jobId}` : '', job.errorCode || ''].filter(Boolean).join(' · ');
+    const diagnostic = job.providerDiagnostic || {};
+    const details = [label, `${notice.draftCount}案`, job.jobId ? `job ${job.jobId}` : '', job.errorCode || '', diagnostic.code || '', diagnostic.message || ''].filter(Boolean).join(' · ');
     const status = el('p', { className: 'x-status', text: details });
     status.dataset.kind = job.status === 'completed' ? 'success' : job.status === 'failed' ? 'error' : 'warn';
     box.append(status);
