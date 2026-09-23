@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '58';
+const DASH_BUILD = '59';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1373,6 +1373,41 @@ const _CAT_QUICK = {
  *
  * 変える re-renders type over the picture already generated for this category, which is free and
  * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
+/* Two stored samples, not the four synthetic panels above them. `.acard-shots` redraws one saved
+ * photograph's lettering four ways; these are two *different* photographs — a symmetric, centred
+ * composition and a photograph extended sideways to carry the headline (`visual.samples.center` /
+ * `.side`, written by POST .../sample with { pattern }) — so a category can be judged on which
+ * composition actually suits it, not only on how its one picture takes different copy.
+ *
+ * Shown whenever either slot has something, so a category that already has one is not hidden while
+ * it awaits the other; the generate button only appears where the category can still spend on one
+ * (`active`/`paused`, mirroring the rule the 見本を作り直す button already used elsewhere). */
+function _catPatternSamples(c, v) {
+  const canGenerate = c.status === 'active' || c.status === 'paused';
+  const samples = v.samples || {};
+  const pat = (key, label) => {
+    const s = samples[key] || {};
+    const body = s.url
+      ? `<img src="${esc(s.url)}" class="cat-pattern-img" alt="${esc(c.name)} ${label}見本" loading="lazy"
+           onclick="event.stopPropagation();_openLightbox('${esc(s.url)}','${esc(c.name)}・${label}')">`
+      : `<div class="cat-pattern-empty">${label}：未生成</div>`;
+    return `<div class="cat-pattern">
+      ${body}
+      <div class="cat-pattern-foot">
+        <span>${label}</span>
+        ${canGenerate ? `<button class="cat-quick" id="cat-pattern-btn-${key}-${esc(c.id)}"
+          onclick="event.stopPropagation();regenCategorySamplePattern('${esc(c.id)}','${key}')"
+          title="画像を1枚生成します（pro課金）">${s.url ? '作り直す' : '作る'}</button>` : ''}
+      </div>
+    </div>`;
+  };
+  if (!canGenerate && !samples.center?.url && !samples.side?.url) return '';
+  return `<div class="acard-patterns" onclick="event.stopPropagation()">
+    ${pat('center', '中央')}
+    ${pat('side', 'サイド')}
+  </div>`;
+}
+
 function _catTileMapBar(c, v) {
   /* What the bar carries depends on what the tile is *for*, which depends on the status.
    *
@@ -1532,6 +1567,7 @@ function _categoryTile(c) {
          </div>`
       : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
     ${_catTileMapBar(c, v)}
+    ${_catPatternSamples(c, v)}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
@@ -2982,6 +3018,44 @@ async function _regenCategorySampleNow(id) {
     if (inEditor) openCategoryDetail(id);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '見本を作り直す'; }
+  }
+}
+
+/* Same button, for the pattern slots instead of the legacy flat one — see _catPatternSamples.
+ * `pattern` is what tells the server which of visual.samples.center/.side to read and write; sent
+ * straight through with force, since pressing this from a tile is always "make (or remake) this
+ * one" rather than a check for something already there. */
+async function regenCategorySamplePattern(id, pattern) {
+  const c = (CATEGORIES || []).find((x) => x.id === id);
+  const rid = c?.visual?.imagePrompt;
+  const recipe = rid ? (_imagePrompts.find((r) => r.id === rid)?.name || rid) : null;
+  const label = pattern === 'center' ? '中央' : 'サイド';
+  showConfirm(
+    `${label}パターンを、${recipe ? `レシピ「${recipe}」` : '自動のレシピ'}のまま作ります。`
+    + '（pro 課金・30秒ほど）。',
+    () => _regenCategorySamplePatternNow(id, pattern),
+    document.getElementById(`cat-pattern-btn-${pattern}-${id}`) ?? undefined,
+  );
+}
+
+async function _regenCategorySamplePatternNow(id, pattern) {
+  const btn = document.getElementById(`cat-pattern-btn-${pattern}-${id}`);
+  const original = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  try {
+    const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true, pattern }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const msg = await res?.json().catch(() => null);
+      showToast(msg?.error ? `見本を作れませんでした: ${msg.error}` : '見本を作れませんでした', 'error');
+      return;
+    }
+    showToast('見本を作りました。', 'success');
+    await _loadTopics();
+  } finally {
+    if (btn) { btn.disabled = false; if (original) btn.textContent = original; }
   }
 }
 

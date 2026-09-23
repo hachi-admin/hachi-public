@@ -2432,6 +2432,19 @@ body:has(.mob-more-sheet.open) .page-area{
 .acard-map-sel{width:100%;min-width:0;font-size:10.5px;padding:4px 6px}
 .acard-map .cat-quick{justify-self:start;white-space:nowrap}
 
+/* The two stored composition samples (center/side), distinct from the four synthetic .acard-shots
+   panels above — see _catPatternSamples. Same two-across geometry as .acard-map so the tile does
+   not grow a third layout. */
+.acard-patterns{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin:2px 0 4px}
+.cat-pattern{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cat-pattern-img{width:100%;aspect-ratio:1280/670;border-radius:8px;display:block;object-fit:cover;cursor:zoom-in}
+.cat-pattern-empty{
+  aspect-ratio:1280/670;border-radius:8px;background:color-mix(in srgb,var(--m) 8%,transparent);
+  display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--m2);
+}
+.cat-pattern-foot{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.cat-pattern-foot>span{font-size:9px;color:var(--m2);font-weight:600}
+
 /* Folded styleSpec groups — open, these ran to several screens above the controls in reach. */
 .hp-grp-fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:6px 0}
 .hp-grp-fold>summary::-webkit-details-marker{display:none}
