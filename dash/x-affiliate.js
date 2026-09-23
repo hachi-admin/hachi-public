@@ -1015,25 +1015,43 @@
     productIdInput.addEventListener('input', () => syncProductPicker(productPicker, productIdInput));
     box.append(generateForm);
     const productDrafts = new Map();
-    (data.drafts || []).forEach(draft => (draft.productIds || []).forEach(productId => {
-      const rows = productDrafts.get(productId) || []; rows.push(draft); productDrafts.set(productId, rows);
-    }));
-    const overview = el('section', { className: 'x-product-review-overview' }, [el('strong', { text: '商品ごとの候補文状況' })]);
-    state.productCatalog.forEach(item => {
-      const product = item.product || {};
-      const drafts = productDrafts.get(product.productId) || [];
-      const counts = { needs_review: 0, approved: 0, rejected: 0, archived: 0 };
-      drafts.forEach(draft => { if (Object.hasOwn(counts, draft.state)) counts[draft.state] += 1; });
-      const stateText = drafts.length ? [counts.needs_review && `レビュー待ち ${counts.needs_review}`, counts.approved && `採用済み ${counts.approved}`, counts.rejected && `見送り ${counts.rejected}`, counts.archived && `保管 ${counts.archived}`].filter(Boolean).join(' · ') : '未生成';
-      overview.append(el('div', { className: 'x-product-review-row' }, [
-        el('strong', { text: product.name || '商品名未入力' }),
-        el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` }),
-        el('span', { className: drafts.length ? 'x-product-review-state' : 'x-muted', text: drafts.length ? `${drafts.length}案 · ${stateText}` : stateText }),
-      ]));
+    const allDraftGroups = new Map();
+    (data.drafts || []).forEach(draft => {
+      if (!allDraftGroups.has(draft.generationGroupId)) allDraftGroups.set(draft.generationGroupId, []);
+      allDraftGroups.get(draft.generationGroupId).push(draft);
+      (draft.productIds || []).forEach(productId => {
+        const rows = productDrafts.get(productId) || []; rows.push(draft); productDrafts.set(productId, rows);
+      });
     });
-    if (!state.productCatalog.length) overview.append(el('p', { className: 'x-muted', text: '商品を読み込むと、商品ごとの候補文状況を表示します' }));
-    box.append(overview);
-    const savedReviewFilter = state.reviewFilters.get(accountId) || { q: '', productId: '', status: '' };
+    const savedReviewFilter = state.reviewFilters.get(accountId) || { q: '', productId: '', status: '', bucket: 'needs_review', page: 0 };
+    const bucket = savedReviewFilter.bucket || 'needs_review';
+    const productRows = state.productCatalog.map(item => item.product || {});
+    const draftRowsFor = product => productDrafts.get(product.productId) || [];
+    const counts = {
+      needs_review: productRows.filter(product => draftRowsFor(product).some(draft => draft.state === 'needs_review')).length,
+      candidate: productRows.filter(product => draftRowsFor(product).length > 0).length,
+      not_generated: productRows.filter(product => draftRowsFor(product).length === 0).length,
+      all: productRows.length,
+    };
+    const bucketOptions = [
+      ['needs_review', 'レビュー待ち', counts.needs_review],
+      ['candidate', '候補あり', counts.candidate],
+      ['not_generated', '未生成', counts.not_generated],
+      ['all', 'すべて', counts.all],
+    ];
+    const overview = el('section', { className: 'x-product-review-overview' }, [
+      el('strong', { text: '商品ごとの候補文状況' }),
+      el('div', { className: 'x-product-review-metrics', role: 'group', 'aria-label': '候補文の状態で絞り込む' }, bucketOptions.map(([value, label, count]) => {
+        const metric = el('button', { className: `x-review-metric${bucket === value ? ' is-active' : ''}`, type: 'button', 'aria-pressed': String(bucket === value) }, [
+          el('strong', { text: String(count) }), el('span', { text: label }),
+        ]);
+        metric.addEventListener('click', () => {
+          state.reviewFilters.set(accountId, { ...savedReviewFilter, bucket: value, page: 0 });
+          renderDrafts(data, accountId, generation);
+        });
+        return metric;
+      })),
+    ]);
     const reviewFilter = el('form', { className: 'x-inline-form x-review-filter' }, [
       field('商品名・ASIN検索', 'search', 'q'),
       el('label', { className: 'x-field' }, [el('span', { text: '商品' }), el('select', { name: 'productId', className: 'form-select' }, [
@@ -1047,7 +1065,7 @@
         event.preventDefault();
         if (!isCurrentScope(accountId, generation)) return;
         const values = formData(reviewFilter);
-        const activeFilter = { q: values.q || '', productId: values.productId || '', status: values.status || '' };
+        const activeFilter = { ...savedReviewFilter, q: values.q || '', productId: values.productId || '', status: values.status || '', page: 0 };
         state.reviewFilters.set(accountId, activeFilter);
         await loadDrafts(accountId, generation);
       }),
@@ -1055,23 +1073,84 @@
     reviewFilter.querySelector('[name="q"]').value = savedReviewFilter.q;
     reviewFilter.querySelector('[name="productId"]').value = savedReviewFilter.productId;
     reviewFilter.querySelector('[name="status"]').value = savedReviewFilter.status;
-    box.append(reviewFilter);
-    box.append(el('p', { className: 'x-muted', text: '候補文は同じ生成グループ単位で表示します。絞り込み条件に一致したグループの案をまとめて確認できます。' }));
-    const activeReviewFilter = savedReviewFilter;
-    const matchingGroupIds = new Set();
-    (data.drafts || []).forEach(draft => {
-      const products = (draft.productIds || []).map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product).filter(Boolean);
-      const query = String(activeReviewFilter.q || '').trim().toLowerCase();
-      const matchesQuery = !query || products.some(product => `${product.name || ''} ${product.asin || ''}`.toLowerCase().includes(query));
-      const matchesProduct = !activeReviewFilter.productId || (draft.productIds || []).includes(activeReviewFilter.productId);
-      const matchesStatus = !activeReviewFilter.status || draft.state === activeReviewFilter.status;
-      if (matchesQuery && matchesProduct && matchesStatus) matchingGroupIds.add(draft.generationGroupId);
+    const query = String(savedReviewFilter.q || '').trim().toLowerCase();
+    const filteredProducts = productRows.filter(product => {
+      const drafts = draftRowsFor(product);
+      const matchesBucket = bucket === 'all' || (bucket === 'candidate' && drafts.length > 0) || (bucket === 'not_generated' && drafts.length === 0) || (bucket === 'needs_review' && drafts.some(draft => draft.state === 'needs_review'));
+      const matchesQuery = !query || `${product.name || ''} ${product.asin || ''}`.toLowerCase().includes(query);
+      const matchesProduct = !savedReviewFilter.productId || product.productId === savedReviewFilter.productId;
+      const matchesStatus = !savedReviewFilter.status || drafts.some(draft => draft.state === savedReviewFilter.status);
+      return matchesBucket && matchesQuery && matchesProduct && matchesStatus;
+    }).sort((a, b) => {
+      const priority = product => { const drafts = draftRowsFor(product); return drafts.some(draft => draft.state === 'needs_review') ? 0 : drafts.length ? 1 : 2; };
+      return priority(a) - priority(b) || String(a.name || '').localeCompare(String(b.name || ''), 'ja');
     });
-    const groups = new Map();
-    (data.drafts || []).forEach(draft => { if (matchingGroupIds.has(draft.generationGroupId)) { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); } });
+    const pageSize = 25;
+    const page = Math.max(0, Number(savedReviewFilter.page) || 0);
+    const visibleProducts = filteredProducts.slice(0, (page + 1) * pageSize);
+    const matchingGroupIds = new Set(visibleProducts.flatMap(product => draftRowsFor(product).map(draft => draft.generationGroupId)));
+    const groups = new Map([...allDraftGroups].filter(([groupId]) => matchingGroupIds.has(groupId)));
+    overview.append(reviewFilter);
+    overview.append(el('p', { className: 'x-muted', text: '商品名を選ぶと候補の要約を開きます。同じ生成グループの案は下のレビュー欄からまとめて操作できます。' }));
+    const listTitle = bucketOptions.find(([value]) => value === bucket)?.[1] || '商品';
+    overview.append(el('div', { className: 'x-product-review-list-title', text: `${listTitle}の商品 ${filteredProducts.length}件` }));
+    const productList = el('div', { className: 'x-product-review-list' });
+    visibleProducts.forEach(product => {
+      const drafts = draftRowsFor(product);
+      const waiting = drafts.filter(draft => draft.state === 'needs_review').length;
+      const states = drafts.length ? [
+        waiting && `レビュー待ち ${waiting}`,
+        drafts.filter(draft => draft.state === 'approved').length && `採用済み ${drafts.filter(draft => draft.state === 'approved').length}`,
+        drafts.filter(draft => draft.state === 'rejected').length && `見送り ${drafts.filter(draft => draft.state === 'rejected').length}`,
+        drafts.filter(draft => draft.state === 'archived').length && `保管 ${drafts.filter(draft => draft.state === 'archived').length}`,
+      ].filter(Boolean).join(' · ') : '未生成';
+      const row = el('details', { className: 'x-product-review-entry' });
+      row.append(el('summary', { className: 'x-product-review-row' }, [
+        el('strong', { text: product.name || '商品名未入力' }),
+        el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` }),
+        el('span', { className: drafts.length ? 'x-product-review-state' : 'x-muted', text: drafts.length ? `${drafts.length}案 · ${states}` : states }),
+      ]));
+      const detail = el('div', { className: 'x-product-review-detail' });
+      const groupIds = [...new Set(drafts.map(draft => draft.generationGroupId))];
+      if (!groupIds.length) {
+        detail.append(el('p', { className: 'x-muted', text: '候補文はまだありません。' }));
+        detail.append(button('この商品を生成対象にする', () => {
+          productIdInput.value = product.productId;
+          syncProductPicker(productPicker, productIdInput);
+          productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          productPicker.focus();
+        }));
+      }
+      drafts.forEach(draft => detail.append(el('div', { className: 'x-draft-preview-row' }, [
+        el('strong', { text: `${draft.variantId || '候補'} · ${draft.state === 'needs_review' ? 'レビュー待ち' : draft.state === 'approved' ? '採用済み' : draft.state === 'rejected' ? '見送り' : '保管'}` }),
+        el('span', { className: 'x-muted', text: String(draft.body || '').replace(/\s+/g, ' ').slice(0, 120) || '本文なし' }),
+      ])));
+      groupIds.forEach(groupId => {
+        const groupDrafts = allDraftGroups.get(groupId) || [];
+        detail.append(button(`候補文の編集・レビューを開く（${groupDrafts.length}案）`, () => {
+          const target = groupDetailsById.get(String(groupId));
+          if (target) { target.open = true; target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        }));
+        if (groupDrafts.some(draft => draft.productIds?.length > 1)) detail.append(el('span', { className: 'x-muted', text: 'この候補は複数商品を含む生成グループです。' }));
+      });
+      productList.append(row);
+    });
+    if (!visibleProducts.length) productList.append(el('p', { className: 'x-muted', text: '条件に一致する商品はありません' }));
+    if (!state.productCatalog.length) productList.append(el('p', { className: 'x-muted', text: '商品を読み込むと、商品ごとの候補文状況を表示します' }));
+    overview.append(productList);
+    if (visibleProducts.length < filteredProducts.length) overview.append(button(`さらに${Math.min(pageSize, filteredProducts.length - visibleProducts.length)}商品を表示`, () => {
+      state.reviewFilters.set(accountId, { ...savedReviewFilter, page: page + 1 });
+      renderDrafts(data, accountId, generation);
+    }));
+    box.append(overview);
+    if (groups.size) box.append(el('h4', { className: 'x-draft-list-title', text: '候補文の編集・レビュー' }));
+    const groupDetailsById = new Map();
     for (const [groupId, drafts] of groups) {
       const groupBusy = drafts.some(draft => Boolean(draft.regenerationLock || draft.regeneration?.status === 'running' || draft.regeneration?.status === 'queued'));
-      const group = el('section', { className: 'x-draft-group' }, [el('strong', { text: `生成グループ ${groupId} · ${drafts.length}案${groupBusy ? ' · 再生成処理中' : ''}` })]);
+      const productNames = [...new Set(drafts.flatMap(draft => (draft.productIds || []).map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product?.name).filter(Boolean)))];
+      const group = el('details', { className: 'x-draft-group' });
+      groupDetailsById.set(String(groupId), group);
+      group.append(el('summary', { text: `${productNames.join('、') || `生成グループ ${groupId}`} · ${drafts.length}案${groupBusy ? ' · 再生成処理中' : ''}` }));
       const comparison = el('div', { className: 'x-form x-draft-grid' });
       drafts.forEach(draft => {
         const edit = field('本文', 'textarea', 'body', draft.body); const textarea = edit.querySelector('textarea');
@@ -1144,7 +1223,7 @@
       });
       group.append(comparison); box.append(group);
     }
-    if (!(data.drafts || []).length) box.append(el('p', { className: 'x-muted', text: '候補文はまだありません' }));
+    if (!(data.drafts || []).length && !state.productCatalog.length) box.append(el('p', { className: 'x-muted', text: '商品と候補文はまだありません' }));
   }
   async function reviewDraft(draft, action, reason, root, accountId, generation) {
     try {
