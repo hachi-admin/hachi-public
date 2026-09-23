@@ -982,6 +982,7 @@
           draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}`,
           jobId ? `job ${jobId}` : '',
           regeneration.errorCode || '',
+          Array.isArray(regeneration.validationErrors) && regeneration.validationErrors.length ? regeneration.validationErrors.join(', ') : '',
           providerDiagnostic.code || '',
           providerDiagnostic.message || '',
         ].filter(Boolean).join(' · ') : '';
@@ -1035,7 +1036,7 @@
           }, !regenerationAllowed),
         ]);
         regenerateForm.querySelector('button')?.setAttribute('data-regeneration-action', 'true');
-        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { const diagnostic = job.providerDiagnostic || {}; const details = [`再生成ジョブ: ${job.status || '不明'}`, `job ${job.jobId || jobId}`, job.errorCode || '', diagnostic.code || '', diagnostic.message || ''].filter(Boolean).join(' · '); message(regenerateForm, details, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
+        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { const diagnostic = job.providerDiagnostic || {}; const details = [`再生成ジョブ: ${job.status || '不明'}`, `job ${job.jobId || jobId}`, job.errorCode || '', Array.isArray(job.validationErrors) && job.validationErrors.length ? job.validationErrors.join(', ') : '', diagnostic.code || '', diagnostic.message || ''].filter(Boolean).join(' · '); message(regenerateForm, details, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
         if (draft.state === 'archived') regenerateForm.querySelectorAll('textarea,button').forEach(node => { node.disabled = true; });
         article.append(regenerateForm);
         article.append(actions); comparison.append(article);
