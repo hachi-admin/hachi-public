@@ -2224,10 +2224,29 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product-tag{padding:3px 8px;border-radius:999px;background:var(--bg);box-shadow:var(--sh-press);font-size:10px;color:var(--acc)}
 .x-product-review-overview{display:grid;gap:8px;margin:14px 0 20px;padding:12px;border-radius:12px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-product-review-overview>strong{font-size:12px;color:var(--txt)}
-.x-product-review-row{display:grid;grid-template-columns:minmax(180px,2fr) minmax(110px,1fr) minmax(180px,2fr);gap:10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line,rgba(128,128,128,.18))}
+.x-product-review-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.x-review-metric{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 11px;border:1px solid transparent;border-radius:10px;background:var(--bg);box-shadow:var(--sh-press);color:var(--m2);cursor:pointer;text-align:left}
+.x-review-metric strong{font-size:18px;line-height:1.2;color:var(--txt)}
+.x-review-metric span{font-size:10px}
+.x-review-metric.is-active{border-color:var(--acc);color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.x-product-review-list-title,.x-draft-list-title{margin:8px 0 2px;font-size:12px;color:var(--txt)}
+.x-product-review-list{display:grid;gap:0}
+.x-product-review-entry{border-bottom:1px solid var(--line,rgba(128,128,128,.18))}
+.x-product-review-entry>summary{list-style:none;cursor:pointer}
+.x-product-review-entry>summary::-webkit-details-marker{display:none}
+.x-product-review-entry>summary::after{content:'＋';justify-self:end;color:var(--m2);font-size:12px}
+.x-product-review-entry[open]>summary::after{content:'−'}
+.x-product-review-row{display:grid;grid-template-columns:minmax(180px,2fr) minmax(110px,1fr) minmax(180px,2fr) 18px;gap:10px;align-items:center;padding:8px 2px}
 .x-product-review-row>strong{font-size:12px;color:var(--txt);overflow-wrap:anywhere}
 .x-product-review-state{font-size:11px;color:var(--acc)}
 @media(max-width:680px){.x-product-review-row{grid-template-columns:1fr;gap:3px}}
+.x-product-review-detail{display:grid;gap:8px;padding:8px 12px 12px;background:var(--surf);border-radius:8px}
+.x-draft-preview-row{display:grid;gap:3px;padding:6px 0;border-bottom:1px solid var(--line,rgba(128,128,128,.18))}
+.x-draft-preview-row strong{font-size:11px;color:var(--txt)}
+.x-draft-preview-row .x-muted{overflow-wrap:anywhere}
+.x-draft-group{margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--bg);box-shadow:var(--sh-press)}
+.x-draft-group>summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
+.x-draft-group[open]>summary{margin-bottom:10px}
 .x-review-filter{margin:14px 0 8px}
 .x-product-list{display:grid;gap:12px;margin-top:14px}
 .x-product{padding:13px;background:var(--bg);border-radius:12px;box-shadow:var(--sh-press)}
@@ -2242,7 +2261,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-skill .x-form textarea{min-height:150px}
 .x-skill-preview{margin-top:10px;padding:10px;border-radius:9px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-import-results{grid-column:1/-1}
-@media(max-width:600px){.x-section-tabs{margin-inline:-4px}.x-section-tab{padding:9px 12px}.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}}
+@media(max-width:600px){.x-section-tabs{margin-inline:-4px}.x-section-tab{padding:9px 12px}.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}.x-product-review-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* ── Hero preset editor ──────────────────────────────────────────────────────
  *
  * These three were inline `style=` attributes, which is why the editor was unusable on a phone:
