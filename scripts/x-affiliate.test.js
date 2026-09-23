@@ -1512,6 +1512,35 @@ test('L4 generation form keeps variant count separate and sends one grouped requ
   assert.deepEqual(body.productIds, ['p1', 'p2']); assert.equal(body.requestedVariantCount, 2); assert.equal(typeof body.idempotencyKey, 'string');
 });
 
+test('generation result and job id remain visible after drafts reload', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP', enabled: true, revision: 0 }], member: { role: 'member', accountIds: ['a1'] } });
+    if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/tags')) return json({ accountId: 'a1', tags: [] });
+    if (path.includes('/products')) return json({ products: [] });
+    if (path.includes('/skills')) return json({ imported: false, skills: [], candidates: [] });
+    if (path.endsWith('/generations')) return json({ job: { jobId: 'job-unknown-1', status: 'unknown', errorCode: 'PROVIDER_RESPONSE_UNKNOWN', createdDraftCount: 0 }, draftIds: [] });
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=generation-result', true, router, { verifier: 'generation-result-v' }); await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-drafts .x-generation-form'); assert.ok(form);
+  form.elements.productIds.value = 'p1'; form.querySelector('button').click(); await flush();
+  const status = dom.window.document.querySelector('#x-drafts .x-status');
+  assert.ok(status);
+  assert.match(status.textContent, /生成結果を確認できません/);
+  assert.match(status.textContent, /job-unknown-1/);
+  assert.match(status.textContent, /PROVIDER_RESPONSE_UNKNOWN/);
+  assert.equal(status.dataset.kind, 'warn');
+  assert.match(dom.window.document.querySelector('#x-generation-status').textContent, /job-unknown-1/);
+  assert.match(dom.window.document.querySelector('#x-generation-status').textContent, /PROVIDER_RESPONSE_UNKNOWN/);
+  assert.ok(dom.window.document.querySelector('#x-drafts .x-generation-form'));
+  assert.ok(requests.some(item => item.path.endsWith('/api/x-affiliate/generations')));
+});
+
 test('L4 comparison shows grouped drafts and review uses the displayed revision', async () => {
   const requests = []; const drafts = [{ draftId: 'd1', generationGroupId: 'g1', variantId: 'variant-1', state: 'needs_review', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文\nhttps://www.amazon.co.jp/dp/B012345678?tag=x-22\n#PR' }, { draftId: 'd2', generationGroupId: 'g1', variantId: 'variant-2', state: 'needs_review', skillId: 's2', skillVersion: '1.0.0', angleId: 'a2', productIds: ['p1'], revision: 7, validation: { ok: false, errors: ['fact_ref_invalid'] }, body: '作業版\n#PR' }];
   const router = (url, options = {}) => {

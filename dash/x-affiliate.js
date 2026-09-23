@@ -20,7 +20,7 @@
     { id: 'operations', label: '運用状況' },
     { id: 'account', label: 'アカウント設定' },
   ];
-  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), productCatalog: [], settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), generationNotice: null, productCatalog: [], settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -206,6 +206,7 @@
     ]));
     root.append(sectionPanel('operations', [
       card('予算・予約状況', el('div', { id: 'x-budget' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
+      card('直近の生成リクエスト', el('div', { id: 'x-generation-status' }, [el('p', { className: 'x-muted', text: 'この画面を開いてからの生成結果を表示します' })])),
       card('通知状況', el('div', { id: 'x-notifications' }, [el('p', { className: 'x-muted', text: 'アカウントを選択してください' })])),
     ]));
     activatePanel(state.activePanel);
@@ -919,6 +920,8 @@
     const box = document.getElementById('x-drafts');
     if (!box || !isCurrentScope(accountId, generation)) return;
     box.replaceChildren(el('p', { className: 'x-muted', text: '候補は人が確認して採用します。生成・再生成は予算を消費します。' }));
+    renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
+    renderGenerationNotice(box, accountId);
     const productIdField = field('対象商品ID（カンマ区切り・1〜3件）', 'text', 'productIds', null, '下の一覧から選ぶと自動入力');
     const productIdInput = productIdField.querySelector('[name="productIds"]');
     const productPicker = el('select', { name: 'productPicker', className: 'form-select', multiple: 'multiple', size: String(Math.min(5, Math.max(2, state.productCatalog.length))) });
@@ -938,7 +941,11 @@
           const idempotencyKey = await keyFor(generateForm, { operation: 'generation', ...payload });
           const result = await api('/api/x-affiliate/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
           clearRetry(generateForm); endWrite(generateForm);
-          if (isCurrentScope(accountId, generation)) { message(generateForm, `受付 ${result.job.status} · ${result.draftIds.length}案`, result.job.status === 'completed' ? 'success' : 'warn'); await loadDrafts(accountId, generation); }
+          if (isCurrentScope(accountId, generation)) {
+            state.generationNotice = { accountId, job: result.job || {}, draftCount: result.job?.createdDraftCount ?? result.draftIds?.length ?? 0 };
+            renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
+            await loadDrafts(accountId, generation);
+          }
         } catch (error) {
           endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, error.body?.error?.code || error.message, 'error');
         }
@@ -1421,6 +1428,21 @@
   function microJPY(value) {
     if (!Number.isFinite(Number(value))) return '不明';
     return `${(Number(value) / 1000000).toLocaleString('ja-JP')}円`;
+  }
+  function renderGenerationNotice(box, accountId) {
+    if (!box) return;
+    box.replaceChildren();
+    const notice = state.generationNotice;
+    if (notice?.accountId !== accountId) {
+      box.append(el('p', { className: 'x-muted', text: 'この画面を開いてからの生成結果はありません' }));
+      return;
+    }
+    const job = notice.job || {};
+    const label = job.status === 'completed' ? '生成完了' : job.status === 'failed' ? '生成失敗' : job.status === 'unknown' ? '生成結果を確認できません' : `生成状態: ${job.status || '不明'}`;
+    const details = [label, `${notice.draftCount}案`, job.jobId ? `job ${job.jobId}` : '', job.errorCode || ''].filter(Boolean).join(' · ');
+    const status = el('p', { className: 'x-status', text: details });
+    status.dataset.kind = job.status === 'completed' ? 'success' : job.status === 'failed' ? 'error' : 'warn';
+    box.append(status);
   }
   function renderBudget(data, accountId, generation) {
     if (!isCurrentScope(accountId, generation)) return;
