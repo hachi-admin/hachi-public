@@ -977,10 +977,18 @@
         const regeneration = draft.regeneration || draft.regenerationJob || state.draftJobs.get(draft.draftId) || {};
         const draftBusy = Boolean(draft.regenerationLock || regeneration.status === 'running' || regeneration.status === 'queued');
         const jobId = regeneration.jobId || draft.regenerationJobId;
+        const providerDiagnostic = regeneration.providerDiagnostic || {};
+        const regenerationSummary = regeneration.status ? [
+          draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}`,
+          jobId ? `job ${jobId}` : '',
+          regeneration.errorCode || '',
+          providerDiagnostic.code || '',
+          providerDiagnostic.message || '',
+        ].filter(Boolean).join(' · ') : '';
         const article = el('article', { className: 'x-product x-draft' }, [
           el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId} · ${draft.state}` }), el('span', { className: 'x-muted', text: `${draft.skillId}@${draft.skillVersion} · 切り口 ${draft.angleId}` })]),
           el('p', { className: draft.validation?.ok ? 'x-muted' : 'x-status', text: draft.validation?.ok ? '検証OK' : `検証NG: ${(draft.validation?.errors || []).join(', ')}` }),
-          ...(regeneration.status ? [el('p', { className: 'x-status', text: draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}` })] : []),
+          ...(regenerationSummary ? [el('p', { className: 'x-status', text: regenerationSummary })] : []),
           edit,
         ]);
         textarea.disabled = draftBusy || draft.state === 'archived';
@@ -1027,7 +1035,7 @@
           }, !regenerationAllowed),
         ]);
         regenerateForm.querySelector('button')?.setAttribute('data-regeneration-action', 'true');
-        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { message(regenerateForm, `ジョブ状態: ${job.status}`, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
+        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { const diagnostic = job.providerDiagnostic || {}; const details = [`再生成ジョブ: ${job.status || '不明'}`, `job ${job.jobId || jobId}`, job.errorCode || '', diagnostic.code || '', diagnostic.message || ''].filter(Boolean).join(' · '); message(regenerateForm, details, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
         if (draft.state === 'archived') regenerateForm.querySelectorAll('textarea,button').forEach(node => { node.disabled = true; });
         article.append(regenerateForm);
         article.append(actions); comparison.append(article);
