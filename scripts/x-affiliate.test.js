@@ -172,6 +172,17 @@ test('401 clears X token, proof and verifier', async () => {
   assert.equal(dom.window.localStorage.getItem('dash-jwt'), 'legacy');
 });
 
+test('API errors surface the safe server code and request correlation ID', async () => {
+  const dom = page('#xentry', true, url => String(url).endsWith('/dashboard-exchange')
+    ? json({ token: jwt() })
+    : json({ error: { code: 'INTERNAL_ERROR', message: 'Request failed', requestId: 'req-safe-123' } }, 500), { jwt: dashboardJwt() });
+  await flush();
+  await assert.rejects(
+    () => dom.window.HachiXAffiliate.api('/api/x-affiliate/test'),
+    error => error.code === 500 && error.body.error.requestId === 'req-safe-123' && /INTERNAL_ERROR.*req-safe-123/.test(error.message),
+  );
+});
+
 test('full production source X entry keeps legacy dashboard idle while feature is off', async () => {
   const legacyToken = 'legacy-full-entry-jwt';
   const requests = [];

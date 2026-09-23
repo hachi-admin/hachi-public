@@ -54,7 +54,11 @@
     const r = await fetch(`${API_ORIGIN}${path}`, { ...options, headers: { ...headers(), ...(options && options.headers || {}) } });
     let body = {}; try { body = await r.json(); } catch {}
     if (r.status === 401) { logout(); throw Object.assign(new Error('認証の有効期限が切れました。再ログインしてください'), { code: 401 }); }
-    if (!r.ok) throw Object.assign(new Error(body.error?.message || `操作に失敗しました (${r.status})`), { code: r.status, body });
+    if (!r.ok) {
+      const diagnostic = [body.error?.code, body.error?.requestId ? `requestId ${body.error.requestId}` : ''].filter(Boolean).join(' · ');
+      const message = body.error?.message || `操作に失敗しました (${r.status})`;
+      throw Object.assign(new Error(diagnostic ? `${message} · ${diagnostic}` : message), { code: r.status, body });
+    }
     return body;
   }
   function logout() {
