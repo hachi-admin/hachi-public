@@ -20,7 +20,7 @@
     { id: 'operations', label: '運用状況' },
     { id: 'account', label: 'アカウント設定' },
   ];
-  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), productCatalog: [], productFilters: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), productCatalog: [], productFilters: new Map(), reviewFilters: new Map(), draftSnapshots: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -540,7 +540,8 @@
       const article = el('article', { className: 'x-product' }, [
         el('div', { className: 'x-product-head' }, [
           el('strong', { text: product.name || '商品名未入力' }),
-          el('span', { className: 'x-muted', text: `${product.asin || 'ASIN不明'} · ${product.catalogStatus || '不明'} · 不足: ${missing} · 手修正: ${overridden}` }),
+          el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'} · ${product.catalogStatus || '不明'} · 不足: ${missing} · 手修正: ${overridden}` }),
+          ...(product.tags?.length ? [el('div', { className: 'x-product-tags' }, product.tags.map(tag => el('span', { className: 'x-product-tag', text: tag })))] : []),
           ...(product.canonicalUrl ? [el('a', { className: 'x-product-link', href: product.canonicalUrl, target: '_blank', rel: 'noopener noreferrer', text: product.canonicalUrl })] : []),
         ]),
       ]);
@@ -619,11 +620,21 @@
     const existingItems = box.querySelector('.x-product-list');
     if (existingItems?.dataset.accountId === accountId) {
       existingItems.replaceWith(renderProductItems(data.products || [], accountId, generation));
+      const tagFilter = box.querySelector('[name="tag"]');
+      if (tagFilter) {
+        const selectedTag = tagFilter.value;
+        const tags = [...new Set(data.availableTags || [])];
+        if (selectedTag && !tags.includes(selectedTag)) tags.unshift(selectedTag);
+        tagFilter.replaceChildren(...['', ...tags].map(tag => el('option', { value: tag, text: tag ? `${tag}${tag === selectedTag && !(data.availableTags || []).includes(tag) ? '（該当なし）' : ''}` : 'すべてのタグ' })));
+        tagFilter.value = selectedTag;
+      }
       const priorResult = box.querySelector('.x-import-results');
       const nextResult = state.importResult?.accountId === accountId ? importResult(state.importResult.result, accountId, generation) : null;
       if (priorResult && nextResult) priorResult.replaceWith(nextResult);
       else if (priorResult) priorResult.remove();
       else if (nextResult) box.querySelector('.x-product-csv-import')?.after(nextResult);
+      const draftSnapshot = state.draftSnapshots.get(accountId);
+      if (draftSnapshot) renderDrafts(draftSnapshot, accountId, generation);
       return;
     }
     box.replaceChildren();
@@ -700,34 +711,49 @@
     ]);
     box.append(csvForm);
     if (state.importResult?.accountId === accountId) box.append(importResult(state.importResult.result, accountId, generation));
-    const savedFilter = state.productFilters.get(accountId) || { q: '', status: '' };
+    const savedFilter = state.productFilters.get(accountId) || { q: '', status: '', tag: '' };
+    const tagOptions = ['', ...(data.availableTags || [])];
     const filter = el('form', { className: 'x-inline-form x-product-filter' }, [
       field('商品名・ASIN検索', 'search', 'q'),
       selectField('状態', 'status', '', ['', 'available', 'input_pending', 'paused', 'archived', 'invalid']),
+      selectField('タグ', 'tag', '', tagOptions),
       button('絞り込む', async event => {
         event.preventDefault();
         if (!isCurrentScope(accountId, generation)) return;
         const values = formData(filter);
-        const activeFilter = { q: values.q || '', status: values.status || '' };
+        const activeFilter = { q: values.q || '', status: values.status || '', tag: values.tag || '' };
         state.productFilters.set(accountId, activeFilter);
         await loadProducts(accountId, generation, activeFilter);
       }),
     ]);
     filter.querySelector('[name="q"]').value = savedFilter.q;
     filter.querySelector('[name="status"]').value = savedFilter.status;
+    filter.querySelector('[name="tag"]').value = savedFilter.tag || '';
     box.append(filter);
     const items = renderProductItems(data.products || [], accountId, generation);
     box.append(items);
+    const draftSnapshot = state.draftSnapshots.get(accountId);
+    if (draftSnapshot) renderDrafts(draftSnapshot, accountId, generation);
   }
   async function loadProducts(accountId, generation, filter) {
     if (!isCurrentScope(accountId, generation)) return;
-    const activeFilter = filter ? { q: filter.q || '', status: filter.status || '' } : (state.productFilters.get(accountId) || { q: '', status: '' });
+    const activeFilter = filter ? { q: filter.q || '', status: filter.status || '', tag: filter.tag || '' } : (state.productFilters.get(accountId) || { q: '', status: '', tag: '' });
     state.productFilters.set(accountId, activeFilter);
     const query = new URLSearchParams({ accountId });
     if (activeFilter.q) query.set('q', activeFilter.q);
     if (activeFilter.status) query.set('status', activeFilter.status);
+    if (activeFilter.tag) query.set('tag', activeFilter.tag);
     try {
-      const result = await api(`/api/x-affiliate/products?${query}`);
+      let products = []; let availableTags = []; let cursor = ''; let lastPage = {};
+      do {
+        const pageQuery = new URLSearchParams(query);
+        if (cursor) pageQuery.set('cursor', cursor);
+        lastPage = await api(`/api/x-affiliate/products?${pageQuery}`);
+        products.push(...(lastPage.products || []));
+        availableTags = [...new Set([...availableTags, ...(lastPage.availableTags || [])])];
+        cursor = lastPage.nextCursor || '';
+      } while (cursor && isCurrentScope(accountId, generation));
+      const result = { ...lastPage, products, availableTags };
       if (isCurrentScope(accountId, generation)) renderProducts(result, accountId, generation);
     } catch (error) {
       const box = document.getElementById('x-products');
@@ -932,7 +958,7 @@
     select.disabled = false;
     state.productCatalog.forEach(item => {
       const product = item.product || {};
-      const option = el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ${product.asin || 'ASIN不明'} · ID: ${product.productId}` });
+      const option = el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'} · ID: ${product.productId}` });
       option.selected = selected.has(product.productId);
       select.append(option);
     });
@@ -977,8 +1003,61 @@
     });
     productIdInput.addEventListener('input', () => syncProductPicker(productPicker, productIdInput));
     box.append(generateForm);
+    const productDrafts = new Map();
+    (data.drafts || []).forEach(draft => (draft.productIds || []).forEach(productId => {
+      const rows = productDrafts.get(productId) || []; rows.push(draft); productDrafts.set(productId, rows);
+    }));
+    const overview = el('section', { className: 'x-product-review-overview' }, [el('strong', { text: '商品ごとの候補文状況' })]);
+    state.productCatalog.forEach(item => {
+      const product = item.product || {};
+      const drafts = productDrafts.get(product.productId) || [];
+      const counts = { needs_review: 0, approved: 0, rejected: 0, archived: 0 };
+      drafts.forEach(draft => { if (Object.hasOwn(counts, draft.state)) counts[draft.state] += 1; });
+      const stateText = drafts.length ? [counts.needs_review && `レビュー待ち ${counts.needs_review}`, counts.approved && `採用済み ${counts.approved}`, counts.rejected && `見送り ${counts.rejected}`, counts.archived && `保管 ${counts.archived}`].filter(Boolean).join(' · ') : '未生成';
+      overview.append(el('div', { className: 'x-product-review-row' }, [
+        el('strong', { text: product.name || '商品名未入力' }),
+        el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` }),
+        el('span', { className: drafts.length ? 'x-product-review-state' : 'x-muted', text: drafts.length ? `${drafts.length}案 · ${stateText}` : stateText }),
+      ]));
+    });
+    if (!state.productCatalog.length) overview.append(el('p', { className: 'x-muted', text: '商品を読み込むと、商品ごとの候補文状況を表示します' }));
+    box.append(overview);
+    const savedReviewFilter = state.reviewFilters.get(accountId) || { q: '', productId: '', status: '' };
+    const reviewFilter = el('form', { className: 'x-inline-form x-review-filter' }, [
+      field('商品名・ASIN検索', 'search', 'q'),
+      el('label', { className: 'x-field' }, [el('span', { text: '商品' }), el('select', { name: 'productId', className: 'form-select' }, [
+        el('option', { value: '', text: 'すべての商品' }),
+        ...state.productCatalog.map(item => { const product = item.product || {}; return el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'}` }); }),
+      ])]),
+      el('label', { className: 'x-field' }, [el('span', { text: '候補の状態' }), el('select', { name: 'status', className: 'form-select' }, [
+        ['', 'すべて'], ['needs_review', 'レビュー待ち'], ['approved', '採用済み'], ['rejected', '見送り'], ['archived', '保管'],
+      ].map(([value, label]) => el('option', { value, text: label }))) ]),
+      button('絞り込む', async event => {
+        event.preventDefault();
+        if (!isCurrentScope(accountId, generation)) return;
+        const values = formData(reviewFilter);
+        const activeFilter = { q: values.q || '', productId: values.productId || '', status: values.status || '' };
+        state.reviewFilters.set(accountId, activeFilter);
+        await loadDrafts(accountId, generation);
+      }),
+    ]);
+    reviewFilter.querySelector('[name="q"]').value = savedReviewFilter.q;
+    reviewFilter.querySelector('[name="productId"]').value = savedReviewFilter.productId;
+    reviewFilter.querySelector('[name="status"]').value = savedReviewFilter.status;
+    box.append(reviewFilter);
+    box.append(el('p', { className: 'x-muted', text: '候補文は同じ生成グループ単位で表示します。絞り込み条件に一致したグループの案をまとめて確認できます。' }));
+    const activeReviewFilter = savedReviewFilter;
+    const matchingGroupIds = new Set();
+    (data.drafts || []).forEach(draft => {
+      const products = (draft.productIds || []).map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product).filter(Boolean);
+      const query = String(activeReviewFilter.q || '').trim().toLowerCase();
+      const matchesQuery = !query || products.some(product => `${product.name || ''} ${product.asin || ''}`.toLowerCase().includes(query));
+      const matchesProduct = !activeReviewFilter.productId || (draft.productIds || []).includes(activeReviewFilter.productId);
+      const matchesStatus = !activeReviewFilter.status || draft.state === activeReviewFilter.status;
+      if (matchesQuery && matchesProduct && matchesStatus) matchingGroupIds.add(draft.generationGroupId);
+    });
     const groups = new Map();
-    (data.drafts || []).forEach(draft => { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); });
+    (data.drafts || []).forEach(draft => { if (matchingGroupIds.has(draft.generationGroupId)) { if (!groups.has(draft.generationGroupId)) groups.set(draft.generationGroupId, []); groups.get(draft.generationGroupId).push(draft); } });
     for (const [groupId, drafts] of groups) {
       const groupBusy = drafts.some(draft => Boolean(draft.regenerationLock || draft.regeneration?.status === 'running' || draft.regeneration?.status === 'queued'));
       const group = el('section', { className: 'x-draft-group' }, [el('strong', { text: `生成グループ ${groupId} · ${drafts.length}案${groupBusy ? ' · 再生成処理中' : ''}` })]);
@@ -1061,7 +1140,7 @@
   }
   async function loadDrafts(accountId, generation) {
     if (!isCurrentScope(accountId, generation)) return;
-    try { const result = await api(`/api/x-affiliate/drafts?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) { const ids = [...new Set((result.drafts || []).map(draft => draft.regenerationLock?.jobId).filter(Boolean))]; await Promise.all(ids.map(jobId => refreshGenerationJob(jobId, accountId, generation))); if (!isCurrentScope(accountId, generation)) return; (result.drafts || []).forEach(draft => { const jobId = draft.regenerationLock?.jobId; if (jobId && state.generationJobs.has(jobId)) { draft.regeneration = state.generationJobs.get(jobId); state.draftJobs.set(draft.draftId, draft.regeneration); } }); renderDrafts(result, accountId, generation); } }
+    try { const result = await api(`/api/x-affiliate/drafts?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) { const ids = [...new Set((result.drafts || []).map(draft => draft.regenerationLock?.jobId).filter(Boolean))]; await Promise.all(ids.map(jobId => refreshGenerationJob(jobId, accountId, generation))); if (!isCurrentScope(accountId, generation)) return; (result.drafts || []).forEach(draft => { const jobId = draft.regenerationLock?.jobId; if (jobId && state.generationJobs.has(jobId)) { draft.regeneration = state.generationJobs.get(jobId); state.draftJobs.set(draft.draftId, draft.regeneration); } }); state.draftSnapshots.set(accountId, result); renderDrafts(result, accountId, generation); } }
     catch (error) { const box = document.getElementById('x-drafts'); if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error'); }
   }
   function isCurrentScope(accountId, generation) {
@@ -1579,7 +1658,8 @@
       if (!isCurrentScope(accountId, generation)) return;
       renderSettings(result, accountId, generation);
       enforceMemberUI();
-      await Promise.all([loadTags(accountId, generation), loadProducts(accountId, generation), loadSkills(accountId, generation), loadDrafts(accountId, generation), loadBudget(accountId, generation), loadNotifications(accountId, generation), loadScheduledRuns(accountId, generation)]);
+      await Promise.all([loadTags(accountId, generation), loadProducts(accountId, generation), loadSkills(accountId, generation), loadBudget(accountId, generation), loadNotifications(accountId, generation), loadScheduledRuns(accountId, generation)]);
+      await loadDrafts(accountId, generation);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');
