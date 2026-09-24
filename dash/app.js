@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '59';
+const DASH_BUILD = '60';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1373,39 +1373,39 @@ const _CAT_QUICK = {
  *
  * 変える re-renders type over the picture already generated for this category, which is free and
  * immediate; 絵を作り直す is the one that spends a pro-tier image call, and says so. */
-/* Two stored samples, not the four synthetic panels above them. `.acard-shots` redraws one saved
- * photograph's lettering four ways; these are two *different* photographs — a symmetric, centred
- * composition and a photograph extended sideways to carry the headline (`visual.samples.center` /
- * `.side`, written by POST .../sample with { pattern }) — so a category can be judged on which
- * composition actually suits it, not only on how its one picture takes different copy.
- *
- * Shown whenever either slot has something, so a category that already has one is not hidden while
- * it awaits the other; the generate button only appears where the category can still spend on one
- * (`active`/`paused`, mirroring the rule the 見本を作り直す button already used elsewhere). */
-function _catPatternSamples(c, v) {
+/* Two stored samples in the tile's one picture slot — the same `.acard-shots` frame the old
+ * four-panel grid used, holding two actually different photographs instead of one re-lettered four
+ * ways: a symmetric, centred composition and a photograph extended sideways to carry the headline
+ * (`visual.samples.center` / `.side`, written by POST .../sample with { pattern }). Each is missing
+ * until generated — a pro-tier call — so an empty slot holds a button in place of the image rather
+ * than a blank frame; a filled one gets a small redraw affordance in its own caption, not a second
+ * row of controls. Falls back to the old single generic thumbnail when the category has neither
+ * slot and no recipe pinned yet — there is nothing to choose between until it does. */
+function _catPatternGrid(c, v) {
   const canGenerate = c.status === 'active' || c.status === 'paused';
   const samples = v.samples || {};
-  const pat = (key, label) => {
+  if (!samples.center?.url && !samples.side?.url && !v.sampleUrl && !v.imagePrompt) {
+    return `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`;
+  }
+  const panel = (key, label) => {
     const s = samples[key] || {};
-    const body = s.url
-      ? `<img src="${esc(s.url)}" class="cat-pattern-img" alt="${esc(c.name)} ${label}見本" loading="lazy"
+    const img = s.url
+      ? `<img src="${esc(s.url)}" alt="${esc(c.name)} ${label}見本" loading="lazy"
            onclick="event.stopPropagation();_openLightbox('${esc(s.url)}','${esc(c.name)}・${label}')">`
-      : `<div class="cat-pattern-empty">${label}：未生成</div>`;
-    return `<div class="cat-pattern">
-      ${body}
-      <div class="cat-pattern-foot">
-        <span>${label}</span>
-        ${canGenerate ? `<button class="cat-quick" id="cat-pattern-btn-${key}-${esc(c.id)}"
-          onclick="event.stopPropagation();regenCategorySamplePattern('${esc(c.id)}','${key}')"
-          title="画像を1枚生成します（pro課金）">${s.url ? '作り直す' : '作る'}</button>` : ''}
-      </div>
-    </div>`;
+      : (canGenerate
+        ? `<button class="cat-quick" id="cat-pattern-btn-${key}-${esc(c.id)}"
+             onclick="event.stopPropagation();regenCategorySamplePattern('${esc(c.id)}','${key}')"
+             title="画像を1枚生成します（pro課金）">作る</button>`
+        : '');
+    const redo = s.url && canGenerate
+      ? `<button class="acard-shot-redo" id="cat-pattern-btn-${key}-${esc(c.id)}"
+           onclick="event.stopPropagation();regenCategorySamplePattern('${esc(c.id)}','${key}')"
+           title="作り直す（pro課金）">↻</button>`
+      : '';
+    return `<figure class="acard-shot"><div class="acard-shot-img">${img}</div
+      ><figcaption>${label}${redo}</figcaption></figure>`;
   };
-  if (!canGenerate && !samples.center?.url && !samples.side?.url) return '';
-  return `<div class="acard-patterns" onclick="event.stopPropagation()">
-    ${pat('center', '中央')}
-    ${pat('side', 'サイド')}
-  </div>`;
+  return `<div class="acard-shots">${panel('center', '中央')}${panel('side', 'サイド')}</div>`;
 }
 
 function _catTileMapBar(c, v) {
@@ -1530,44 +1530,17 @@ function _categoryTile(c) {
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
     onclick="openCategoryDetail('${c.id}')">
-    ${/* Every tile carries a picture, not only the ones with something pinned.
-          Drawing the type is a render, not a generation — it costs no image call — so there was
-          never a reason to make a category earn its thumbnail by first having a preset pinned or a
-          paid sample made. Gating it that way is why this list showed format icons and nothing
-          else. What it draws is what this category would actually get: its pinned style if it has
-          one, the template's own treatment if it does not. */ ''}
-    ${/* Four panels, the same four the サムネタイトル catalogue shows: 短文・中央 / 短文・左 /
-          長文・中央 / 長文・左. A single thumbnail answers "is there a picture"; it does not answer
-          "does this style hold up when the headline is long, or when it is flushed left", which is
-          the question a category's look actually has to survive — its titles are written per article
-          and vary in exactly those two ways.
-
-          No image generation. All four are existing pictures with type redrawn over them through
-          /api/hero-presets/preview, which is the same free path the preset cards use. The one
-          generated picture stays one generated picture; only the lettering is re-rendered.
-
-          Shown for any category with a 絵のレシピ, not only one that has bought a picture. The grounds
-          are this category's own sample *plus* its recipe's three stored samples, so a recipe is on
-          its own enough to fill four frames — and gating on `sampleUrl` meant the single category
-          that had never had a picture generated fell back to one title-only panel, which looked like
-          the grid was broken for it rather than like a category without a photograph. Four real
-          headlines on the recipe's own pictures is a better answer to "what will this look like"
-          than one headline on a synthetic ground, and it costs the same: nothing. */ ''}
-    ${/* Empty frames, not a stand-in picture.
-          Each panel used to be painted with the stored composite and then replaced by its own
-          render, so four wrong images appeared and were swapped out one at a time — the flash was
-          not a loading artefact but a picture that was never going to be correct, shown on purpose.
-          `.hp-shot-img` on the サムネタイトル cards has always started empty for this reason. The
-          frame holds its aspect ratio so nothing reflows when the renders land. */ ''}
-    ${v.sampleUrl || v.imagePrompt
-      ? `<div class="acard-shots" data-cat-shots="${esc(c.id)}">
-           ${_catShots(c).map((sh, i) =>
-             `<figure class="acard-shot" data-variant="${i}"><div class="acard-shot-img"></div
-             >${sh.label ? `<figcaption>${esc(sh.label)}${sh.align === (v.align || 'center') ? '（この設定）' : ''}</figcaption>` : ''}</figure>`).join('')}
-         </div>`
-      : `<div class="acard-thumb" data-cat-thumb="${esc(c.id)}"></div>`}
+    ${/* Two panels: 中央 and サイド, from `visual.samples.center`/`.side` — two different
+          photographs, not one photograph shown four ways. The grid used to redraw one stored
+          ground with the headline set short/long × centred/left, which answers "does this style
+          hold up under real copy" but not "which composition suits this category" — a question
+          that needs two actually different pictures (a symmetric centred scene vs. one built to
+          carry the headline on its own extended backdrop), so it cannot be answered by re-lettering
+          a single stored ground for free the way the four-panel grid did. Each slot costs a
+          pro-tier generation and is made on request (regenCategorySamplePattern), drawn in the
+          category's own pinned サムネタイトル so what is judged here is the real thing. */ ''}
+    ${_catPatternGrid(c, v)}
     ${_catTileMapBar(c, v)}
-    ${_catPatternSamples(c, v)}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
       <div class="acard-chips" style="margin-top:4px">
