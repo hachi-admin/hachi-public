@@ -2255,6 +2255,9 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product-head strong{font-size:13px;color:var(--txt)}
 .x-product-link{display:block;overflow-wrap:anywhere;font-size:11px;color:var(--acc);text-decoration:underline}
 .x-generation-form .x-field select[multiple]{min-height:74px}
+.x-generation-slots{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.x-generation-form>.x-skill-preview{grid-column:1/-1}
+.x-generation-form button:disabled{opacity:.55;cursor:not-allowed}
 .x-skill-list{display:grid;gap:12px;margin-top:14px}
 .x-skill details,.x-skill-decisions{margin-top:10px}
 .x-skill summary,.x-skill-decisions summary{cursor:pointer;font-size:12px;color:var(--txt)}
