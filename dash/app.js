@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '64';
+const DASH_BUILD = '65';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -3371,7 +3371,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLigh
  * this catalogue has pairs that are a stroke width apart. These name the decisions rather than
  * dumping the spec — the JSON dump this replaced told you the preset set `metal` and `glows`
  * without telling you anything you could act on. */
-const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝' };
+const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝', pop: 'ポップ' };
 
 function _hpTypoChips(s = {}) {
   const chip = (t, title) => `<span class="cat-chip"${title ? ` title="${esc(title)}"` : ''}>${esc(t)}</span>`;
