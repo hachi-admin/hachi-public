@@ -952,16 +952,19 @@
     }
   }
   function syncProductPicker(select, input) {
-    if (!select || !input) return;
-    const selected = new Set(String(input.value || '').split(',').map(value => value.trim()).filter(Boolean));
+    if (!select) return;
+    const selected = new Set(input
+      ? String(input.value || '').split(',').map(value => value.trim()).filter(Boolean)
+      : [...select.selectedOptions].map(option => option.value).filter(Boolean));
     select.replaceChildren();
-    if (!state.productCatalog.length) {
-      select.append(el('option', { text: '商品登録後に選択できます', value: '' }));
+    const ready = state.productCatalog.filter(item => item.product?.catalogStatus === 'available' && item.readiness?.ready === true && item.readiness?.requiresRecheck !== true && item.accountProduct?.enabled !== false && item.accountProduct?.scheduleEnabled !== true);
+    if (!ready.length) {
+      select.append(el('option', { text: state.productCatalog.length ? '投稿生成の準備ができた商品はありません' : '商品登録後に選択できます', value: '' }));
       select.disabled = true;
       return;
     }
     select.disabled = false;
-    state.productCatalog.forEach(item => {
+    ready.forEach(item => {
       const product = item.product || {};
       const option = el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'} · ID: ${product.productId}` });
       option.selected = selected.has(product.productId);
@@ -974,45 +977,171 @@
     box.replaceChildren(el('p', { className: 'x-muted', text: '候補は人が確認して採用します。生成・再生成は予算を消費します。' }));
     renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
     renderGenerationNotice(box, accountId);
-    const productIdField = field('対象商品ID（カンマ区切り・1〜3件）', 'text', 'productIds', null, '下の一覧から選ぶと自動入力');
-    const productIdInput = productIdField.querySelector('[name="productIds"]');
     const productPicker = el('select', { name: 'productPicker', className: 'form-select', multiple: 'multiple', size: String(Math.min(5, Math.max(2, state.productCatalog.length))) });
-    const productPickerField = el('label', { className: 'x-field' }, [el('span', { text: '商品一覧から選択（最大3件）' }), productPicker]);
-    const generateForm = el('form', { className: 'x-form x-generation-form' }, [
-      productIdField,
-      productPickerField,
-      el('p', { className: 'x-muted', text: '商品IDは画面内部の識別子です。商品名・ASIN・IDが一覧に表示されるので、通常は一覧から選択してください。' }),
-      selectField('候補数', 'requestedVariantCount', '3', ['1', '2', '3']),
-      button('候補を生成', async event => {
-        event.preventDefault();
-        if (!generateForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(generateForm)) return;
-        const values = formData(generateForm); const productIds = String(values.productIds || '').split(',').map(value => value.trim()).filter(Boolean);
-        if (productIds.length < 1 || productIds.length > 3) { endWrite(generateForm); message(generateForm, '商品IDは1〜3件で入力してください', 'error'); return; }
-        const payload = { accountId, productIds, requestedVariantCount: Number(values.requestedVariantCount) };
-        try {
-          const idempotencyKey = await keyFor(generateForm, { operation: 'generation', ...payload });
-          const result = await api('/api/x-affiliate/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
-          clearRetry(generateForm); endWrite(generateForm);
-          if (isCurrentScope(accountId, generation)) {
-            state.generationNotice = { accountId, job: result.job || {}, draftCount: result.job?.createdDraftCount ?? result.draftIds?.length ?? 0 };
-            renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
-            await loadDrafts(accountId, generation);
-          }
-        } catch (error) {
-          endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, error.body?.error?.code || error.message, 'error');
+    const productPickerField = el('label', { className: 'x-field' }, [el('span', { text: '生成準備ができた商品（最大3件）' }), productPicker]);
+    const allocationStatus = el('p', { className: 'x-muted', text: '投稿生成できる商品を選ぶと、利用可能なテンプレートだけが表示されます。' });
+    const allocationSlots = el('div', { className: 'x-generation-slots' });
+    const allocationSummary = el('div', { className: 'x-skill-preview' });
+    const skillLabels = {
+      'text-amazon-hook-fixed': '特徴を短く紹介',
+      'text-amazon-tsubuyaki': 'つぶやき風のおすすめ',
+      'text-nsen-matome': '複数商品をまとめて紹介',
+      'text-gadget-surprise': 'サイズ・省スペース紹介',
+      'text-gadget-comparison': '比較軸で比較',
+    };
+    let skillCatalog = [];
+    let eligibleOptions = [];
+    let checkingEligibility = true;
+    let eligibilityRequestId = 0;
+    const currentAllocations = () => [...allocationSlots.querySelectorAll('select')].map(select => {
+      const [skillId, angleId] = String(select.value || '').split('::');
+      return skillId && angleId ? { skillId, angleId } : null;
+    });
+    const currentPayload = () => {
+      const productIds = [...productPicker.selectedOptions].map(option => option.value).filter(Boolean);
+      const count = Number(generateForm.querySelector('[name="requestedVariantCount"]')?.value || 0);
+      const requested = currentAllocations();
+      if (!productIds.length || productIds.length > 3 || requested.length !== count || requested.some(item => !item)) return null;
+      const allowed = new Set(eligibleOptions.map(option => option.value));
+      const selected = requested.map(item => `${item.skillId}::${item.angleId}`);
+      if (selected.some(value => !allowed.has(value)) || new Set(selected).size !== selected.length) return null;
+      return { accountId, productIds, requestedVariantCount: count, requested };
+    };
+    const generateButton = button('候補を生成', async event => {
+      event.preventDefault();
+      if (!generateForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(generateForm)) return;
+      const payload = currentPayload();
+      if (!payload) { endWrite(generateForm); message(generateForm, '商品と案ごとのテンプレート／切り口を選択してください。', 'error'); return; }
+      try {
+        const idempotencyKey = await keyFor(generateForm, { operation: 'generation', ...payload });
+        const result = await api('/api/x-affiliate/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+        clearRetry(generateForm); endWrite(generateForm);
+        if (isCurrentScope(accountId, generation)) {
+          state.generationNotice = { accountId, job: result.job || {}, draftCount: result.job?.createdDraftCount ?? result.draftIds?.length ?? 0 };
+          renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
+          await loadDrafts(accountId, generation);
         }
-      }),
+      } catch (error) {
+        endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, error.body?.error?.code || error.message, 'error');
+      }
+    });
+    generateButton.disabled = true;
+    const generateForm = el('form', { className: 'x-form x-generation-form' }, [
+      productPickerField,
+      el('p', { className: 'x-muted', text: '生成準備ができた商品だけを表示します。商品に合うテンプレート／切り口を選ぶと、そのまま生成できます。' }),
+      selectField('候補数', 'requestedVariantCount', '3', ['1', '2', '3']),
+      allocationSlots,
+      allocationStatus,
+      generateButton,
+      allocationSummary,
     ]);
-    syncProductPicker(productPicker, productIdInput);
+    const countSelect = generateForm.querySelector('[name="requestedVariantCount"]');
+    const updateGenerationState = () => {
+      const payload = currentPayload();
+      generateButton.disabled = checkingEligibility || !payload;
+      allocationSummary.replaceChildren(...(payload ? payload.requested.map((item, index) => {
+        const option = eligibleOptions.find(entry => entry.value === `${item.skillId}::${item.angleId}`);
+        return el('div', { className: 'x-row' }, [el('span', { text: `案 ${index + 1}: ${option?.label || item.skillId}` })]);
+      }) : []));
+      if (payload) allocationStatus.textContent = '選択した商品とテンプレートで生成できます。';
+    };
+    const updateVariantCounts = () => {
+      const maximum = Math.min(3, eligibleOptions.length);
+      const previousCount = Number(countSelect.value || 3);
+      const choices = Array.from({ length: maximum }, (_, index) => index + 1);
+      countSelect.replaceChildren(...(choices.length
+        ? choices.map(count => el('option', { value: String(count), text: `${count}案` }))
+        : [el('option', { value: '', text: '利用可能なテンプレートがありません' })]));
+      countSelect.disabled = choices.length === 0;
+      if (choices.length) countSelect.value = String(choices.includes(previousCount) ? previousCount : maximum);
+    };
+    const updateAllocationSlots = (previous = []) => {
+      const count = Number(countSelect.value || 0);
+      const options = eligibleOptions;
+      allocationSlots.replaceChildren();
+      for (let index = 0; index < count; index++) {
+        const select = el('select', { name: `allocation-${index}`, className: 'form-select', required: 'required' }, [
+          el('option', { value: '', text: 'テンプレートと切り口を選択' }),
+          ...options.map(option => el('option', { value: option.value, text: option.label })),
+        ]);
+        select.disabled = checkingEligibility || options.length === 0;
+        select.value = previous[index] || '';
+        select.addEventListener('change', () => {
+          const chosen = [...allocationSlots.querySelectorAll('select')].map(item => item.value).filter(Boolean);
+          if (new Set(chosen).size !== chosen.length) {
+            select.value = '';
+            allocationStatus.textContent = '同じテンプレートと切り口は重複して選べません。';
+          }
+          updateGenerationState();
+        });
+        allocationSlots.append(el('label', { className: 'x-field' }, [el('span', { text: `案 ${index + 1}` }), select]));
+      }
+      updateGenerationState();
+    };
+    const refreshEligibleOptions = async () => {
+      const requestId = ++eligibilityRequestId;
+      const productIds = [...productPicker.selectedOptions].map(option => option.value).filter(Boolean);
+      checkingEligibility = true;
+      eligibleOptions = [];
+      updateVariantCounts();
+      updateAllocationSlots();
+      if (!productIds.length) {
+        checkingEligibility = false;
+        updateGenerationState();
+        allocationStatus.textContent = productPicker.disabled
+          ? '投稿生成の準備ができた商品がありません。商品情報を確認してください。'
+          : '生成する商品を選択してください。';
+        return;
+      }
+      allocationStatus.textContent = '選択した商品で利用できるテンプレートを確認中です。';
+      try {
+        const payload = { accountId, productIds, requestedVariantCount: 1, requested: [] };
+        const idempotencyKey = await keyFor(generateForm, { operation: 'generation-template-options', ...payload });
+        const result = await api('/api/x-affiliate/skill-allocation-previews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+        clearRetry(generateForm);
+        if (!generateForm.isConnected || !isCurrentScope(accountId, generation) || requestId !== eligibilityRequestId) return;
+        const skillById = new Map(skillCatalog.map(skill => [skill.id, skill]));
+        eligibleOptions = (result.diagnostics || []).filter(item => item.eligible).flatMap(item => {
+          const skill = skillById.get(item.skillId);
+          return (item.angleIds || []).map(angleId => {
+            const angle = skill?.angles?.find(entry => entry.id === angleId);
+            return { value: `${item.skillId}::${angleId}`, label: `${skillLabels[item.skillId] || item.skillId} · ${angle?.label || angleId}` };
+          });
+        }).sort((a, b) => a.label.localeCompare(b.label, 'ja'));
+        checkingEligibility = false;
+        updateVariantCounts();
+        updateAllocationSlots();
+        allocationStatus.textContent = eligibleOptions.length
+          ? `${eligibleOptions.length}種類のテンプレート／切り口から選べます。`
+          : '選択した商品で使えるテンプレートがありません。別の商品を選ぶか、商品情報を補完してください。';
+        updateGenerationState();
+      } catch (error) {
+        if (requestId === eligibilityRequestId && generateForm.isConnected && isCurrentScope(accountId, generation)) {
+          checkingEligibility = false;
+          allocationStatus.textContent = `利用できるテンプレートを確認できませんでした: ${error.body?.error?.code || error.message}`;
+          updateGenerationState();
+        }
+      }
+    };
+    syncProductPicker(productPicker, null);
     productPicker.addEventListener('change', () => {
       const selected = [...productPicker.selectedOptions].map(option => option.value).filter(Boolean);
       if (selected.length > 3) {
         productPicker.selectedOptions[productPicker.selectedOptions.length - 1].selected = false;
         return;
       }
-      productIdInput.value = selected.join(',');
+      refreshEligibleOptions();
     });
-    productIdInput.addEventListener('input', () => syncProductPicker(productPicker, productIdInput));
+    countSelect.addEventListener('change', () => updateAllocationSlots(currentAllocations().map(item => item ? `${item.skillId}::${item.angleId}` : '')));
+    updateAllocationSlots();
+    api(`/api/x-affiliate/skills?accountId=${encodeURIComponent(accountId)}`).then(result => {
+      if (!generateForm.isConnected || !isCurrentScope(accountId, generation)) return;
+      skillCatalog = result.skills || [];
+      refreshEligibleOptions();
+    }).catch(error => {
+      checkingEligibility = false;
+      if (generateForm.isConnected && isCurrentScope(accountId, generation)) allocationStatus.textContent = `テンプレート一覧を読み込めませんでした: ${error.body?.error?.code || error.message}`;
+    });
     box.append(generateForm);
     const productDrafts = new Map();
     const allDraftGroups = new Map();
@@ -1136,8 +1265,14 @@
       if (!selectedDrafts.length) {
         detail.append(el('p', { className: 'x-muted', text: 'この商品にはまだ候補文がありません。' }));
         detail.append(button('この商品を生成対象にする', () => {
-          productIdInput.value = selectedProduct.productId;
-          syncProductPicker(productPicker, productIdInput);
+          const option = [...productPicker.options].find(item => item.value === selectedProduct.productId);
+          if (!option) {
+            allocationStatus.textContent = 'この商品は投稿生成の準備ができていません。商品情報を確認してください。';
+            productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+          }
+          option.selected = true;
+          refreshEligibleOptions();
           productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
           productPicker.focus();
         }));
