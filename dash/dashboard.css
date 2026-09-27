@@ -2257,6 +2257,13 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product-head strong{font-size:13px;color:var(--txt)}
 .x-product-link{display:block;overflow-wrap:anywhere;font-size:11px;color:var(--acc);text-decoration:underline}
 .x-generation-form .x-field select[multiple]{min-height:74px}
+.x-generation-product-options{display:grid;gap:6px;max-height:230px;overflow:auto;padding:2px}
+.x-generation-product-option{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line,rgba(128,128,128,.18));border-radius:9px;background:var(--surf);color:var(--txt);cursor:pointer;font-size:12px;line-height:1.5}
+.x-generation-product-option:hover{border-color:var(--acc)}
+.x-generation-product-option:focus-within{outline:2px solid var(--acc);outline-offset:1px}
+.x-generation-product-option input{flex:0 0 auto;margin:2px 0 0;accent-color:var(--acc)}
+.x-generation-product-option span{overflow-wrap:anywhere}
+.x-review-action-hint{flex-basis:100%;margin:0}
 .x-generation-slots{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
 .x-generation-form>.x-skill-preview{grid-column:1/-1}
 .x-generation-form button:disabled{opacity:.55;cursor:not-allowed}
