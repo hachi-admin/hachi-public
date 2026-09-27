@@ -1,4 +1,4 @@
-/* global sessionStorage, TextEncoder */
+/* global Event, sessionStorage, TextEncoder */
 /* X affiliate administration. Uses the verified dashboard identity to mint an isolated X session. */
 (function () {
   'use strict';
@@ -33,9 +33,35 @@
     skill_snapshot_invalid: 'この案のテンプレート情報が現在の状態と一致しません。最新のテンプレートで候補を作り直してください。',
     default_tag_not_configured: '商品リンクのタグ設定が確認できません。アカウント設定の商品リンクタグを確認してください。',
     generation_allocations_invalid: '選択したテンプレートと候補数が一致しません。案ごとの選択内容を確認してください。',
+    variant_set_invalid: '候補の数が選択内容と一致しません。候補数と案ごとのテンプレートを確認してください。',
   };
   const validationMessage = code => VALIDATION_GUIDANCE[code] || '投稿ルールに沿っていない箇所があります。本文と選択したテンプレートを確認してください。';
   const validationMessages = codes => [...new Set((codes || []).filter(code => typeof code === 'string').map(validationMessage))];
+  const draftStateLabel = state => ({ needs_review: 'レビュー待ち', approved: '採用済み', rejected: '見送り', archived: '保管' })[state] || '状態確認中';
+  const angleLabels = { feature: '確認済みの特徴', size: 'サイズ・省スペース', comparison: '比較', classification: '分類', placement: '配置場所', object: '片付け対象' };
+  const ACTION_GUIDANCE = {
+    generation_allocation_blocked: '選択した商品で使えるテンプレートがありません。商品の情報を補うか、別の商品を選んでください。',
+    generation_adapter_not_configured: '投稿生成機能を現在利用できません。時間をおいてから再度お試しください。',
+    generation_input_too_large: '選択内容が多く、候補を作成できませんでした。商品数または候補数を減らしてください。',
+    generation_output_invalid: '生成結果が投稿ルールを満たしませんでした。表示されている修正点を確認してください。',
+    generation_response_unknown: '生成結果を確認できませんでした。再生成の前に、予算画面の応答不明の予約を確認してください。',
+    provider_response_unknown: '生成サービスから結果を確認できませんでした。再生成の前に、予算画面の応答不明の予約を確認してください。',
+    operation_budget_exceeded: 'この操作の費用上限を超えるため実行できません。候補数を減らすか、管理者にご確認ください。',
+    monthly_budget_exceeded: '今月の生成予算上限に達しています。予算設定を確認してください。',
+    daily_budget_exceeded: '本日の生成予算上限に達しています。時間をおいてから再度お試しください。',
+    review_slots_exceeded: 'レビュー待ちの上限に達しています。先に既存の候補を確認・整理してください。',
+    draft_not_approvable: 'この候補は投稿ルールを満たしていません。上の指摘を修正して保存してください。',
+    evidence_stale: '商品情報またはテンプレートが更新されています。最新の内容で候補を作り直してください。',
+    job_in_progress: '生成または再生成の処理中です。完了してから操作してください。',
+    revision_conflict: '別の更新が先に行われました。最新の内容を確認してから、もう一度操作してください。',
+    group_snapshot_conflict: '同じグループの候補が更新されています。最新の候補を読み込み直してください。',
+  };
+  const actionErrorMessage = error => {
+    const code = String(error?.body?.error?.code || '').toLowerCase();
+    return ACTION_GUIDANCE[code] || error?.body?.error?.message || error?.message || '操作に失敗しました。最新の状態を読み込み直してください。';
+  };
+  const actionGuidanceForCode = code => ACTION_GUIDANCE[String(code || '').toLowerCase()] || (code ? `詳細コード: ${code}` : '');
+  const jobStatusLabel = status => ({ queued: '受付済み', running: '処理中', completed: '完了', failed: '失敗', unknown: '結果を確認できません' })[status] || '状態確認中';
   const VERIFIER_KEY = 'hachi-x-oauth-verifier';
   const PROOF_KEY = 'hachi-x-browser-proof';
   const pendingCode = new URLSearchParams(location.hash.slice(1)).get('x_code');
@@ -652,7 +678,7 @@
     if (!box || !isCurrentScope(accountId, generation)) return;
     state.productCatalog = data.products || [];
     const draftForm = document.querySelector('#x-drafts .x-generation-form');
-    if (draftForm) syncProductPicker(draftForm.querySelector('[name="productPicker"]'), draftForm.querySelector('[name="productIds"]'));
+    if (draftForm) syncProductPicker(draftForm.querySelector('[name="productPicker"]'), draftForm.querySelector('[name="productIds"]'), draftForm.querySelector('.x-generation-product-options'));
     invalidateSkillPreview();
     const existingItems = box.querySelector('.x-product-list');
     if (existingItems?.dataset.accountId === accountId) {
@@ -983,7 +1009,7 @@
       if (box && isCurrentScope(accountId, generation)) message(box, error.message, 'error');
     }
   }
-  function syncProductPicker(select, input) {
+  function syncProductPicker(select, input, choices = null) {
     if (!select) return;
     const selected = new Set(input
       ? String(input.value || '').split(',').map(value => value.trim()).filter(Boolean)
@@ -993,14 +1019,22 @@
     if (!ready.length) {
       select.append(el('option', { text: state.productCatalog.length ? '投稿生成の準備ができた商品はありません' : '商品登録後に選択できます', value: '' }));
       select.disabled = true;
+      choices?.replaceChildren(el('p', { className: 'x-muted', text: state.productCatalog.length ? '投稿生成に使える商品がありません。商品情報を確認してください。' : '商品登録後に選択できます。' }));
       return;
     }
     select.disabled = false;
+    if (choices) choices.replaceChildren();
     ready.forEach(item => {
       const product = item.product || {};
-      const option = el('option', { value: product.productId, text: `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'} · ID: ${product.productId}` });
+      const label = `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'}`;
+      const option = el('option', { value: product.productId, text: `${label} · ID: ${product.productId}` });
       option.selected = selected.has(product.productId);
       select.append(option);
+      if (choices) {
+        const checkbox = el('input', { type: 'checkbox', name: 'productPickerChoice', value: product.productId, 'aria-label': label });
+        checkbox.checked = selected.has(product.productId);
+        choices.append(el('label', { className: 'x-generation-product-option' }, [checkbox, el('span', { text: label })]));
+      }
     });
   }
   function renderDrafts(data, accountId, generation) {
@@ -1009,8 +1043,9 @@
     box.replaceChildren(el('p', { className: 'x-muted', text: '候補は人が確認して採用します。生成・再生成は予算を消費します。' }));
     renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
     renderGenerationNotice(box, accountId);
-    const productPicker = el('select', { name: 'productPicker', className: 'form-select', multiple: 'multiple', size: String(Math.min(5, Math.max(2, state.productCatalog.length))) });
-    const productPickerField = el('label', { className: 'x-field' }, [el('span', { text: '生成準備ができた商品（最大3件）' }), productPicker]);
+    const productPicker = el('select', { name: 'productPicker', className: 'x-generation-product-picker-source', multiple: 'multiple', hidden: 'true', 'aria-hidden': 'true', tabindex: '-1' });
+    const productOptions = el('div', { className: 'x-generation-product-options', role: 'group', 'aria-label': '投稿生成に使う商品' });
+    const productPickerField = el('div', { className: 'x-field x-generation-product-field' }, [el('span', { text: '投稿を作る商品（最大3件）' }), productOptions, el('span', { className: 'x-muted', text: '商品名とASINを確認し、チェックを入れてください。' }), productPicker]);
     const allocationStatus = el('p', { className: 'x-muted', text: '投稿生成できる商品を選ぶと、利用可能なテンプレートだけが表示されます。' });
     const allocationSlots = el('div', { className: 'x-generation-slots' });
     const allocationSummary = el('div', { className: 'x-skill-preview' });
@@ -1054,7 +1089,7 @@
           await loadDrafts(accountId, generation);
         }
       } catch (error) {
-        endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, error.body?.error?.code || error.message, 'error');
+        endWrite(generateForm); if (generateForm.isConnected && isCurrentScope(accountId, generation)) message(generateForm, actionErrorMessage(error), 'error');
       }
     });
     generateButton.disabled = true;
@@ -1150,18 +1185,31 @@
       } catch (error) {
         if (requestId === eligibilityRequestId && generateForm.isConnected && isCurrentScope(accountId, generation)) {
           checkingEligibility = false;
-          allocationStatus.textContent = `利用できるテンプレートを確認できませんでした: ${error.body?.error?.code || error.message}`;
+          allocationStatus.textContent = `テンプレートを確認できませんでした。${actionErrorMessage(error)}`;
           updateGenerationState();
         }
       }
     };
-    syncProductPicker(productPicker, null);
+    syncProductPicker(productPicker, null, productOptions);
+    productOptions.addEventListener('change', event => {
+      const selected = [...productOptions.querySelectorAll('input[name="productPickerChoice"]:checked')].map(input => input.value);
+      if (selected.length > 3) {
+        if (event.target?.matches?.('input[name="productPickerChoice"]')) event.target.checked = false;
+        allocationStatus.textContent = '商品は最大3件まで選択できます。';
+        return;
+      }
+      [...productPicker.options].forEach(option => { option.selected = selected.includes(option.value); });
+      productPicker.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     productPicker.addEventListener('change', () => {
       const selected = [...productPicker.selectedOptions].map(option => option.value).filter(Boolean);
       if (selected.length > 3) {
         productPicker.selectedOptions[productPicker.selectedOptions.length - 1].selected = false;
+        syncProductPicker(productPicker, null, productOptions);
+        allocationStatus.textContent = '商品は最大3件まで選択できます。';
         return;
       }
+      syncProductPicker(productPicker, null, productOptions);
       refreshEligibleOptions();
     });
     countSelect.addEventListener('change', () => updateAllocationSlots(currentAllocations().map(item => item ? `${item.skillId}::${item.angleId}` : '')));
@@ -1172,7 +1220,7 @@
       refreshEligibleOptions();
     }).catch(error => {
       checkingEligibility = false;
-      if (generateForm.isConnected && isCurrentScope(accountId, generation)) allocationStatus.textContent = `テンプレート一覧を読み込めませんでした: ${error.body?.error?.code || error.message}`;
+      if (generateForm.isConnected && isCurrentScope(accountId, generation)) allocationStatus.textContent = `テンプレート一覧を読み込めませんでした。${actionErrorMessage(error)}`;
     });
     box.append(generateForm);
     const productDrafts = new Map();
@@ -1300,19 +1348,20 @@
           const option = [...productPicker.options].find(item => item.value === selectedProduct.productId);
           if (!option) {
             allocationStatus.textContent = 'この商品は投稿生成の準備ができていません。商品情報を確認してください。';
-            productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            productPickerField.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
           }
           option.selected = true;
+          syncProductPicker(productPicker, null, productOptions);
           refreshEligibleOptions();
-          productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          productPicker.focus();
+          productPickerField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          productOptions.querySelector('input')?.focus();
         }));
       }
       selectedDrafts.forEach(draft => {
         const groupId = draft.generationGroupId;
         const groupDrafts = allDraftGroups.get(groupId) || [];
-        const stateLabel = draft.state === 'needs_review' ? 'レビュー待ち' : draft.state === 'approved' ? '採用済み' : draft.state === 'rejected' ? '見送り' : '保管';
+        const stateLabel = draftStateLabel(draft.state);
         const card = el('article', { className: 'x-product-review-post' }, [
           el('div', { className: 'x-product-review-post-head' }, [
             el('strong', { text: draft.variantId || '候補文' }),
@@ -1349,10 +1398,11 @@
         const draftBusy = Boolean(draft.regenerationLock || regeneration.status === 'running' || regeneration.status === 'queued');
         const jobId = regeneration.jobId || draft.regenerationJobId;
         const providerDiagnostic = regeneration.providerDiagnostic || {};
+        const stateLabel = draftStateLabel(draft.state);
         const regenerationSummary = regeneration.status ? [
-          draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}`,
-          jobId ? `job ${jobId}` : '',
-          regeneration.errorCode === 'GENERATION_OUTPUT_INVALID' ? '生成結果が投稿ルールに合いませんでした' : regeneration.errorCode || '',
+          draftBusy ? `再生成${jobStatusLabel(regeneration.status)}です。本文編集・レビュー操作は一時停止しています。` : `再生成: ${jobStatusLabel(regeneration.status)}`,
+          jobId ? `確認ID: ${jobId}` : '',
+          regeneration.errorCode ? actionGuidanceForCode(regeneration.errorCode) : '',
           Array.isArray(regeneration.validationErrors) && regeneration.validationErrors.length ? `修正点: ${validationMessages(regeneration.validationErrors).join(' / ')}` : '',
           providerDiagnostic.code || '',
           providerDiagnostic.message || '',
@@ -1367,7 +1417,7 @@
               : [el('p', { text: '本文と選択したテンプレートを確認し、修正後に保存してください。' })]),
           ]);
         const article = el('article', { className: 'x-product x-draft' }, [
-          el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId} · ${draft.state}` }), el('span', { className: 'x-muted', text: `${draft.skillId}@${draft.skillVersion} · 切り口 ${draft.angleId}` })]),
+          el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId || '候補'} · ${stateLabel}` }), el('span', { className: 'x-muted', text: `${skillLabels[draft.skillId] || 'テンプレート'} · 切り口 ${angleLabels[draft.angleId] || '選択内容'}` })]),
           validationFeedback,
           ...(regenerationSummary ? [el('p', { className: 'x-status', text: regenerationSummary })] : []),
           edit,
@@ -1376,15 +1426,17 @@
         const actions = el('div', { className: 'x-inline-form' });
         actions.append(button('編集を保存', async () => {
           try { const idempotencyKey = random(); await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: draft.revision, body: textarea.value, idempotencyKey }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
-          catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' 入力を残したまま最新状態を確認してください。' : ''), 'error'); }
+          catch (error) { if (article.isConnected) message(article, `${actionErrorMessage(error)}${error.code === 409 ? ' 入力は保持しています。最新状態を確認してください。' : ''}`, 'error'); }
         }, draftBusy || draft.state === 'archived'));
         if (draft.state === 'needs_review') {
+          if (groupBusy || draftBusy) actions.append(el('p', { className: 'x-muted x-review-action-hint', text: '再生成中は採用・見送り操作を行えません。完了後にもう一度お試しください。' }));
+          else if (!draft.validation?.ok) actions.append(el('p', { className: 'x-muted x-review-action-hint', text: '採用するには、上の指摘を本文に反映して「編集を保存」してください。' }));
           actions.append(button('採用', async () => reviewDraft(draft, 'approve', null, article, accountId, generation), groupBusy || draftBusy || !draft.validation?.ok));
           actions.append(button('見送り', async () => reviewDraft(draft, 'reject', 'not_this_time', article, accountId, generation), groupBusy || draftBusy));
           if (drafts.length > 1) actions.append(button('この案を採用し残りを見送り', async () => {
             if (draftBusy || !draft.validation?.ok || !window.confirm(`この案を採用し、同じグループの残り${drafts.length - 1}案を見送りますか？`)) return;
             try { await api(`/api/x-affiliate/draft-groups/${encodeURIComponent(groupId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, approvedDraftId: draft.draftId, expectedRevisions: drafts.map(item => ({ draftId: item.draftId, revision: item.revision })), entrypoint: 'public', idempotencyKey: random() }) }); if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation); }
-            catch (error) { if (article.isConnected) message(article, error.message + (error.code === 409 ? ' グループ内の状態が変わりました。再確認してください。' : ''), 'error'); }
+            catch (error) { if (article.isConnected) message(article, `${actionErrorMessage(error)}${error.code === 409 ? ' グループ内の最新状態を確認してください。' : ''}`, 'error'); }
           }, groupBusy || draftBusy));
         } else if (draft.state === 'approved') actions.append(button('採用を解除', async () => reviewDraft(draft, 'unapprove', null, article, accountId, generation), draftBusy));
         else if (draft.state === 'rejected') actions.append(button('再検討', async () => reviewDraft(draft, 'reopen', null, article, accountId, generation), draftBusy));
@@ -1412,11 +1464,26 @@
                 if (result.job?.jobId) await refreshGenerationJob(result.job.jobId, accountId, generation);
                 await loadDrafts(accountId, generation);
               }
-            } catch (error) { endWrite(regenerateForm); if (regenerateForm.isConnected && isCurrentScope(accountId, generation)) message(regenerateForm, error.message + (error.code === 409 ? ' 入力は保持しています。処理中または最新状態を確認してください。' : ''), 'error'); }
+            } catch (error) { endWrite(regenerateForm); if (regenerateForm.isConnected && isCurrentScope(accountId, generation)) message(regenerateForm, `${actionErrorMessage(error)}${error.code === 409 ? ' 入力は保持しています。最新状態を確認してください。' : ''}`, 'error'); }
           }, !regenerationAllowed),
         ]);
         regenerateForm.querySelector('button')?.setAttribute('data-regeneration-action', 'true');
-        if (jobId) regenerateForm.append(button('ジョブ状態を更新', async () => { const job = await refreshGenerationJob(jobId, accountId, generation); if (job && isCurrentScope(accountId, generation)) { const diagnostic = job.providerDiagnostic || {}; const details = [`再生成ジョブ: ${job.status || '不明'}`, `job ${job.jobId || jobId}`, job.errorCode || '', Array.isArray(job.validationErrors) && job.validationErrors.length ? job.validationErrors.join(', ') : '', diagnostic.code || '', diagnostic.message || ''].filter(Boolean).join(' · '); message(regenerateForm, details, job.status === 'failed' || job.status === 'unknown' ? 'warn' : ''); await loadDrafts(accountId, generation); } }));
+        if (jobId) regenerateForm.append(button('再生成の状態を更新', async () => {
+          const job = await refreshGenerationJob(jobId, accountId, generation);
+          if (job && isCurrentScope(accountId, generation)) {
+            const diagnostic = job.providerDiagnostic || {};
+            const details = [
+              `再生成: ${jobStatusLabel(job.status)}`,
+              `確認ID: ${job.jobId || jobId}`,
+              job.errorCode ? actionGuidanceForCode(job.errorCode) : '',
+              Array.isArray(job.validationErrors) && job.validationErrors.length ? `修正点: ${validationMessages(job.validationErrors).join(' / ')}` : '',
+              diagnostic.code ? `詳細コード: ${diagnostic.code}` : '',
+              diagnostic.message ? `詳細: ${diagnostic.message}` : '',
+            ].filter(Boolean).join(' · ');
+            message(regenerateForm, details, job.status === 'failed' || job.status === 'unknown' ? 'warn' : '');
+            await loadDrafts(accountId, generation);
+          }
+        }));
         if (draft.state === 'archived') regenerateForm.querySelectorAll('textarea,button').forEach(node => { node.disabled = true; });
         article.append(regenerateForm);
         article.append(actions); comparison.append(article);
@@ -1430,7 +1497,7 @@
       const payload = { expectedRevision: draft.revision, action, entrypoint: 'public', idempotencyKey: random() }; if (reason) payload.reason = reason;
       await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (isCurrentScope(accountId, generation)) await loadDrafts(accountId, generation);
-    } catch (error) { if (root.isConnected) message(root, error.message + (error.code === 409 ? ' 最新状態を再確認してください。' : ''), 'error'); }
+    } catch (error) { if (root.isConnected) message(root, `${actionErrorMessage(error)}${error.code === 409 ? ' 最新状態を再読み込みしました。' : ''}`, 'error'); }
   }
   async function refreshGenerationJob(jobId, accountId, generation) {
     if (!jobId || !isCurrentScope(accountId, generation)) return null;
