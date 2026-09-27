@@ -1,4 +1,4 @@
-/* global sessionStorage, TextEncoder */
+/* global Event, sessionStorage, TextEncoder */
 /* X affiliate administration. Uses the verified dashboard identity to mint an isolated X session. */
 (function () {
   'use strict';
