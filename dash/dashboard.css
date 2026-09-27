@@ -2217,6 +2217,8 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-status{padding:8px 10px;border-radius:8px;font-size:12px;color:var(--txt);background:var(--bg)}
 .x-status[data-kind="error"]{color:var(--error)}
 .x-status[data-kind="warn"]{color:var(--yel)}
+.x-validation-feedback ul{margin:6px 0 0;padding-left:1.4em;display:grid;gap:5px}
+.x-validation-feedback li{line-height:1.5}
 .x-toolbar{display:flex;gap:8px;justify-content:flex-end}
 .x-product-import .x-field:first-child{grid-column:1/-1}
 .x-product-filter{margin:16px 0}

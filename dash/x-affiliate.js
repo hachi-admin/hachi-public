@@ -4,6 +4,38 @@
   'use strict';
   const API_ORIGIN = 'https://hachi-core-685554938840.asia-northeast1.run.app';
   const FEATURE_ENABLED = true;
+  const VALIDATION_GUIDANCE = {
+    structure_invalid: '本文（商品リンクと #PR を除く）の段落数がテンプレートと合いません。元の段落数を保ち、各段落の文章を直してください。',
+    blocks_invalid: '本文の段落構成を確認できません。内容を確認し、必要なら新しい候補を作成してください。',
+    assignment_mismatch: '候補に割り当てられたテンプレートや商品が一致しません。最新の条件で候補を作り直してください。',
+    fact_ref_invalid: '商品に登録されている情報と結び付かない内容があります。登録済みの特徴に沿って書き直してください。',
+    block_order_invalid: '段落の順番がテンプレートと異なります。テンプレートの順番に合わせてください。',
+    product_count_invalid: 'このテンプレートで扱える商品数と選択数が合いません。商品数かテンプレートを見直してください。',
+    angle_invalid: 'このテンプレートでは使えない切り口です。選べる切り口を指定してください。',
+    unknown_fact_ref: '商品に登録されていない情報を根拠にしています。登録済みの商品情報に沿って書き直してください。',
+    evidence_ref_missing: '商品情報に基づく説明に根拠がありません。登録済みの特徴を使って説明してください。',
+    prohibited_exaggeration: '「絶対」「必ず」「最強」など、確認できない強い表現は使えません。事実に沿った表現に直してください。',
+    unverified_experience: '実際に使ったと確認できない体験談は書けません。商品情報に基づく表現に直してください。',
+    fixed_phrase_missing: 'このテンプレートに必要な決まり文句がありません。テンプレートの形式に合わせてください。',
+    hook_length_invalid: '冒頭の紹介文の長さがテンプレートの範囲外です。短く調整してください。',
+    period_not_allowed: 'このテンプレートでは「。」を使えません。句点を外してください。',
+    monologue_too_long: 'つぶやき部分が長すぎます。20文字以内に短くしてください。',
+    single_product_nsen_not_allowed: 'まとめ紹介には複数商品が必要です。複数商品を選ぶか、別のテンプレートを使ってください。',
+    product_count_label_missing: '本文に書かれた紹介数と選択した商品数が合いません。数字を合わせてください。',
+    measurement_missing: 'サイズや数量などの具体的な数値がありません。商品情報にある数値を加えてください。',
+    single_comparison_axis_required: '比較の根拠を1つに特定できません。商品情報にある比較項目を確認してください。',
+    pr_disclosure_invalid: '#PR は1回だけ必要です。削除や重複がないか確認してください。',
+    extra_hashtag: '#PR 以外のハッシュタグは使えません。',
+    product_link_missing: '商品リンクが不足または変更されています。本文末尾の商品リンクを残してください。',
+    product_link_count_invalid: '選択した商品数とリンク数が合いません。余分なURLを削除し、各商品のリンクを残してください。',
+    weighted_length_exceeded: '投稿全体がXの文字数上限を超えています。商品リンクなども含めて本文を短くしてください。',
+    exact_duplicate: '同じグループに同じ内容の案があります。採用する案を選ぶか、それぞれの内容を変えてください。',
+    skill_snapshot_invalid: 'この案のテンプレート情報が現在の状態と一致しません。最新のテンプレートで候補を作り直してください。',
+    default_tag_not_configured: '商品リンクのタグ設定が確認できません。アカウント設定の商品リンクタグを確認してください。',
+    generation_allocations_invalid: '選択したテンプレートと候補数が一致しません。案ごとの選択内容を確認してください。',
+  };
+  const validationMessage = code => VALIDATION_GUIDANCE[code] || '投稿ルールに沿っていない箇所があります。本文と選択したテンプレートを確認してください。';
+  const validationMessages = codes => [...new Set((codes || []).filter(code => typeof code === 'string').map(validationMessage))];
   const VERIFIER_KEY = 'hachi-x-oauth-verifier';
   const PROOF_KEY = 'hachi-x-browser-proof';
   const pendingCode = new URLSearchParams(location.hash.slice(1)).get('x_code');
@@ -1320,14 +1352,23 @@
         const regenerationSummary = regeneration.status ? [
           draftBusy ? `再生成処理中です（${regeneration.status}）。本文編集・レビュー操作は一時停止しています。` : `再生成ジョブ: ${regeneration.status}`,
           jobId ? `job ${jobId}` : '',
-          regeneration.errorCode || '',
-          Array.isArray(regeneration.validationErrors) && regeneration.validationErrors.length ? regeneration.validationErrors.join(', ') : '',
+          regeneration.errorCode === 'GENERATION_OUTPUT_INVALID' ? '生成結果が投稿ルールに合いませんでした' : regeneration.errorCode || '',
+          Array.isArray(regeneration.validationErrors) && regeneration.validationErrors.length ? `修正点: ${validationMessages(regeneration.validationErrors).join(' / ')}` : '',
           providerDiagnostic.code || '',
           providerDiagnostic.message || '',
         ].filter(Boolean).join(' · ') : '';
+        const validationErrors = validationMessages(draft.validation?.errors);
+        const validationFeedback = draft.validation?.ok
+          ? el('p', { className: 'x-muted', text: '検証OK' })
+          : el('div', { className: 'x-status x-validation-feedback' }, [
+            el('strong', { text: '採用前に、次の点を確認してください。' }),
+            ...(validationErrors.length
+              ? [el('ul', {}, validationErrors.map(text => el('li', { text })))]
+              : [el('p', { text: '本文と選択したテンプレートを確認し、修正後に保存してください。' })]),
+          ]);
         const article = el('article', { className: 'x-product x-draft' }, [
           el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId} · ${draft.state}` }), el('span', { className: 'x-muted', text: `${draft.skillId}@${draft.skillVersion} · 切り口 ${draft.angleId}` })]),
-          el('p', { className: draft.validation?.ok ? 'x-muted' : 'x-status', text: draft.validation?.ok ? '検証OK' : `検証NG: ${(draft.validation?.errors || []).join(', ')}` }),
+          validationFeedback,
           ...(regenerationSummary ? [el('p', { className: 'x-status', text: regenerationSummary })] : []),
           edit,
         ]);
