@@ -1265,8 +1265,14 @@
       if (!selectedDrafts.length) {
         detail.append(el('p', { className: 'x-muted', text: 'この商品にはまだ候補文がありません。' }));
         detail.append(button('この商品を生成対象にする', () => {
-          productIdInput.value = selectedProduct.productId;
-          syncProductPicker(productPicker, productIdInput);
+          const option = [...productPicker.options].find(item => item.value === selectedProduct.productId);
+          if (!option) {
+            allocationStatus.textContent = 'この商品は投稿生成の準備ができていません。商品情報を確認してください。';
+            productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+          }
+          option.selected = true;
+          refreshEligibleOptions();
           productPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
           productPicker.focus();
         }));
