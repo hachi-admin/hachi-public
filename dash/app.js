@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '65';
+const DASH_BUILD = '66';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1446,6 +1446,11 @@ function _catTileMapBar(c, v) {
    * The two selects are the decisions that remain: which lettering, and which kind of picture. Both
    * are free to change here — the lettering re-renders over the photograph already stored, and the
    * recipe only decides what the *next* generation produces. */
+  /* A proposal has no style or picture yet, which reads as broken unless the tile says what
+     approving does: the server picks both and draws the first sample (the approve route). */
+  if (c.status === 'suggested') {
+    return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、サムネタイトルのスタイルと絵のレシピを自動で選び、見本を1枚作ります（pro課金・30秒ほど）。あとで「見た目」から変えられます。</div>`;
+  }
   if (c.status !== 'active') return '';
   return `<div class="acard-map" onclick="event.stopPropagation()">
     ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
@@ -2040,7 +2045,8 @@ function openCategoryDetail(id) {
   /* The style picker needs the catalogue and the preview needs the picker, so both wait on the
      same fetch — and the preview is rendered once from inside it rather than also being fired
      here, which would have drawn the un-pinned version first and replaced it a moment later. */
-  _ensureHeroPresets().then(() => { _fillCatPresetOptions(c.id); refreshCatPreview(c.id); });
+  _ensureHeroPresets().then(() => { _fillCatPresetOptions(c.id); _renderCatGallery(c.id); refreshCatPreview(c.id); });
+  _ensurePalettes().then(() => _fillCatPaletteOptions(c.id));
   // Independent of the hero catalogue — it only fills a picker, and nothing waits on it.
   _ensureImagePrompts().then(() => _fillCatImagePromptOptions(c.id));
 }
@@ -2588,21 +2594,23 @@ function _visualSection(c, section) {
         <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
         <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
       </label>
-      <!-- visual.heroPreset has existed on the category document and been honoured by the article
-           pipeline (_heroStyleFor short-circuits to it) since before this control did — so the
-           only thing missing was a way for a person to set it. Options are filled in by
-           _fillCatPresetOptions once the catalogue has loaded; data-selected carries the saved
-           value across that gap. -->
-      <label class="cat-field">
+      <!-- The style is chosen by eye, on this magazine's own photograph and headline, rather than
+           from a list of names — 「連載コラム」 says nothing about whether it survives this photo.
+           The <select> stays as the saved value (saveCategory, refreshCatPreview and the tile
+           picker all read it); the gallery drives it. Renders are free: the bare sample photo is
+           reused, no image is generated. -->
+      <div class="cat-field cat-wide">
         <span class="cat-label">サムネタイトルのスタイル</span>
-        <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}"
-          onchange="queueCatPreview('${c.id}')">
+        <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}" hidden
+          onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="サムネタイトルのスタイル">
           <option value="">未設定（要指定）</option>
         </select>
-        <span class="cat-hint">原則ここで指定します。選ぶと、このカテゴリの記事は毎回この装飾で描かれ、
-          その配色もこのスタイルのものになります。扱う話題の幅が広くて一つに決められないカテゴリだけ
-          「自由指定」にしてください</span>
-      </label>
+        <div id="cat-gallery-${c.id}" class="cat-gallery" aria-label="スタイルを見比べて選ぶ">
+          <div class="cat-hint">読み込み中…</div>
+        </div>
+        <span class="cat-hint">このカテゴリの写真と見本の見出しで描いています。押すと選ばれ、上のプレビューに反映されます。
+          選ぶと、このカテゴリの記事は毎回この装飾で描かれます。話題の幅が広く一つに決められないときだけ「自由指定」に。</span>
+      </div>
       <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
            visual.imagePrompt/figurePrompt have been on the category document and honoured by
            resolveRecipe (hero) / _generateImage (figure) — the figure side only as of the same
@@ -2623,21 +2631,55 @@ function _visualSection(c, section) {
         </select>
         <span class="cat-hint">記事本文に入る図版・挿絵の作風を固定します。見出し画像とは別に選べます</span>
       </label>
-      ${swatch('accent', v.accent, 'マガジンの色', '色地の型では背景そのもの、黒地では差し色になります')}
-      <label class="cat-field">
-        <span class="cat-label">文字の位置</span>
-        <select id="cat-align-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
-          ${[['', '型にまかせる'], ['center', '中央（ポスター的）'], ['left', '左揃え（雑誌的）']]
-            .map(([val, l]) => `<option value="${val}"${val === (v.align || '') ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <span class="cat-hint">左揃えにすると、下のマガジン名を見出しの上に置けます</span>
-      </label>
       <label class="cat-field">
         <span class="cat-label">マガジン名</span>
         <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
           value="${esc(v.eyebrow || '')}" placeholder="未設定" oninput="queueCatPreview('${c.id}')">
-        <span class="cat-hint">見出しの上に小さく入ります。毎回同じ位置に出るので、一覧で見分けがつくようになります</span>
+        <span class="cat-hint">毎回同じ位置に出るので、一覧で見分けがつくようになります</span>
       </label>
+      <label class="cat-field">
+        <span class="cat-label">マガジン名の置き方</span>
+        <select id="cat-eyeplace-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
+          ${[['', '見出しの上'], ['corner', '角のマーク']]
+            .map(([val, l]) => `<option value="${val}"${val === (v.eyebrowPlacement || '') ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <span class="cat-hint">角のマークは写真を邪魔しにくく、連載らしく見えます</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">タグにする語</span>
+        <input type="text" id="cat-eyetags-${c.id}" class="cat-in" maxlength="60"
+          value="${esc((v.eyebrowEmphasis || []).join('、'))}" placeholder="なし" oninput="queueCatPreview('${c.id}')">
+        <span class="cat-hint">マガジン名のうち色付きのタグにする部分。「、」区切り。名前全体を入れると全体がタグになります</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">文字の横位置</span>
+        <select id="cat-align-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
+          ${[['', 'スタイルにまかせる'], ['left', '左揃え（雑誌的）'], ['center', '中央（ポスター的）'], ['right', '右揃え']]
+            .map(([val, l]) => `<option value="${val}"${val === (v.align || '') ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <span class="cat-hint">写真の主役と重なるときに動かします</span>
+      </label>
+      <label class="cat-field">
+        <span class="cat-label">文字の縦位置</span>
+        <select id="cat-anchor-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
+          ${[['', 'スタイルにまかせる'], ['top', '上'], ['center', '中央'], ['bottom', '下']]
+            .map(([val, l]) => `<option value="${val}"${val === (v.anchor || '') ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <span class="cat-hint">顔や主役が写真の上にあるなら「下」に</span>
+      </label>
+      <div class="cat-field cat-wide">
+        <span class="cat-label">配色</span>
+        <select id="cat-palette-${c.id}" class="cat-in" data-selected="${esc(v.palette || '')}"
+          onchange="_showCatPalette('${c.id}');queueCatPreview('${c.id}')" aria-label="配色">
+          <option value="">スタイルの配色のまま</option>
+        </select>
+        <div id="cat-palette-strip-${c.id}" class="cat-pal-strip"></div>
+        <span class="cat-hint">塗り・縁・強調の3色の組。雑誌の色を毎回固定したいときだけ選びます。スタイルの色より優先されます</span>
+      </div>
+      <details class="cat-adv cat-wide"${v.accent ? ' open' : ''}>
+        <summary>細かい上書き（通常は不要）</summary>
+        ${swatch('accent', v.accent, '強調の色', 'スタイルと配色の強調色より優先されます。空欄でスタイルに戻ります')}
+      </details>
     </div>
     <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
       A/Bテストが動いている間は、そちらの割り当てが優先されます。
@@ -2713,6 +2755,164 @@ function _fillPresetSelect(sel) {
   }
 }
 
+/* What this magazine's thumbnail is drawn from, for every render of it in the editor: the bare
+   picture of its centre sample (free to re-letter), its own sample headline, and its series name. */
+function _catSampleInput(c) {
+  const v = c?.visual || {};
+  return {
+    photoUrl: v.samples?.center?.photoUrl || v.samplePhotoUrl || undefined,
+    lines: v.sampleLines?.short?.length ? v.sampleLines.short : undefined,
+    emphasis: v.sampleLines?.short?.length ? (v.sampleEmphasis?.short || []) : undefined,
+  };
+}
+
+/* The look settings as they stand in the editor right now, saved or not. One reader for the
+   preview, the gallery and 保存, so the three can never disagree about what was chosen. */
+function _catVisualDraft(id) {
+  return {
+    accent: _catVal(`cat-accenthex-${id}`).trim(),
+    align: _catVal(`cat-align-${id}`),
+    anchor: _catVal(`cat-anchor-${id}`),
+    eyebrow: _catVal(`cat-eyebrow-${id}`).trim(),
+    eyebrowPlacement: _catVal(`cat-eyeplace-${id}`),
+    eyebrowEmphasis: _catVal(`cat-eyetags-${id}`).split(/[、,，]/).map((t) => t.trim()).filter(Boolean),
+    // Until the palette list has arrived the select holds only its placeholder; saving then must
+    // keep what is stored rather than read the placeholder as "cleared".
+    palette: (() => {
+      const el = document.getElementById(`cat-palette-${id}`);
+      return el && el.options.length > 1 ? el.value : (el?.dataset.selected || '');
+    })(),
+  };
+}
+
+/* The style gallery. The HTML/CSS styles are the catalogue; the earlier SVG styles are kept
+   folded underneath because categories still pin some of them. Each tile is this category's own
+   photo and headline in that style — a list of names cannot answer "does it work on *this*". */
+const _catGalleryRun = {};
+
+function _renderCatGallery(catId) {
+  const host = document.getElementById(`cat-gallery-${catId}`);
+  if (!host) return;
+  const usable = _heroPresets.filter((p) => p.enabled !== false);
+  const curated = usable.filter((p) => p.styleSpec?.engine === 'satori');
+  const legacy = usable.filter((p) => p.styleSpec?.engine !== 'satori');
+  const want = _catVal(`cat-preset-${catId}`);
+  const tile = (p) => `<button type="button" class="cat-gal-tile" data-preset="${esc(p.id)}"
+      onclick="_pickCatPreset('${catId}','${esc(p.id)}')" title="${esc(p.description || p.name)}">
+      <span class="cat-gal-img" data-preset="${esc(p.id)}"><span class="cat-gal-wait">…</span></span>
+      <span class="cat-gal-name">${esc(p.name)}</span></button>`;
+  const chip = (val, label) => `<button type="button" class="cat-quick" data-preset="${val}"
+      onclick="_pickCatPreset('${catId}','${val}')">${label}</button>`;
+  const photo = _catSampleInput(CATEGORIES.find((x) => x.id === catId)).photoUrl;
+  host.innerHTML = `<div class="cat-gal-chips">${chip('', '未設定')}${chip(HP_AUTO, '自由指定（記事ごとに選ぶ）')}
+      ${photo ? '' : '<span class="cat-hint">見本の写真がまだないので、仮の背景で描いています</span>'}</div>
+    <div class="cat-gal-grid">${curated.map(tile).join('')}</div>
+    ${legacy.length ? `<details class="cat-adv"${legacy.some((p) => p.id === want) ? ' open' : ''}
+        ontoggle="if(this.open)_drawCatGallery('${catId}')">
+        <summary>以前のスタイル（${legacy.length}）</summary>
+        <div class="cat-gal-grid">${legacy.map(tile).join('')}</div></details>` : ''}`;
+  _markCatGallery(catId);
+  // The gallery sits in the collapsed 見た目 section; hidden tiles are skipped, so draw on opening.
+  const sec = host.closest('details.neu-sec');
+  if (sec && !sec.dataset.galleryHook) {
+    sec.dataset.galleryHook = '1';
+    sec.addEventListener('toggle', () => { if (sec.open) _drawCatGallery(catId); });
+  }
+  _drawCatGallery(catId);
+}
+
+/* One render at a time, visible tiles only, and abandoned if the editor is re-rendered — a dozen
+   server renders fired at once from a phone is what the preset grid learned not to do. */
+async function _drawCatGallery(catId) {
+  const run = (_catGalleryRun[catId] = (_catGalleryRun[catId] || 0) + 1);
+  const c = CATEGORIES.find((x) => x.id === catId);
+  const base = _catSampleInput(c);
+  const visual = _catVisualDraft(catId);
+  const cells = [...document.querySelectorAll(`#cat-gallery-${catId} .cat-gal-img`)]
+    .filter((el) => !el.dataset.drawn && el.offsetParent !== null);
+  for (const el of cells) {
+    if (_catGalleryRun[catId] !== run) return;
+    const p = _heroPresets.find((x) => x.id === el.dataset.preset);
+    if (!p) continue;
+    el.dataset.drawn = '1';
+    // One retry after a pause: a cold or busy instance drops the odd render in a burst (503),
+    // and the same request succeeds a moment later — the preset grid learned the same thing.
+    const draw = () => fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        presetId: p.id, templateId: _catVal(`cat-tpl-${catId}`) || p.templateId || 'photo_scrim',
+        styleSpec: p.styleSpec || {}, categoryId: catId, visual, ...base,
+        meta: { series: visual.eyebrow || c?.name || '' },
+        article: c?.name || 'サンプルタイトル', width: 420,
+      }),
+    }).catch(() => null);
+    let res = await draw();
+    if (!res?.ok) { await new Promise((r) => setTimeout(r, 1500)); res = await draw(); }
+    if (!res?.ok) { el.innerHTML = '<span class="cat-gal-wait">描けませんでした</span>'; delete el.dataset.drawn; continue; }
+    const url = URL.createObjectURL(await res.blob());
+    el.innerHTML = `<img src="${url}" alt="${esc(p.name)} の見本" loading="lazy">`;
+  }
+}
+
+function _pickCatPreset(catId, presetId) {
+  const sel = document.getElementById(`cat-preset-${catId}`);
+  if (!sel) return;
+  if (![...sel.options].some((o) => o.value === presetId)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(presetId)}">${esc(presetId)}</option>`);
+  sel.value = presetId;
+  _markCatGallery(catId);
+  queueCatPreview(catId);
+}
+
+function _markCatGallery(catId) {
+  const want = _catVal(`cat-preset-${catId}`);
+  document.querySelectorAll(`#cat-gallery-${catId} [data-preset]`).forEach((el) => {
+    if (!el.matches('button')) return;
+    const on = el.dataset.preset === want;
+    el.classList.toggle(el.classList.contains('cat-quick') ? 'is-on' : 'is-picked', on);
+    el.setAttribute('aria-pressed', String(on));
+  });
+}
+
+/* Palettes with their own contrast verdicts. /api/palettes attaches `problems` to each (the
+   same WCAG check the seed's tests run), so a combination that has drifted out of spec says so at
+   the point of choosing instead of looking exactly like a good one. Falls back to the category
+   meta's copy, which carries the colours but not the verdicts. */
+let _palettes = null;
+
+async function _ensurePalettes() {
+  if (_palettes) return _palettes;
+  const res = await fetch(apiUrl('/api/palettes'), { headers: _authHeaders() }).catch(() => null);
+  const data = res?.ok ? await res.json().catch(() => null) : null;
+  _palettes = data?.palettes || CAT_META?.palettes || [];
+  return _palettes;
+}
+
+function _fillCatPaletteOptions(catId) {
+  const sel = document.getElementById(`cat-palette-${catId}`);
+  if (!sel) return;
+  const want = sel.dataset.selected || '';
+  sel.innerHTML = '<option value="">スタイルの配色のまま</option>'
+    + (_palettes || []).map((p) => `<option value="${esc(p.id)}"${p.id === want ? ' selected' : ''}>`
+      + `${esc(p.name || p.id)}${p.problems?.length ? '（要確認）' : ''}</option>`).join('');
+  if (want && !(_palettes || []).some((p) => p.id === want)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(want)}" selected>${esc(want)}（削除済み）</option>`);
+  }
+  _showCatPalette(catId);
+}
+
+function _showCatPalette(catId) {
+  const strip = document.getElementById(`cat-palette-strip-${catId}`);
+  if (!strip) return;
+  const p = (_palettes || []).find((x) => x.id === _catVal(`cat-palette-${catId}`));
+  if (!p) { strip.innerHTML = ''; return; }
+  const chip = (hex, role) => `<span class="cat-pal-chip"><span class="cat-pal-dot" style="background:${esc(hex || '#888888')}"></span>${role}<code>${esc(hex || '')}</code></span>`;
+  const src = typeof p.source === 'string' ? p.source : (p.source?.label || p.source?.name || '');
+  strip.innerHTML = chip(p.fill, '塗り') + chip(p.stroke, '縁') + chip(p.emphasis, '強調')
+    + (p.ground ? `<span class="cat-pal-meta">${({ dark: '暗い写真向け', light: '明るい写真向け', any: 'どの写真にも' })[p.ground] || esc(p.ground)}</span>` : '')
+    + (src ? `<span class="cat-pal-meta">${esc(src)}</span>` : '')
+    + (p.problems?.length ? `<div class="cat-pal-problems" role="alert">コントラスト不足：${p.problems.map(esc).join(' / ')}</div>` : '');
+}
+
 // One picker each for kind:'hero' (the cover) and kind:'figure' (in-body diagrams) — a recipe
 // meant for one would be the wrong shape drawn into the other.
 function _fillCatImagePromptOptionsFor(selId, kind) {
@@ -2753,15 +2953,16 @@ async function refreshCatPreview(id) {
     templateId: _catVal(`cat-tpl-${id}`) || preset?.templateId || undefined,
     styleSpec: preset?.styleSpec || undefined,
     categoryId: id,
-    visual: {
-      accent: _catVal(`cat-accenthex-${id}`).trim(),
-      align: _catVal(`cat-align-${id}`),
-      eyebrow: _catVal(`cat-eyebrow-${id}`).trim(),
-    },
+    presetId: preset?.id,
+    visual: _catVisualDraft(id),
     article: (c?.name || 'サンプルタイトル'),
-    lines: [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }],
+    /* The real picture and the category's own sample headline when it has them, so this preview
+       is the thumbnail an article would get rather than the name set over a grey stand-in. */
+    ..._catSampleInput(c),
+    meta: { series: _catVal(`cat-eyebrow-${id}`).trim() || c?.name || '' },
     width: 640,
   };
+  if (!body.lines) body.lines = [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }];
   if (status) status.textContent = '生成中…';
   const res = await fetch(apiUrl('/api/hero-presets/preview'), {
     method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
@@ -2813,9 +3014,7 @@ async function saveCategory(id, { silent = false } = {}) {
       figurePrompt: _catVal(`cat-figprompt-${id}`),
       // The hex box wins over the picker: it is the only one of the two that can be empty, and
       // empty is a real choice meaning "decide from the article".
-      accent: _catVal(`cat-accenthex-${id}`).trim(),
-      align: _catVal(`cat-align-${id}`),
-      eyebrow: _catVal(`cat-eyebrow-${id}`).trim(),
+      ..._catVisualDraft(id),
     },
     targeting: {
       ageMin: Number(_catVal(`cat-agemin-${id}`)),
@@ -3131,10 +3330,19 @@ async function _loadHeroPresets() {
        re-rendered on arrival: it is one small request, and a card that changes under the reader is
        worse than one that appears a moment later. */
     await _loadStyleVocab();
+    await _ensureCategoriesForPreview();   // the shelves sort by which categories use a style
     _renderHeroPresets();
   } catch (e) {
     listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
   }
+}
+
+// Which categories pin a style — shown on its card, and what sorts the older styles into shelves.
+const _hpUsers = (id) => CATEGORIES.filter((c) => c.visual?.heroPreset === id);
+function _hpUsedBy(id) {
+  const users = _hpUsers(id);
+  return users.length ? `<span class="chip" title="${esc(users.map((c) => c.name).join('、'))}"
+    style="background:color-mix(in srgb, var(--acc) 14%, transparent);color:var(--acc)">使用中 ${users.length}</span>` : '';
 }
 
 function _renderHeroPresets() {
@@ -3149,9 +3357,21 @@ function _renderHeroPresets() {
   const shown = _hpFaceFilter
     ? _heroPresets.filter((p) => p.styleSpec?.face === _hpFaceFilter)
     : _heroPresets;
+  /* Three shelves. The HTML/CSS styles are the catalogue the operator curated (fewer than fifteen,
+     on purpose); the earlier SVG styles stay reachable because categories still pin some of them,
+     and the ones nothing uses fold away instead of doubling the scroll. */
+  const curated = shown.filter((p) => p.styleSpec?.engine === 'satori');
+  const legacy = shown.filter((p) => p.styleSpec?.engine !== 'satori');
+  const inUse = legacy.filter((p) => _hpUsers(p.id).length);
+  const idle = legacy.filter((p) => !_hpUsers(p.id).length);
+  const shelf = (title, hint, list) => (list.length
+    ? `<div class="hp-shelf-hd">${title}<span>${hint}</span></div><div class="hp-card-grid">${list.map(_heroPresetCard).join('')}</div>` : '');
   listEl.innerHTML = _hpFaceBar(_heroPresets)
     + (shown.length
-      ? `<div class="hp-card-grid">${shown.map(_heroPresetCard).join('')}</div>`
+      ? shelf('厳選スタイル', `HTML/CSSで描く${curated.length}種。実際の写真の中央・サイドで表示しています`, curated)
+        + shelf('使用中の以前のスタイル', 'カテゴリが今も使っているSVGのスタイル', inUse)
+        + (idle.length ? `<details class="hp-shelf-more"><summary>使われていない以前のスタイル（${idle.length}）</summary>
+            <div class="hp-card-grid">${idle.map(_heroPresetCard).join('')}</div></details>` : '')
       : '<div style="font-size:11px;color:var(--m);padding:12px">この書体のスタイルはありません</div>');
   _observeHeroPreviews();
 }
@@ -3241,6 +3461,7 @@ async function _loadHeroPreviewInto(id) {
   const p = _heroPresets.find((x) => x.id === id);
   const grid = document.querySelector(`#hero-presets-list .hp-shot-grid[data-preset-id="${CSS.escape(id)}"]`);
   if (!p || !grid) return;
+  if (p.styleSpec?.engine === 'satori') { await _loadSatoriPreviewInto(p, grid); return; }
   const v = _hpNormalizeVariants(p.exampleLines);
 
   /* In sequence, not in parallel. Each panel is a server-side render, and four cards coming into
@@ -3326,6 +3547,71 @@ async function _loadHeroPreviewInto(id) {
   }
 }
 
+/* The HTML/CSS styles are judged on a real photograph, centre and side — the two compositions a
+ * category's samples come in — because their devices (frosted cards, halos, blur behind the lines)
+ * only mean something over a picture. The photos are the bare samples of a category that pins the
+ * style, else of the category the style was designed on (`sampleCategory`); re-lettering them is
+ * free. Categories are fetched here when this tab is opened first. */
+async function _ensureCategoriesForPreview() {
+  if (CATEGORIES.length) return CATEGORIES;
+  const res = await fetch(apiUrl('/api/article-categories'), { headers: _authHeaders() }).catch(() => null);
+  const data = res?.ok ? await res.json().catch(() => null) : null;
+  if (Array.isArray(data?.categories) && !CATEGORIES.length) CATEGORIES = data.categories;
+  return CATEGORIES;
+}
+
+async function _loadSatoriPreviewInto(p, grid) {
+  const cats = await _ensureCategoriesForPreview();
+  const withPhotos = (c) => c?.visual?.samples?.center?.photoUrl || c?.visual?.samples?.side?.photoUrl;
+  const cat = cats.find((c) => c.visual?.heroPreset === p.id && withPhotos(c))
+    || cats.find((c) => c.id === p.sampleCategory);
+  const lines = _hpNormalizeVariants(p.exampleLines).standard;
+  for (const [i, pattern] of ['center', 'side'].entries()) {
+    const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
+    if (!host) continue;
+    const photoUrl = cat?.visual?.samples?.[pattern]?.photoUrl || undefined;
+    // The side photo was drawn with its empty half on one side; the lab picked it the same way.
+    const zone = pattern === 'side' ? ((cat?.id || '').length % 2 === 0 ? 'left' : 'right') : 'full';
+    const draw = () => fetch(apiUrl('/api/hero-presets/preview'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({
+        presetId: p.id, templateId: 'photo_scrim', styleSpec: { ...(p.styleSpec || {}), textZone: zone },
+        photoUrl, lines, emphasis: [], width: 640, article: p.name,
+      }),
+    }).catch(() => null);
+    let res = await draw();
+    if (!res?.ok) { await new Promise((r) => setTimeout(r, 1200)); res = await draw(); }
+    if (!res?.ok) { host.innerHTML = '<div class="hp-card-shot-fail">描けません</div>'; continue; }
+    const url = URL.createObjectURL(await res.blob());
+    const alt = `${p.name} の見本（${pattern === 'center' ? '中央' : 'サイド'}）`;
+    host.innerHTML = `<img src="${url}" alt="${esc(alt)}" loading="lazy" onclick="_openLightbox('${url}','${esc(alt)}')">`;
+  }
+}
+
+/* Start a new style from an existing one — the usual way a catalogue grows, since most new styles
+   are a variation (another colour, another face) on one that already works. Saved as a new id. */
+function _duplicateHeroPreset(id) {
+  const p = _heroPresets.find((x) => x.id === id);
+  if (!p) return;
+  _showNewPresetForm();
+  document.getElementById('hp-editor-title').textContent = `「${p.name}」を複製`;
+  let copyId = `${id}-copy`;
+  for (let n = 2; _heroPresets.some((x) => x.id === copyId); n++) copyId = `${id}-copy${n}`;
+  document.getElementById('hp-id').value = copyId;
+  document.getElementById('hp-name').value = `${p.name}（コピー）`;
+  document.getElementById('hp-mood').value = (p.mood || []).join(', ');
+  document.getElementById('hp-description').value = p.description || '';
+  document.getElementById('hp-style-spec').value = JSON.stringify(p.styleSpec || {}, null, 2);
+  _hpVariants = _hpNormalizeVariants(JSON.parse(JSON.stringify(p.exampleLines || {})));
+  _hpVariant = 'standard';
+  document.getElementById('hp-example-lines').value = JSON.stringify(_hpVariants.standard, null, 2);
+  document.getElementById('hp-example-badge').value = p.exampleBadge ? JSON.stringify(p.exampleBadge, null, 2) : '';
+  _syncHpSummaries();
+  _renderSampleTabs();
+  _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
+  _refreshPreview();
+}
+
 /* What the agent may choose from, and on whose authority.
  *
  * `enabled: false` was documented as the way to withdraw a preset but was never in the API's PATCH
@@ -3371,7 +3657,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLigh
  * this catalogue has pairs that are a stroke width apart. These name the decisions rather than
  * dumping the spec — the JSON dump this replaced told you the preset set `metal` and `glows`
  * without telling you anything you could act on. */
-const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝', pop: 'ポップ' };
+const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝', pop: 'ポップ',
+  dela: 'デラ極太', decol: '装飾明朝', opti: 'オプティ明朝', hand: '手書き' };
 
 function _hpTypoChips(s = {}) {
   const chip = (t, title) => `<span class="cat-chip"${title ? ` title="${esc(title)}"` : ''}>${esc(t)}</span>`;
@@ -3444,14 +3731,14 @@ function _heroPresetCard(p) {
           and whether it still reads pushed to one side, and a single representative sample shows
           neither. Drawing costs no image generation — this is type over a flat field — so the only
           budget is requests, and those are lazy per card and issued in sequence. */ ''}
-    <div class="hp-shot-grid" data-preset-id="${esc(p.id)}">
-      ${['短文・中央', '短文・左', '長文・中央', '長文・左'].map((l, i) =>
+    <div class="hp-shot-grid${p.styleSpec?.engine === 'satori' ? ' is-pair' : ''}" data-preset-id="${esc(p.id)}">
+      ${(p.styleSpec?.engine === 'satori' ? ['中央（実写）', 'サイド（実写）'] : ['短文・中央', '短文・左', '長文・中央', '長文・左']).map((l, i) =>
     `<figure class="hp-shot" data-variant="${i}"><div class="hp-shot-img"></div><figcaption>${l}</figcaption></figure>`).join('')}
     </div>
     <div class="hp-card-body">
       <div class="hp-card-name">${esc(p.name)}</div>
       <div class="hp-card-id">${esc(p.id)}</div>
-      <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}</div>
+      <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}${_hpUsedBy(p.id)}</div>
       ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
       ${/* What the letters are made of, and how they sit — the two things this screen manages.
             The ground is deliberately absent: it belongs to the template and is chosen per article.
@@ -3463,6 +3750,7 @@ function _heroPresetCard(p) {
     </div>
     <div class="hp-card-acts">
       <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
+      <button class="act-btn" onclick="_duplicateHeroPreset('${esc(p.id)}')" title="このスタイルを元に新しいスタイルを作ります">複製</button>
       <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
         title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
       ${/* System presets are deletable now. Deleting one used to be refused because the seeder
@@ -4960,6 +5248,7 @@ function _imagePromptCard(r) {
       ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
     </div>
     <div class="hp-card-acts">
+      <button class="act-btn" onclick="_openRecipeEditor('${esc(r.id)}')" title="名前・説明・画づくりの指示を直します">編集</button>
       <button class="act-btn" data-ip-gen="${esc(r.id)}" onclick="_genImagePromptSamples('${esc(r.id)}')"
         title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">${samples.length ? '見本を作り直す' : '見本を作る'}</button>
       <button class="act-btn" onclick="_toggleImagePrompt('${esc(r.id)}',${off})"
@@ -4988,7 +5277,13 @@ async function _requestImagePromptSamples(id) {
   return { ok: false, error: err?.error || `Error ${res?.status ?? '—'}` };
 }
 
-async function _genImagePromptSamples(id) {
+function _genImagePromptSamples(id) {
+  showConfirm('このレシピで画像を3枚生成して見本にします（画像生成の課金・1分ほど）。',
+    () => _genImagePromptSamplesNow(id),
+    document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`) ?? undefined);
+}
+
+async function _genImagePromptSamplesNow(id) {
   const btn = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
   showToast('3枚生成しています…（1分ほどかかります）', 'info');
@@ -5002,6 +5297,84 @@ async function _genImagePromptSamples(id) {
   _loadImagePrompts();
 }
 
+
+/* The recipe editor. What the reference-image flow drafts, corrected by hand — or a recipe
+   written from nothing. Spec fields are the prompt fragments themselves, so they are shown as
+   such; the Japanese name and description are what the list and the category picker show. */
+const _IP_SPEC = [
+  ['style', '作風', 'e.g. Cinematic film still, 35mm, shallow depth of field'],
+  ['composition', '構図', 'e.g. Subject on the right third, open negative space on the left for a headline'],
+  ['lighting', '光', 'e.g. Wet neon reflections, magenta and cyan rim light'],
+  ['camera', 'カメラ', 'e.g. 50mm, eye level'],
+  ['color_restriction', '色の制約', 'e.g. Teal and orange only, no pure black'],
+  ['texture', '質感', 'e.g. Fine film grain'],
+  ['mood', '雰囲気', 'e.g. Lonely, late night, quiet'],
+];
+let _ipEditingId = null;
+
+function _openRecipeEditor(id = null) {
+  const r = id ? (_imagePrompts || []).find((x) => x.id === id) : null;
+  if (id && !r) return;
+  _ipEditingId = id;
+  const $ = (k) => document.getElementById(`ip-edit-${k}`);
+  $('title').textContent = r ? `「${r.name || r.id}」を編集` : '絵のレシピを空から書く';
+  $('id').value = r?.id || '';
+  $('id').disabled = !!r;
+  $('kind').value = r?.kind || 'hero';
+  $('kind').disabled = !!r;   // a recipe drawn for one shape would be wrong in the other
+  $('name').value = r?.name || '';
+  $('description').value = r?.description || '';
+  $('spec').innerHTML = _IP_SPEC.map(([k, label, ph]) => `<label class="cat-field cat-wide">
+      <span class="cat-label">${label}<code style="margin-left:6px;font-size:9px;color:var(--m2)">${k}</code></span>
+      <textarea id="ip-edit-spec-${k}" class="cat-in" rows="${Math.min(7, Math.max(2, Math.ceil((r?.spec?.[k] || '').length / 90)))}" placeholder="${esc(ph)}">${esc(r?.spec?.[k] || '')}</textarea>
+    </label>`).join('');
+  $('negative').value = (r?.negative || []).join('\n');
+  $('keywords').value = (r?.keywords || []).join('、');
+  $('centered').checked = r?.centeredSubject === true;
+  $('error').style.display = 'none';
+  document.getElementById('ip-edit-modal').classList.add('open');
+  (r ? $('name') : $('id')).focus();
+}
+
+function _closeRecipeEditor() {
+  document.getElementById('ip-edit-modal')?.classList.remove('open');
+  _ipEditingId = null;
+}
+
+async function _saveRecipe() {
+  const $ = (k) => document.getElementById(`ip-edit-${k}`);
+  const fail = (msg) => { $('error').textContent = msg; $('error').style.display = ''; };
+  const id = ($('id').value || '').trim();
+  if (!/^[a-z0-9][a-z0-9-]{1,58}$/.test(id)) { fail('IDは英小文字・数字・ハイフンで2文字以上にしてください'); return; }
+  if (!_ipEditingId && (_imagePrompts || []).some((x) => x.id === id)) { fail('そのIDはすでに使われています'); return; }
+  const name = $('name').value.trim();
+  if (!name) { fail('名前を入れてください'); return; }
+  /* Every field, blanks included: the server merges nested fields, so a field left out would keep
+     its old text rather than be cleared. renderPrompt skips empty ones. */
+  const spec = Object.fromEntries(_IP_SPEC.map(([k]) => [k, (document.getElementById(`ip-edit-spec-${k}`)?.value || '').trim()]));
+  if (!spec.style) { fail('「作風」は必須です（これが無いと画像モデルに何も伝わりません）'); return; }
+  const body = {
+    name, description: $('description').value.trim(), spec,
+    negative: $('negative').value.split('\n').map((x) => x.trim()).filter(Boolean),
+    keywords: $('keywords').value.split(/[、,，]/).map((x) => x.trim()).filter(Boolean),
+    centeredSubject: $('centered').checked,
+    ...(_ipEditingId ? {} : { kind: $('kind').value, sourceMode: 'ai', enabled: true }),
+  };
+  const btn = $('save');
+  btn.disabled = true;
+  const res = await fetch(apiUrl(`/api/image-prompts/${encodeURIComponent(id)}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).catch(() => null);
+  btn.disabled = false;
+  if (!res?.ok) {
+    const err = await res?.json().catch(() => ({}));
+    fail(err?.error || `保存できませんでした（${res?.status ?? '通信エラー'}）`);
+    return;
+  }
+  _closeRecipeEditor();
+  showToast(_ipEditingId ? 'レシピを保存しました' : 'レシピを作りました。「見本を作る」で見た目を確かめられます', 'success');
+  _loadImagePrompts();
+}
 
 async function _toggleImagePrompt(id, currentlyOff) {
   const res = await fetch(apiUrl(`/api/image-prompts/${id}`), {

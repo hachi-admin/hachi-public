@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=65">
-<link rel="stylesheet" href="dashboard.css?v=65">
+<link rel="stylesheet" href="../shared/neu.css?v=66">
+<link rel="stylesheet" href="dashboard.css?v=66">
 </head>
 <body>
 
@@ -185,6 +185,7 @@
     <div class="page-hd">
       <div class="page-title">絵のレシピ</div>
       <button class="act-btn" onclick="_openNewRecipeModal()" style="font-size:11px">＋ 参考画像から作る</button>
+      <button class="act-btn" onclick="_openRecipeEditor()" style="font-size:11px">＋ 空から書く</button>
       <button class="refresh-btn" onclick="_loadImagePrompts()" style="font-size:11px">&#8635; 更新</button>
     </div>
     <div id="image-prompts-list" class="feed-box"></div>
@@ -196,7 +197,7 @@
   <div class="lightbox-ov" id="ip-new-modal" onclick="_closeNewRecipeModal()">
     <div class="neu-well" style="background:var(--surf);max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()">
       <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">参考画像から絵のレシピを作る</div>
-      <div class="cat-hint" style="margin-bottom:12px">似た見た目の画像を1〜5枚。共通する画づくり（構図・光・質感・トーン）をAIが言葉にします。写っている被写体そのものではなく、その作風が抽出されます。</div>
+      <div class="cat-hint" style="margin-bottom:12px">似た見た目の画像を1〜5枚。共通する画づくり（構図・光・質感・トーン）をAIが言葉にします。写っている被写体そのものではなく、その作風が抽出されます。「生成する」でAIの画像解析が1回走ります（少額の課金）。見本の画像はまだ作られません。</div>
       <label class="cat-field">
         <span class="cat-label">参考画像（最大5枚）</span>
         <input type="file" id="ip-new-files" accept="image/*" multiple onchange="_onNewRecipeFiles(this.files)">
@@ -214,6 +215,57 @@
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="act-btn" onclick="_closeNewRecipeModal()" style="flex:1;justify-content:center">キャンセル</button>
         <button class="act-btn resume" id="ip-new-submit" onclick="_submitNewRecipe()" style="flex:1;justify-content:center">生成する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Recipe editor ─────────────────────────────────────────────────────────
+       Every field upsertImagePrompt accepts, by hand. The reference-image flow above writes a first
+       draft; this is where it is corrected, or a recipe is written from scratch. The spec fields are
+       sent to the image model verbatim, which is why they are labelled as prompt text. -->
+  <div class="lightbox-ov" id="ip-edit-modal" onclick="_closeRecipeEditor()">
+    <div class="neu-well" style="background:var(--surf);max-width:640px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()" role="dialog" aria-labelledby="ip-edit-title">
+      <div id="ip-edit-title" style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">絵のレシピを編集</div>
+      <div class="cat-hint" style="margin-bottom:12px">名前と説明は一覧用。「画づくり」の各欄はそのまま画像モデルに渡る指示文です（英語のほうが安定します）。保存しても見本は作り直されません。</div>
+      <div class="cat-grid">
+        <label class="cat-field">
+          <span class="cat-label">ID（英小文字・数字・ハイフン）</span>
+          <input type="text" id="ip-edit-id" class="cat-in" maxlength="60" placeholder="例: soft-editorial-portrait" spellcheck="false">
+        </label>
+        <label class="cat-field">
+          <span class="cat-label">使う場所</span>
+          <select id="ip-edit-kind" class="cat-in"><option value="hero">見出し画像</option><option value="figure">本文の図解</option></select>
+        </label>
+        <label class="cat-field cat-wide">
+          <span class="cat-label">名前</span>
+          <input type="text" id="ip-edit-name" class="cat-in" maxlength="60" placeholder="例: シネマ：ネオン香港">
+        </label>
+        <label class="cat-field cat-wide">
+          <span class="cat-label">説明</span>
+          <textarea id="ip-edit-description" class="cat-in" rows="2" maxlength="300" placeholder="どんな絵になるか、どの記事に向くか"></textarea>
+        </label>
+      </div>
+      <div class="cat-label" style="margin:14px 0 6px">画づくり（画像モデルへの指示）</div>
+      <div class="cat-grid" id="ip-edit-spec"></div>
+      <div class="cat-grid" style="margin-top:12px">
+        <label class="cat-field cat-wide">
+          <span class="cat-label">避けるもの（1行に1つ）</span>
+          <textarea id="ip-edit-negative" class="cat-in" rows="3" placeholder="text&#10;watermark&#10;extra fingers"></textarea>
+        </label>
+        <label class="cat-field cat-wide">
+          <span class="cat-label">キーワード（「、」区切り）</span>
+          <input type="text" id="ip-edit-keywords" class="cat-in" placeholder="映画、夜、ネオン" >
+          <span class="cat-hint">記事に合うレシピを自動で選ぶときの手がかりになります</span>
+        </label>
+        <label class="cat-field cat-wide" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="ip-edit-centered">
+          <span>主役を中央に置く絵（文字を全面に重ねる型では使われなくなります）</span>
+        </label>
+      </div>
+      <div id="ip-edit-error" style="display:none;color:var(--error);font-size:11px;margin-top:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="act-btn" onclick="_closeRecipeEditor()" style="flex:1;justify-content:center">キャンセル</button>
+        <button class="act-btn resume" id="ip-edit-save" onclick="_saveRecipe()" style="flex:1;justify-content:center">保存</button>
       </div>
     </div>
   </div>
@@ -1017,8 +1069,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=65"></script>
-<script src="x-affiliate.js?v=65"></script>
-<script src="app.js?v=65"></script>
+<script src="../shared/ui.js?v=66"></script>
+<script src="x-affiliate.js?v=66"></script>
+<script src="app.js?v=66"></script>
 </body>
 </html>
