@@ -2859,7 +2859,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .cal-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
 .cal-m-wd { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
 .cal-m-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 54px; padding: 6px 0 4px;
-  border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--sh-sm); color: var(--text); cursor: pointer; font: inherit; }
+  border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--sh-sm); color: var(--text); cursor: pointer; font: inherit; }
 .cal-m-cell.out { opacity: .4; }
 .cal-m-cell.today { box-shadow: var(--sh-sm), inset 0 0 0 2px var(--accent); }
 .cal-m-cell.sel { box-shadow: var(--sh-in); }
