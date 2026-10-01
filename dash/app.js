@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '69';
+const DASH_BUILD = '70';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1510,52 +1510,40 @@ function _calDay(d, today) {
   </section>`;
 }
 
-// A slate of ideas is alternatives for one category, so it is shown and moved as one block.
+/* Approvals are answered in Discord — the calendar only shows *when* they arrive, one line per
+   category, so the page is a schedule rather than a second copy of #approvals. Moving a line to
+   another day is the one action here, and only for cards that have not been posted yet. */
 function _calApprovalGroups(items, date) {
+  const pending = items.filter((a) => a.status === 'pending');
+  const done = items.filter((a) => a.status !== 'pending');
   const groups = [];
   const byKey = {};
-  for (const a of items) {
-    const key = a.slotGroup || a.id;
-    if (!byKey[key]) { byKey[key] = { key, items: [] }; groups.push(byKey[key]); }
+  for (const a of pending) {
+    const key = a.slotGroup || `${a.categoryId || a.kind}|${a.released ? 'r' : 'w'}`;
+    if (!byKey[key]) { byKey[key] = { items: [] }; groups.push(byKey[key]); }
     byKey[key].items.push(a);
   }
-  return groups.map((g) => {
+  const moveOpts = Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i))
+    .map((k) => `<option value="${k}"${k === date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('');
+  const rows = groups.map((g) => {
     const first = g.items[0];
-    const pending = g.items.some((a) => a.status === 'pending');
-    const waiting = g.items.some((a) => a.status === 'pending' && !a.released);
+    const waiting = !first.released;
     const head = first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind;
-    const moveOpts = Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i))
-      .map((k) => `<option value="${k}"${k === date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('');
-    return `<div class="cal-slate">
-      <div class="cal-slate-hd">
-        <span class="cal-slate-title">${esc(head)}</span>
-        ${srcChip(_PROP_KIND_LABEL[first.kind] || first.kind, 'purple')}
-        ${waiting ? srcChip('配信前') : ''}
-        ${pending ? `<label class="cal-move">日付<select aria-label="この案を別の日へ移す" onchange="calMove('${esc(first.id)}',this.value,this)">${moveOpts}</select></label>` : ''}
+    return `<div class="cal-appr">
+      <div class="cal-appr-main">
+        <span class="cal-item-title">${esc(head)}</span>
+        <span class="cal-item-meta">${esc(_PROP_KIND_LABEL[first.kind] || first.kind)} ${g.items.length}件 · ${waiting ? `${CAL.releaseHour ?? 9}:00 にDiscordへ` : 'Discordで回答待ち'}</span>
       </div>
-      ${g.items.map(_calApproval).join('')}
+      ${waiting ? `<select class="cal-appr-move" aria-label="別の日へ移す" onchange="calMove('${esc(first.id)}',this.value,this)">${moveOpts}</select>` : ''}
     </div>`;
   }).join('');
-}
-
-function _calApproval(a) {
-  if (a.status !== 'pending') {
-    const label = a.status === 'expired' ? '期限切れ' : (a.decisionLabel ? `決定: ${a.decisionLabel}` : '決定済み');
-    return `<div class="cal-item done"><span class="cal-item-title">${esc(a.title)}</span><span class="cal-item-meta">${esc(label)}</span></div>`;
-  }
-  const real = (a.choices || []).filter((c) => c.value !== '__other__' && c.value !== '__cancel__');
-  return `<div class="cal-item">
-    ${a.imageUrl ? `<img class="cal-item-img" src="${esc(a.imageUrl)}" alt="" loading="lazy">` : ''}
-    <div class="cal-item-main">
-      <div class="cal-item-title">${esc(a.title)}</div>
-      ${a.description ? `<div class="cal-item-desc">${esc(a.description)}</div>` : ''}
-      <div class="cal-item-actions">
-        ${real.map((c) => `<button class="act-btn resume" title="${esc(c.description || '')}"
-          onclick="calDecide('${esc(a.id)}','${esc(c.value)}',this)">${esc(c.label)}</button>`).join('')}
-        <button class="act-btn cancel" onclick="calDecide('${esc(a.id)}','__cancel__',this)">見送る</button>
-      </div>
-    </div>
-  </div>`;
+  const decided = done.filter((a) => a.status === 'decided').length;
+  const expired = done.filter((a) => a.status === 'expired').length;
+  const tally = done.length
+    ? `<div class="cal-appr-tally">済み: ${[decided ? `回答 ${decided}件` : '', expired ? `期限切れ ${expired}件` : ''].filter(Boolean).join(' · ')}
+        <span title="3日間回答がなかったカードは自動で閉じます">（期限切れ＝3日間回答がなく自動で閉じたもの）</span></div>`
+    : '';
+  return rows + tally;
 }
 
 const _CAL_JOB_STATUS = {
@@ -1754,17 +1742,6 @@ function _calBundle(b) {
   </div>`;
 }
 
-async function calDecide(id, value, btn) {
-  btn?.setAttribute('disabled', 'true');
-  const res = await fetch(apiUrl(`/api/proposals/${id}/decide`), {
-    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value }),
-  }).catch(() => null);
-  const data = await res?.json().catch(() => null);
-  if (!res?.ok) { showToast(data?.error || '反映に失敗しました', 'error'); btn?.removeAttribute('disabled'); return; }
-  showToast(data.message || '反映しました', 'success');
-  _loadCalendar();
-}
 
 async function calMove(id, slotDate, sel) {
   sel.disabled = true;
