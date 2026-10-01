@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '67';
+const DASH_BUILD = '68';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1335,25 +1335,47 @@ function decideProposalFreeText(id) {
 // #approvals at 9:00), so a busy cycle arrives as a handful per day instead of a wall. This page
 // shows that schedule — what lands on which day, what was written, and the merged note import
 // files — and lets a card be answered early or moved to a lighter day.
-let _calFrom = null;   // 'YYYY-MM-DD' (JST) of the first day shown; null = today
+let _calFrom = null;   // week view: 'YYYY-MM-DD' (JST) of the first day shown; null = today
+let _calMode = 'week'; // 'week' | 'month'
+let _calMonth = null;  // month view: 'YYYY-MM'; null = this month
+let _calSel = null;    // month view: the day opened under the grid
 let CAL = null;
+let CAL_JOBS = null;   // /api/job-schedules
+let CAL_CHANNELS = null;
 
 const _CAL_WD = ['日','月','火','水','木','金','土'];
 const _calTodayKey = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const _calAdd = (key, n) => new Date(Date.parse(key + 'T00:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+const _calWd = (key) => new Date(key + 'T00:00:00Z').getUTCDay();
 const _calLabel = (key) => {
   const d = new Date(key + 'T00:00:00Z');
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${_CAL_WD[d.getUTCDay()]}）`;
 };
 const _calTime = (iso) => iso ? new Date(iso).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '';
+const _calMonthKey = () => _calMonth || _calTodayKey().slice(0, 7);
+const _calShiftMonth = (ym, n) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return d.toISOString().slice(0, 7);
+};
 
 async function _loadCalendar() {
   const box = document.getElementById('cal-body');
   if (!box) return;
-  const from = _calFrom || _calTodayKey();
+  _renderCalNav();
+  let from, days;
+  if (_calMode === 'month') {
+    // Monday-first grid of six weeks, so every month fits the same 7×6 shape.
+    const first = _calMonthKey() + '-01';
+    from = _calAdd(first, -((_calWd(first) + 6) % 7));
+    days = 42;
+  } else {
+    from = _calFrom || _calTodayKey();
+    days = 7;
+  }
   if (!CAL) box.innerHTML = '<div class="cal-empty">読み込み中…</div>';
   try {
-    const res = await fetch(apiUrl(`/api/calendar?from=${from}&days=7`), { headers: _authHeaders() });
+    const res = await fetch(apiUrl(`/api/calendar?from=${from}&days=${days}`), { headers: _authHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     CAL = await res.json();
   } catch (err) {
@@ -1363,8 +1385,40 @@ async function _loadCalendar() {
   _renderCalendar();
 }
 
-function calShift(weeks) {
-  _calFrom = weeks === 0 ? null : _calAdd(_calFrom || _calTodayKey(), weeks * 7);
+function _renderCalNav() {
+  const nav = document.getElementById('cal-nav');
+  if (!nav) return;
+  const week = _calMode === 'week';
+  nav.innerHTML = `
+    <div class="cal-seg" role="tablist">
+      <button class="cal-seg-btn${week ? ' active' : ''}" role="tab" aria-selected="${week}" onclick="calSetMode('week')">週</button>
+      <button class="cal-seg-btn${week ? '' : ' active'}" role="tab" aria-selected="${!week}" onclick="calSetMode('month')">月</button>
+    </div>
+    <button class="act-btn" onclick="calShift(-1)" aria-label="${week ? '前の週' : '前の月'}">‹</button>
+    <button class="act-btn" onclick="calShift(0)">${week ? '今週' : '今月'}</button>
+    <button class="act-btn" onclick="calShift(1)" aria-label="${week ? '次の週' : '次の月'}">›</button>
+    <span class="cal-range" id="cal-range"></span>
+    <div class="cal-tools">
+      <button class="act-btn" onclick="calRebalance(this)" title="まだDiscordに届いていない承認カードを1週間に均等に並べ直します">均等に並べ直す</button>
+      <button class="act-btn${document.getElementById('cal-jobs')?.hidden === false ? ' active' : ''}" onclick="calToggleJobs()">定期ジョブ</button>
+    </div>`;
+}
+
+function calSetMode(mode) {
+  if (_calMode === mode) return;
+  _calMode = mode;
+  _calSel = null;
+  CAL = null;
+  _loadCalendar();
+}
+
+function calShift(n) {
+  if (_calMode === 'month') {
+    _calMonth = n === 0 ? null : _calShiftMonth(_calMonthKey(), n);
+    _calSel = null;
+  } else {
+    _calFrom = n === 0 ? null : _calAdd(_calFrom || _calTodayKey(), n * 7);
+  }
   _loadCalendar();
 }
 
@@ -1372,8 +1426,14 @@ function _renderCalendar() {
   const box = document.getElementById('cal-body');
   if (!box || !CAL) return;
   const today = _calTodayKey();
-  const perDay = CAL.perDay || 8;
   const range = document.getElementById('cal-range');
+  if (_calMode === 'month') {
+    const [y, m] = _calMonthKey().split('-');
+    if (range) range.textContent = `${y}年${Number(m)}月`;
+    box.innerHTML = _calMonthGrid(today);
+    return;
+  }
+  const perDay = CAL.perDay || 8;
   if (range) range.textContent = `${_calLabel(CAL.days[0].date)} 〜 ${_calLabel(CAL.days[CAL.days.length - 1].date)}`;
 
   // The week at a glance: one column per day, filled by how much of its share is used.
@@ -1382,7 +1442,7 @@ function _renderCalendar() {
     const full = d.pendingCount >= perDay;
     return `<a class="cal-strip-day${d.date === today ? ' today' : ''}${full ? ' full' : ''}" href="#cal-${d.date}"
         onclick="event.preventDefault();document.getElementById('cal-${d.date}')?.scrollIntoView({behavior:'smooth',block:'start'})">
-      <span class="cal-strip-wd">${_CAL_WD[new Date(d.date + 'T00:00:00Z').getUTCDay()]}</span>
+      <span class="cal-strip-wd">${_CAL_WD[_calWd(d.date)]}</span>
       <span class="cal-strip-bar"><i style="height:${pct}%"></i></span>
       <span class="cal-strip-n">${d.pendingCount}</span>
     </a>`;
@@ -1392,9 +1452,51 @@ function _renderCalendar() {
   box.innerHTML = strip + CAL.days.map((d) => _calDay(d, today)).join('');
 }
 
+// Month: a 7×6 grid of counts; tapping a day opens its full list underneath.
+function _calMonthGrid(today) {
+  const ym = _calMonthKey();
+  const head = ['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('');
+  const cells = CAL.days.map((d) => {
+    const out = d.date.slice(0, 7) !== ym;
+    const jobs = d.jobs?.length || 0;
+    const sel = d.date === _calSel;
+    return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${sel ? ' sel' : ''}"
+        onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)}">
+      <span class="cal-m-num">${Number(d.date.slice(8))}</span>
+      <span class="cal-m-marks">
+        ${d.pendingCount ? `<i class="cal-m-pill appr">${d.pendingCount}</i>` : ''}
+        ${d.articles.length ? `<i class="cal-m-dot art" title="記事"></i>` : ''}
+        ${jobs ? `<i class="cal-m-dot job" title="定期ジョブ"></i>` : ''}
+        ${d.bundles.length ? `<i class="cal-m-dot bun" title="まとめ"></i>` : ''}
+      </span>
+    </button>`;
+  }).join('');
+  const legend = `<div class="cal-legend cal-m-legend">
+    <span><i class="cal-m-pill appr">n</i> 承認待ち</span><span><i class="cal-m-dot art"></i> 記事</span>
+    <span><i class="cal-m-dot job"></i> 定期ジョブ</span><span><i class="cal-m-dot bun"></i> まとめ</span></div>`;
+  const selDay = CAL.days.find((d) => d.date === _calSel);
+  return `<div class="cal-month">${head}${cells}</div>${legend}${selDay ? _calDay(selDay, today) : '<div class="cal-empty">日付をタップすると、その日の予定を表示します</div>'}`;
+}
+
+function calSelectDay(key) {
+  _calSel = _calSel === key ? null : key;
+  _renderCalendar();
+  if (_calSel) document.getElementById('cal-' + _calSel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function calRebalance(btn) {
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl('/api/proposals/rebalance'), { method: 'POST', headers: _authHeaders() }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  btn?.removeAttribute('disabled');
+  if (!res?.ok) { showToast(data?.error || '並べ直せませんでした', 'error'); return; }
+  showToast(data.moved ? `${data.moved}件を並べ直しました` : '並べ直す必要はありませんでした', 'success');
+  _loadCalendar();
+}
+
 function _calDay(d, today) {
   const past = d.date < today;
-  const empty = !d.approvals.length && !d.articles.length && !d.bundles.length;
+  const empty = !d.approvals.length && !d.articles.length && !d.bundles.length && !d.jobs?.length;
   return `<section class="cal-day${d.date === today ? ' today' : ''}${past ? ' past' : ''}" id="cal-${d.date}">
     <div class="cal-day-hd">
       <span class="cal-day-date">${_calLabel(d.date)}${d.date === today ? ' <b>今日</b>' : ''}</span>
@@ -1402,6 +1504,7 @@ function _calDay(d, today) {
     </div>
     ${empty ? '<div class="cal-empty">予定はありません</div>' : ''}
     ${d.approvals.length ? `<div class="cal-group-label">承認</div>${_calApprovalGroups(d.approvals, d.date)}` : ''}
+    ${d.jobs?.length ? `<div class="cal-group-label">定期ジョブ</div>${d.jobs.map(_calJob).join('')}` : ''}
     ${d.bundles.length ? `<div class="cal-group-label">まとめインポート</div>${d.bundles.map(_calBundle).join('')}` : ''}
     ${d.articles.length ? `<div class="cal-group-label">生成された記事</div>${d.articles.map(_calArticle).join('')}` : ''}
   </section>`;
@@ -1453,6 +1556,152 @@ function _calApproval(a) {
       </div>
     </div>
   </div>`;
+}
+
+const _CAL_JOB_STATUS = {
+  scheduled: '予定', external: '外部で実行', pending: '待機中', running: '実行中',
+  completed: '完了', failed: '失敗', cancelled: '中止',
+};
+function _calJob(j) {
+  const tone = j.status === 'failed' ? 'red' : (j.status === 'completed' ? 'green' : '');
+  return `<button class="cal-item cal-job" onclick="calEditJob('${esc(j.type)}')">
+    <span class="cal-job-time">${j.at ? _calTime(j.at) : '—'}</span>
+    <span class="cal-item-title">${esc(j.label)}</span>
+    ${srcChip(_CAL_JOB_STATUS[j.status] || j.status, tone)}
+  </button>`;
+}
+
+// ── 定期ジョブ: when each recurring job runs and where it posts ──────────────
+const _CAL_FREQ = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
+const _calHours = (sel) => Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === sel ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('');
+
+function _calScheduleText(s) {
+  if (s.external) return '毎日（外部スケジューラ）';
+  if (s.enabled === false) return '停止中';
+  const at = s.hour != null ? ` ${String(s.hour).padStart(2, '0')}:00` : '';
+  if (s.freq === 'weekly') return `毎週${_CAL_WD[s.weekday]}曜${at}`;
+  if (s.freq === 'monthly') return `毎月${s.dayOfMonth}日${at}`;
+  return `毎日${at}`;
+}
+
+async function calToggleJobs(force) {
+  const panel = document.getElementById('cal-jobs');
+  if (!panel) return;
+  panel.hidden = force === undefined ? !panel.hidden : !force;
+  _renderCalNav();
+  if (panel.hidden) return;
+  panel.innerHTML = '<div class="cal-empty">読み込み中…</div>';
+  try {
+    const [jobs, ch] = await Promise.all([
+      fetch(apiUrl('/api/job-schedules'), { headers: _authHeaders() }).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+      CAL_CHANNELS ? Promise.resolve({ channels: CAL_CHANNELS })
+        : fetch(apiUrl('/api/channels'), { headers: _authHeaders() }).then((r) => r.json()).catch(() => ({ channels: {} })),
+    ]);
+    CAL_JOBS = jobs.jobs || [];
+    CAL_CHANNELS = ch.channels || {};
+  } catch (err) {
+    panel.innerHTML = `<div class="cal-empty">定期ジョブを読み込めませんでした（${esc(err.message)}）</div>`;
+    return;
+  }
+  _renderJobsPanel();
+}
+
+function calEditJob(type) {
+  const panel = document.getElementById('cal-jobs');
+  const open = () => {
+    const el = document.getElementById('cal-job-' + type);
+    el?.setAttribute('open', '');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  if (panel?.hidden || !CAL_JOBS) calToggleJobs(true).then(open);
+  else open();
+}
+
+function _renderJobsPanel() {
+  const panel = document.getElementById('cal-jobs');
+  if (!panel || !CAL_JOBS) return;
+  panel.innerHTML = `<div class="cal-jobs-hd">定期ジョブ <span>いつ動き、どこへ投稿するか</span></div>
+    ${CAL_JOBS.map(_calJobEditor).join('')}`;
+}
+
+function _calJobEditor(j) {
+  const s = j.schedule;
+  const dest = j.destination || {};
+  const keys = Object.keys(CAL_CHANNELS || {}).sort();
+  const destVal = dest.channelId ? '__id__' : (dest.channelKey || '');
+  const destOpts = [`<option value=""${destVal === '' ? ' selected' : ''}>既定（${esc(j.defaultChannelKey || '—')}）</option>`]
+    .concat(keys.map((k) => `<option value="${esc(k)}"${destVal === k ? ' selected' : ''}>#${esc(k)}${CAL_CHANNELS[k]?.asThread ? '（スレッド）' : ''}</option>`))
+    .concat([`<option value="__id__"${destVal === '__id__' ? ' selected' : ''}>チャンネル／スレッドIDを指定…</option>`]).join('');
+  const freq = s.external ? 'daily' : s.freq;
+  return `<details class="cal-job-card" id="cal-job-${esc(j.type)}">
+    <summary>
+      <span class="cal-item-title">${esc(j.label)}</span>
+      <span class="cal-item-meta">${esc(_calScheduleText(s))}${j.nextRunAt ? ` · 次回 ${esc(_calLabel(new Date(Date.parse(j.nextRunAt) + 9 * 3600e3).toISOString().slice(0, 10)))} ${esc(_calTime(j.nextRunAt))}` : ''}</span>
+      ${j.managed ? srcChip('カスタム', 'purple') : srcChip('既定')}
+    </summary>
+    <form class="cal-job-form" onsubmit="event.preventDefault();calSaveJob('${esc(j.type)}',this)">
+      ${j.note ? `<p class="cal-job-note">${esc(j.note)}</p>` : ''}
+      <label class="cal-field cal-field-row"><input type="checkbox" name="enabled"${s.enabled !== false ? ' checked' : ''}> 有効</label>
+      <label class="cal-field">頻度
+        <select name="freq" onchange="this.form.dataset.freq=this.value">
+          ${Object.entries(_CAL_FREQ).map(([v, l]) => `<option value="${v}"${v === freq ? ' selected' : ''}>${l}</option>`).join('')}
+        </select></label>
+      <label class="cal-field cal-only-weekly">曜日
+        <select name="weekday">${_CAL_WD.map((w, i) => `<option value="${i}"${i === (s.weekday ?? 1) ? ' selected' : ''}>${w}曜</option>`).join('')}</select></label>
+      <label class="cal-field cal-only-monthly">日
+        <select name="dayOfMonth">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}"${i + 1 === (s.dayOfMonth ?? 1) ? ' selected' : ''}>${i + 1}日</option>`).join('')}</select></label>
+      <label class="cal-field">時刻（日本時間）
+        <select name="hour">${_calHours(s.hour ?? 9)}</select></label>
+      ${j.posts ? `<label class="cal-field">投稿先
+        <select name="dest" onchange="this.form.dataset.dest=this.value">${destOpts}</select></label>
+      <label class="cal-field cal-only-id">チャンネル／スレッドID
+        <input name="channelId" inputmode="numeric" value="${esc(dest.channelId || '')}" placeholder="例: 1234567890123456789"></label>`
+      : '<p class="cal-job-note">このジョブの出力は承認カードなので、#approvals に届きます（カレンダーで日を振り分けます）。</p>'}
+      <div class="cal-item-actions">
+        <button type="submit" class="act-btn resume">保存</button>
+        ${j.managed ? `<button type="button" class="act-btn cancel cal-reset" onclick="calResetJob('${esc(j.type)}',this)">既定に戻す</button>` : ''}
+      </div>
+    </form>
+  </details>`.replace('<form class="cal-job-form"', `<form class="cal-job-form" data-freq="${freq}" data-dest="${destVal}"`);
+}
+
+async function calSaveJob(type, form) {
+  const f = new FormData(form);
+  const destSel = f.get('dest') ?? '';
+  const body = {
+    enabled: form.enabled.checked,
+    freq: f.get('freq'),
+    hour: Number(f.get('hour')),
+    weekday: Number(f.get('weekday')),
+    dayOfMonth: Number(f.get('dayOfMonth')),
+    destination: destSel === '__id__' ? { channelId: String(f.get('channelId') || '').trim() }
+      : destSel ? { channelKey: destSel } : {},
+  };
+  const btn = form.querySelector('button[type=submit]');
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl(`/api/job-schedules/${encodeURIComponent(type)}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  btn?.removeAttribute('disabled');
+  if (!res?.ok) { showToast(data?.error || '保存できませんでした', 'error'); return; }
+  showToast('保存しました。次の回から反映されます', 'success');
+  CAL_JOBS = CAL_JOBS.map((j) => (j.type === type ? data.job : j));
+  _renderJobsPanel();
+  document.getElementById('cal-job-' + type)?.setAttribute('open', '');
+  _loadCalendar();
+}
+
+async function calResetJob(type, btn) {
+  if (!window.confirm('このジョブを既定の動きに戻しますか？')) return;
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl(`/api/job-schedules/${encodeURIComponent(type)}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (!res?.ok) { btn?.removeAttribute('disabled'); showToast(data?.error || '戻せませんでした', 'error'); return; }
+  showToast('既定に戻しました', 'success');
+  CAL_JOBS = CAL_JOBS.map((j) => (j.type === type ? data.job : j));
+  _renderJobsPanel();
+  _loadCalendar();
 }
 
 function _calArticle(a) {

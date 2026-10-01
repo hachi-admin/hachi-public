@@ -2844,7 +2844,52 @@ body:has(.mob-more-sheet.open) .page-area{
 .cal-bundle-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .cal-bundle-list { margin: 6px 0 0 18px; padding: 0; font-size: 13px; line-height: 1.7; }
 @media (max-width: 560px) {
-  .cal-item:not(.done) { flex-direction: column; }
+  .cal-item:not(.done):not(.cal-job) { flex-direction: column; }
   .cal-item-img { width: 100%; height: auto; aspect-ratio: 16 / 9; }
   .cal-range { width: 100%; margin-left: 0; }
 }
+
+/* Week/month switch, tools, month grid, recurring jobs */
+.cal-seg { display: inline-flex; padding: 3px; border-radius: 12px; box-shadow: var(--sh-in); }
+.cal-seg-btn { min-height: 36px; min-width: 44px; border: 0; background: none; border-radius: 9px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.cal-seg-btn.active { background: var(--bg); box-shadow: var(--sh-sm); color: var(--accent); font-weight: 700; }
+.cal-tools { display: flex; gap: 8px; width: 100%; }
+.cal-tools .act-btn { flex: 1; min-height: 40px; font-size: 13px; }
+.cal-tools .act-btn.active { color: var(--accent); box-shadow: var(--sh-in); }
+.cal-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+.cal-m-wd { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
+.cal-m-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 54px; padding: 6px 0 4px;
+  border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--sh-sm); color: var(--text); cursor: pointer; font: inherit; }
+.cal-m-cell.out { opacity: .4; }
+.cal-m-cell.today { box-shadow: var(--sh-sm), inset 0 0 0 2px var(--accent); }
+.cal-m-cell.sel { box-shadow: var(--sh-in); }
+.cal-m-num { font-size: 14px; font-weight: 600; }
+.cal-m-marks { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px; min-height: 16px; }
+.cal-m-pill { font-style: normal; font-size: 11px; font-weight: 700; line-height: 16px; min-width: 16px; padding: 0 4px; border-radius: 8px; color: #fff; background: var(--accent); }
+.cal-m-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.cal-m-dot.art { background: var(--success); }
+.cal-m-dot.job { background: var(--info); }
+.cal-m-dot.bun { background: var(--warn); }
+.cal-m-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.cal-m-legend span { display: inline-flex; align-items: center; gap: 4px; }
+button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.cal-item.cal-job { flex-direction: row; align-items: center; text-align: left; min-height: 44px; }
+.cal-job .cal-item-title { flex: 1; }
+.cal-job-time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; }
+#cal-jobs { background: var(--surface); border-radius: 16px; box-shadow: var(--sh-sm); padding: 12px 14px; margin-bottom: 12px; }
+.cal-jobs-hd { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.cal-jobs-hd span { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.cal-job-card { border-top: 1px solid color-mix(in srgb, var(--m) 22%, transparent); padding: 10px 0; scroll-margin-top: 72px; }
+.cal-job-card summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; cursor: pointer; list-style: none; min-height: 40px; }
+.cal-job-card summary::-webkit-details-marker { display: none; }
+.cal-job-card summary .cal-item-meta { width: 100%; order: 3; }
+.cal-job-form { display: grid; gap: 10px; margin-top: 10px; }
+.cal-field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.cal-field-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.cal-field-row input { width: 20px; height: 20px; }
+.cal-field select, .cal-field input:not([type=checkbox]) { font-size: 16px; min-height: 40px; border-radius: 8px; padding: 0 8px; }
+.cal-job-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; }
+.cal-job-form:not([data-freq=weekly]) .cal-only-weekly,
+.cal-job-form:not([data-freq=monthly]) .cal-only-monthly,
+.cal-job-form:not([data-dest=__id__]) .cal-only-id { display: none; }
+.cal-reset { margin-left: auto; }
