@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '70';
+const DASH_BUILD = '71';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1895,7 +1895,11 @@ function _catTileMapBar(c, v) {
   /* A proposal has no style or picture yet, which reads as broken unless the tile says what
      approving does: the server picks both and draws the first sample (the approve route). */
   if (c.status === 'suggested') {
-    return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、サムネタイトルのスタイルと絵のレシピを自動で選び、見本を1枚作ります（pro課金・30秒ほど）。あとで「見た目」から変えられます。</div>`;
+    // Suggestions expire two days after they are made (article.suggestedCategoryTtlDays).
+    const t = c.createdAt;
+    const ms = typeof t === 'string' ? Date.parse(t) : ((t?._seconds ?? t?.seconds ?? NaN) * 1000);
+    const left = Number.isFinite(ms) ? Math.max(0, Math.round((ms + 2 * 86400e3 - Date.now()) / 3600e3)) : null;
+    return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、サムネタイトルのスタイルと絵のレシピを自動で選び、見本を作ります（pro課金・30秒ほど）。${left != null ? `<b>未承認のままだと、あと${left}時間で自動的に削除されます。</b>` : '未承認のまま2日たつと自動的に削除されます。'}</div>`;
   }
   if (c.status !== 'active') return '';
   return `<div class="acard-map" onclick="event.stopPropagation()">
@@ -1990,7 +1994,8 @@ function _categoryTile(c) {
           a single stored ground for free the way the four-panel grid did. Each slot costs a
           pro-tier generation and is made on request (regenCategorySamplePattern), drawn in the
           category's own pinned サムネタイトル so what is judged here is the real thing. */ ''}
-    ${_catPatternGrid(c, v)}
+    ${/* No picture before approval: a suggestion is a question about the topic, and its samples
+         are made when it is approved. */ c.status === 'suggested' ? '' : _catPatternGrid(c, v)}
     ${_catTileMapBar(c, v)}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
