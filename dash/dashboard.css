@@ -2893,3 +2893,10 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cal-job-form:not([data-freq=monthly]) .cal-only-monthly,
 .cal-job-form:not([data-dest=__id__]) .cal-only-id { display: none; }
 .cal-reset { margin-left: auto; }
+
+.cal-sys summary { cursor: pointer; list-style: none; min-height: 40px; display: flex; align-items: center; }
+.cal-sys summary::-webkit-details-marker { display: none; }
+.cal-sys-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--m) 22%, transparent); cursor: pointer; }
+.cal-sys-row .cal-item-meta { grid-column: 1; }
+.cal-sys-row input { grid-column: 2; grid-row: 1 / span 2; width: 22px; height: 22px; }

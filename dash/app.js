@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '68';
+const DASH_BUILD = '69';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1578,6 +1578,7 @@ const _calHours = (sel) => Array.from({ length: 24 }, (_, h) => `<option value="
 function _calScheduleText(s) {
   if (s.external) return '毎日（外部スケジューラ）';
   if (s.enabled === false) return '停止中';
+  if (s.freq === 'hourly') return '毎時';
   const at = s.hour != null ? ` ${String(s.hour).padStart(2, '0')}:00` : '';
   if (s.freq === 'weekly') return `毎週${_CAL_WD[s.weekday]}曜${at}`;
   if (s.freq === 'monthly') return `毎月${s.dayOfMonth}日${at}`;
@@ -1620,8 +1621,40 @@ function calEditJob(type) {
 function _renderJobsPanel() {
   const panel = document.getElementById('cal-jobs');
   if (!panel || !CAL_JOBS) return;
+  const groups = [['news', 'ニュース'], ['research', '調査・偵察'], ['review', 'レビュー・監査']];
+  const sys = CAL_JOBS.filter((j) => j.system);
   panel.innerHTML = `<div class="cal-jobs-hd">定期ジョブ <span>いつ動き、どこへ投稿するか</span></div>
-    ${CAL_JOBS.map(_calJobEditor).join('')}`;
+    ${groups.map(([g, label]) => {
+      const list = CAL_JOBS.filter((j) => j.group === g && !j.system);
+      return list.length ? `<div class="cal-group-label">${label}</div>${list.map(_calJobEditor).join('')}` : '';
+    }).join('')}
+    ${sys.length ? `<details class="cal-sys"><summary class="cal-group-label">システム（オン／オフのみ）</summary>
+      ${sys.map(_calSystemJob).join('')}</details>` : ''}`;
+}
+
+// Housekeeping jobs: their cadence is what they are, so the only control is the switch.
+function _calSystemJob(j) {
+  const on = j.schedule.enabled !== false;
+  return `<label class="cal-sys-row">
+    <span class="cal-item-title">${esc(j.label)}</span>
+    <span class="cal-item-meta">${esc(_calScheduleText(j.schedule))}</span>
+    <input type="checkbox" role="switch"${on ? ' checked' : ''} onchange="calToggleSystemJob('${esc(j.type)}',this)" aria-label="${esc(j.label)}">
+  </label>`;
+}
+
+async function calToggleSystemJob(type, input) {
+  input.disabled = true;
+  const enabled = input.checked;
+  // Switching a job back on returns it to the built-in behaviour, which is what "on" means here.
+  const res = await fetch(apiUrl(`/api/job-schedules/${encodeURIComponent(type)}`), enabled
+    ? { method: 'DELETE', headers: _authHeaders() }
+    : { method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) },
+  ).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  input.disabled = false;
+  if (!res?.ok) { input.checked = !enabled; showToast(data?.error || '切り替えられませんでした', 'error'); return; }
+  showToast(enabled ? 'オンにしました' : 'オフにしました', 'success');
+  CAL_JOBS = CAL_JOBS.map((j) => (j.type === type ? data.job : j));
 }
 
 function _calJobEditor(j) {
