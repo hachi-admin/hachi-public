@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=66">
-<link rel="stylesheet" href="dashboard.css?v=66">
+<link rel="stylesheet" href="../shared/neu.css?v=67">
+<link rel="stylesheet" href="dashboard.css?v=67">
 </head>
 <body>
 
@@ -118,6 +118,22 @@
   </section>
 
   <!-- ── TASKS ─────────────────────────────────── -->
+  <section class="page" id="page-calendar" data-dest="today">
+    <div class="page-hd">
+      <div>
+        <div class="page-title">カレンダー</div>
+        <div class="page-sub">承認・記事・まとめファイルを1週間で</div>
+      </div>
+    </div>
+    <div class="cal-nav">
+      <button class="act-btn" onclick="calShift(-1)" aria-label="前の週">‹ 前の週</button>
+      <button class="act-btn" onclick="calShift(0)">今週</button>
+      <button class="act-btn" onclick="calShift(1)" aria-label="次の週">次の週 ›</button>
+      <span class="cal-range" id="cal-range"></span>
+    </div>
+    <div id="cal-body"></div>
+  </section>
+
   <section class="page active" id="page-tasks" data-dest="today">
     <div class="page-hd">
       <div>
@@ -1069,8 +1085,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=66"></script>
-<script src="x-affiliate.js?v=66"></script>
-<script src="app.js?v=66"></script>
+<script src="../shared/ui.js?v=67"></script>
+<script src="x-affiliate.js?v=67"></script>
+<script src="app.js?v=67"></script>
 </body>
 </html>

@@ -2797,3 +2797,54 @@ body:has(.mob-more-sheet.open) .page-area{
 .hp-glow-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--m)}
 .hp-glow-row > span{flex:0 0 42px}
 .hp-glow-row input[type=range]{flex:1;min-width:0;block-size:32px;accent-color:var(--acc)}
+
+/* The palette's --border is transparent (neumorphic), so dividers here mix from --m instead.
+   ── カレンダー ───────────────────────────────────────────────────────────────
+   Built for a phone first: one column of days, nothing narrower than a thumb, and no text under
+   12px — this is the page that is read on the move. */
+.cal-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.cal-nav .act-btn { min-height: 40px; font-size: 13px; }
+.cal-range { font-size: 13px; color: var(--muted); margin-left: auto; }
+.cal-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+.cal-strip-day { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
+  border-radius: 12px; background: var(--surface); box-shadow: var(--sh-sm); color: var(--text); text-decoration: none; }
+.cal-strip-day.today { outline: 2px solid var(--accent); }
+.cal-strip-wd { font-size: 12px; color: var(--muted); }
+.cal-strip-bar { position: relative; width: 10px; height: 44px; border-radius: 5px; background: color-mix(in srgb, var(--m) 25%, transparent); overflow: hidden; }
+.cal-strip-bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+.cal-strip-day.full .cal-strip-bar i { background: var(--warn); }
+.cal-strip-n { font-size: 14px; font-weight: 700; }
+.cal-legend { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
+.cal-day { background: var(--surface); border-radius: 16px; box-shadow: var(--sh-sm); padding: 12px 14px; margin-bottom: 12px; scroll-margin-top: 72px; }
+.cal-day.past { opacity: .75; }
+.cal-day.today { box-shadow: var(--sh-sm), inset 0 0 0 2px var(--accent); }
+.cal-day-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.cal-day-date { font-size: 15px; font-weight: 700; }
+.cal-day-date b { font-size: 12px; color: var(--accent); margin-left: 4px; }
+.cal-day-count { font-size: 12px; color: var(--muted); }
+.cal-group-label { font-size: 12px; font-weight: 700; color: var(--muted); margin: 10px 0 6px; letter-spacing: .04em; }
+.cal-empty { font-size: 13px; color: var(--muted); padding: 6px 0; }
+.cal-slate { border: 1px solid color-mix(in srgb, var(--m) 22%, transparent); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+.cal-slate-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cal-slate-title { font-size: 14px; font-weight: 700; margin-right: 2px; }
+.cal-move { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.cal-move select { font-size: 16px; min-height: 36px; border-radius: 8px; }
+.cal-item { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--m) 22%, transparent); }
+.cal-slate .cal-item:first-of-type { border-top: 0; }
+.cal-item.done { flex-direction: column; gap: 2px; }
+.cal-item-img { width: 96px; height: 54px; object-fit: cover; border-radius: 8px; flex: none; }
+.cal-item-main { min-width: 0; flex: 1; }
+.cal-item-title { font-size: 14px; line-height: 1.5; word-break: break-word; }
+.cal-item-title a { color: var(--text); }
+.cal-item-desc { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 2px; }
+.cal-item-meta { font-size: 12px; color: var(--muted); }
+.cal-item-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cal-item-actions .act-btn, .cal-bundle .act-btn { min-height: 40px; font-size: 13px; }
+.cal-bundle { border: 1px solid color-mix(in srgb, var(--m) 22%, transparent); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+.cal-bundle-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-bundle-list { margin: 6px 0 0 18px; padding: 0; font-size: 13px; line-height: 1.7; }
+@media (max-width: 560px) {
+  .cal-item:not(.done) { flex-direction: column; }
+  .cal-item-img { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .cal-range { width: 100%; margin-left: 0; }
+}

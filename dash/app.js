@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '66';
+const DASH_BUILD = '67';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -390,7 +390,7 @@ document.addEventListener('keydown', (e) => {
    same table, so the two can no longer drift apart (概要 / エージェント was the same page under
    two names). */
 const DESTINATIONS = {
-  today:     { label: '今日', pages: [ ['tasks','タスク'], ['inbox','受信箱'] ] },
+  today:     { label: '今日', pages: [ ['tasks','タスク'], ['calendar','カレンダー'], ['inbox','受信箱'] ] },
   articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','サムネタイトル'], ['image-prompts','絵のレシピ'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
@@ -471,6 +471,7 @@ function _renderDestSub(dest, pageId) {
 function _initPage(pageId) {
   if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
+  if (pageId === 'calendar') _loadCalendar();
   if (pageId === 'wiki') _initWikiIfNeeded();
   if (pageId === 'articles') _loadTopics();
   if (pageId === 'hero-presets') _loadHeroPresets();
@@ -1190,7 +1191,9 @@ async function _loadTopics() {
     CAT_META = meta;
     CATEGORIES = Array.isArray(cats.categories) ? cats.categories : [];
     CAT_ARTICLES = Array.isArray(arts.articles) ? arts.articles : [];
-    PROPOSALS = Array.isArray(props.proposals) ? props.proposals : [];
+    // Cards waiting for their day on the approval calendar are not asked yet — they live on
+    // カレンダー until then, so this list stays what Discord shows.
+    PROPOSALS = (Array.isArray(props.proposals) ? props.proposals : []).filter(p => p.released !== false);
   } catch { CATEGORIES = []; CAT_ARTICLES = []; PROPOSALS = []; }
   if (box) box.dataset.loaded = '1';
   _renderTopics();
@@ -1325,6 +1328,190 @@ function decideProposalFreeText(id) {
     showToast(data.message || '記録しました', data.decided ? 'success' : 'info');
     _loadTopics();
   })();
+}
+
+// ─── カレンダー: the week as it reaches the operator ──────────────────────────
+// Article-idea cards are spread over the coming week by the service (a day's cards reach
+// #approvals at 9:00), so a busy cycle arrives as a handful per day instead of a wall. This page
+// shows that schedule — what lands on which day, what was written, and the merged note import
+// files — and lets a card be answered early or moved to a lighter day.
+let _calFrom = null;   // 'YYYY-MM-DD' (JST) of the first day shown; null = today
+let CAL = null;
+
+const _CAL_WD = ['日','月','火','水','木','金','土'];
+const _calTodayKey = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const _calAdd = (key, n) => new Date(Date.parse(key + 'T00:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+const _calLabel = (key) => {
+  const d = new Date(key + 'T00:00:00Z');
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${_CAL_WD[d.getUTCDay()]}）`;
+};
+const _calTime = (iso) => iso ? new Date(iso).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '';
+
+async function _loadCalendar() {
+  const box = document.getElementById('cal-body');
+  if (!box) return;
+  const from = _calFrom || _calTodayKey();
+  if (!CAL) box.innerHTML = '<div class="cal-empty">読み込み中…</div>';
+  try {
+    const res = await fetch(apiUrl(`/api/calendar?from=${from}&days=7`), { headers: _authHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    CAL = await res.json();
+  } catch (err) {
+    box.innerHTML = `<div class="cal-empty">カレンダーを読み込めませんでした（${esc(err.message)}）</div>`;
+    return;
+  }
+  _renderCalendar();
+}
+
+function calShift(weeks) {
+  _calFrom = weeks === 0 ? null : _calAdd(_calFrom || _calTodayKey(), weeks * 7);
+  _loadCalendar();
+}
+
+function _renderCalendar() {
+  const box = document.getElementById('cal-body');
+  if (!box || !CAL) return;
+  const today = _calTodayKey();
+  const perDay = CAL.perDay || 8;
+  const range = document.getElementById('cal-range');
+  if (range) range.textContent = `${_calLabel(CAL.days[0].date)} 〜 ${_calLabel(CAL.days[CAL.days.length - 1].date)}`;
+
+  // The week at a glance: one column per day, filled by how much of its share is used.
+  const strip = `<div class="cal-strip">${CAL.days.map((d) => {
+    const pct = Math.min(100, Math.round((d.pendingCount / perDay) * 100));
+    const full = d.pendingCount >= perDay;
+    return `<a class="cal-strip-day${d.date === today ? ' today' : ''}${full ? ' full' : ''}" href="#cal-${d.date}"
+        onclick="event.preventDefault();document.getElementById('cal-${d.date}')?.scrollIntoView({behavior:'smooth',block:'start'})">
+      <span class="cal-strip-wd">${_CAL_WD[new Date(d.date + 'T00:00:00Z').getUTCDay()]}</span>
+      <span class="cal-strip-bar"><i style="height:${pct}%"></i></span>
+      <span class="cal-strip-n">${d.pendingCount}</span>
+    </a>`;
+  }).join('')}</div>
+  <div class="cal-legend">1日の承認は最大 ${perDay} 件 · その日の分は ${CAL.releaseHour ?? 9}:00 にDiscordへ届きます</div>`;
+
+  box.innerHTML = strip + CAL.days.map((d) => _calDay(d, today)).join('');
+}
+
+function _calDay(d, today) {
+  const past = d.date < today;
+  const empty = !d.approvals.length && !d.articles.length && !d.bundles.length;
+  return `<section class="cal-day${d.date === today ? ' today' : ''}${past ? ' past' : ''}" id="cal-${d.date}">
+    <div class="cal-day-hd">
+      <span class="cal-day-date">${_calLabel(d.date)}${d.date === today ? ' <b>今日</b>' : ''}</span>
+      <span class="cal-day-count">${[d.pendingCount ? `承認 ${d.pendingCount}件` : '', d.articles.length ? `記事 ${d.articles.length}本` : ''].filter(Boolean).join(' · ')}</span>
+    </div>
+    ${empty ? '<div class="cal-empty">予定はありません</div>' : ''}
+    ${d.approvals.length ? `<div class="cal-group-label">承認</div>${_calApprovalGroups(d.approvals, d.date)}` : ''}
+    ${d.bundles.length ? `<div class="cal-group-label">まとめインポート</div>${d.bundles.map(_calBundle).join('')}` : ''}
+    ${d.articles.length ? `<div class="cal-group-label">生成された記事</div>${d.articles.map(_calArticle).join('')}` : ''}
+  </section>`;
+}
+
+// A slate of ideas is alternatives for one category, so it is shown and moved as one block.
+function _calApprovalGroups(items, date) {
+  const groups = [];
+  const byKey = {};
+  for (const a of items) {
+    const key = a.slotGroup || a.id;
+    if (!byKey[key]) { byKey[key] = { key, items: [] }; groups.push(byKey[key]); }
+    byKey[key].items.push(a);
+  }
+  return groups.map((g) => {
+    const first = g.items[0];
+    const pending = g.items.some((a) => a.status === 'pending');
+    const waiting = g.items.some((a) => a.status === 'pending' && !a.released);
+    const head = first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind;
+    const moveOpts = Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i))
+      .map((k) => `<option value="${k}"${k === date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('');
+    return `<div class="cal-slate">
+      <div class="cal-slate-hd">
+        <span class="cal-slate-title">${esc(head)}</span>
+        ${srcChip(_PROP_KIND_LABEL[first.kind] || first.kind, 'purple')}
+        ${waiting ? srcChip('配信前') : ''}
+        ${pending ? `<label class="cal-move">日付<select aria-label="この案を別の日へ移す" onchange="calMove('${esc(first.id)}',this.value,this)">${moveOpts}</select></label>` : ''}
+      </div>
+      ${g.items.map(_calApproval).join('')}
+    </div>`;
+  }).join('');
+}
+
+function _calApproval(a) {
+  if (a.status !== 'pending') {
+    const label = a.status === 'expired' ? '期限切れ' : (a.decisionLabel ? `決定: ${a.decisionLabel}` : '決定済み');
+    return `<div class="cal-item done"><span class="cal-item-title">${esc(a.title)}</span><span class="cal-item-meta">${esc(label)}</span></div>`;
+  }
+  const real = (a.choices || []).filter((c) => c.value !== '__other__' && c.value !== '__cancel__');
+  return `<div class="cal-item">
+    ${a.imageUrl ? `<img class="cal-item-img" src="${esc(a.imageUrl)}" alt="" loading="lazy">` : ''}
+    <div class="cal-item-main">
+      <div class="cal-item-title">${esc(a.title)}</div>
+      ${a.description ? `<div class="cal-item-desc">${esc(a.description)}</div>` : ''}
+      <div class="cal-item-actions">
+        ${real.map((c) => `<button class="act-btn resume" title="${esc(c.description || '')}"
+          onclick="calDecide('${esc(a.id)}','${esc(c.value)}',this)">${esc(c.label)}</button>`).join('')}
+        <button class="act-btn cancel" onclick="calDecide('${esc(a.id)}','__cancel__',this)">見送る</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _calArticle(a) {
+  return `<div class="cal-item done">
+    <span class="cal-item-title">${a.wikiUrl ? `<a href="${esc(a.wikiUrl)}" target="_blank" rel="noopener">${esc(a.title)}</a>` : esc(a.title)}</span>
+    <span class="cal-item-meta">${esc([_calTime(a.createdAt), a.categoryName, a.bundleId ? 'まとめ済み' : ''].filter(Boolean).join(' · '))}</span>
+  </div>`;
+}
+
+function _calBundle(b) {
+  return `<div class="cal-bundle">
+    <div class="cal-bundle-hd">
+      <span class="cal-item-title">📦 ${esc(b.label)}（${b.count}本）</span>
+      <button class="act-btn resume" onclick="calDownloadBundle('${esc(b.id)}','${esc(b.fileName)}',this)">ファイルを保存</button>
+    </div>
+    <ol class="cal-bundle-list">${(b.titles || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ol>
+  </div>`;
+}
+
+async function calDecide(id, value, btn) {
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl(`/api/proposals/${id}/decide`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (!res?.ok) { showToast(data?.error || '反映に失敗しました', 'error'); btn?.removeAttribute('disabled'); return; }
+  showToast(data.message || '反映しました', 'success');
+  _loadCalendar();
+}
+
+async function calMove(id, slotDate, sel) {
+  sel.disabled = true;
+  const res = await fetch(apiUrl(`/api/proposals/${id}/slot`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slotDate }),
+  }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  sel.disabled = false;
+  if (!res?.ok) { showToast(data?.error || '移動できませんでした', 'error'); return; }
+  showToast(`${_calLabel(slotDate)} に移しました`, 'success');
+  _loadCalendar();
+}
+
+// The file needs the auth header, so it is fetched and handed to the browser as a blob.
+async function calDownloadBundle(id, fileName, btn) {
+  btn?.setAttribute('disabled', 'true');
+  try {
+    const res = await fetch(apiUrl(`/api/note-imports/${encodeURIComponent(id)}/file`), { headers: _authHeaders() });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `HTTP ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: fileName || `note-bundle-${id}.xml` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (err) {
+    showToast(`保存できませんでした（${err.message}）`, 'error');
+  } finally {
+    btn?.removeAttribute('disabled');
+  }
 }
 
 function _buildCategoryCards() {
