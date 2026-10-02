@@ -1318,13 +1318,13 @@ body:has(.mob-more-sheet.open) .page-area{
   /* Stacked, not squeezed: a two-up select with a hint under it is unreadable at 165px. */
   .cat-grid,.cat-grid.cat-style,.cat-grid.cat-money{grid-template-columns:1fr}
   .cat-hint{min-height:0}
-  .cat-in{min-height:44px;font-size:16px}   /* 16px stops iOS zooming the page on focus */
+  .cat-in{min-height:44px}
   /* Queue rows: comfortable thumb target, and the action button kept clear of the row's own
      tap area so cancelling and opening are not the same gesture. */
   #task-feed .feed-item{padding:12px 10px;min-height:56px;align-items:center}
   #task-feed .feed-item .act-btn{min-width:44px;min-height:44px}
   .feed-text{font-size:13px}
-  .cat-prompt{font-size:16px}
+  .cat-prompt{font-size:14px}
   /* Touch targets: minimum 44×44px for all interactive controls */
   .cat-tab,.qcat{min-height:44px;padding:8px 14px}
   .tab-btn{min-height:40px;padding:7px 14px}
@@ -2904,7 +2904,7 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cal-appr { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--m) 22%, transparent); }
 .cal-appr:first-of-type { border-top: 0; }
 .cal-appr-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.cal-appr-move { font-size: 16px; min-height: 36px; border-radius: 8px; max-width: 42%; }
+.cal-appr-move{max-width:46%;min-height:38px;width:auto}
 .cal-appr-tally { font-size: 12px; color: var(--muted); padding: 6px 0 2px; line-height: 1.6; }
 .cal-appr-tally span { display: block; }
 
@@ -2922,21 +2922,21 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 
 /* ── Card actions: tap = primary, ⋯ / long-press = sheet, swipe-left = strip ──
    Neumorphic like the rest: raised = --sh, chosen/pressed = inset with accent text. No flat fills. */
-.act-card{position:relative;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:pointer}
-.act-card .act-card-in{position:relative;z-index:1;align-self:stretch;background:var(--bg);display:flex;flex-direction:column;flex:1;
+.sw-card{position:relative;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:pointer}
+.sw-card .sw-card-in{position:relative;z-index:1;align-self:stretch;background:var(--bg);display:flex;flex-direction:column;flex:1;
   border-radius:inherit;transition:transform .22s ease}
 .act-more{position:absolute;top:8px;right:8px;z-index:2;width:36px;height:36px;border-radius:50%;border:0;
   background:var(--bg);color:var(--txt);font-size:18px;line-height:1;cursor:pointer;box-shadow:var(--sh-sm)}
 .act-more:active{box-shadow:var(--sh-press)}
 .act-strip{position:absolute;top:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:0 10px;z-index:0;visibility:hidden;background:var(--bg)}
-.act-card.is-swiping .act-strip,.act-card.is-swiped .act-strip{visibility:visible}
-.act-card.is-off.is-swiping,.act-card.is-off.is-swiped{opacity:1}
+.sw-card.is-swiping .act-strip,.sw-card.is-swiped .act-strip{visibility:visible}
+.sw-card.is-off.is-swiping,.sw-card.is-off.is-swiped{opacity:1}
 .act-strip-btn{width:62px;height:62px;border:0;border-radius:16px;font-size:11.5px;font-weight:700;color:var(--acc);
   background:var(--bg);box-shadow:var(--sh-sm);cursor:pointer}
 .act-strip-btn:nth-child(2){color:var(--m)}
 .act-strip-btn.is-danger{color:var(--red)}
 .act-strip-btn:active{box-shadow:var(--sh-press)}
-.act-card.is-busy .act-card-in::after{content:'生成中…';position:absolute;inset:0;display:flex;align-items:center;
+.sw-card.is-busy .sw-card-in::after{content:'生成中…';position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;background:color-mix(in srgb,var(--bg) 70%,transparent);color:var(--acc);font-weight:700;font-size:13px;border-radius:inherit}
 .act-sheet{position:fixed;inset:0;z-index:10050;background:rgba(10,12,20,0);display:flex;align-items:flex-end;
   justify-content:center;pointer-events:none;transition:background .2s}
@@ -2989,3 +2989,85 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cat-range::-webkit-slider-thumb{margin-top:-9px}
 .seg-btn .pal-dots{display:inline-flex;gap:2px;margin-right:6px;vertical-align:-1px}
 .seg-btn .pal-dots i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+
+/* ── One type size for every field, and every field a recessed well ───────────
+   The viewport caps auto-zoom (maximum-scale=1), so fields no longer need 16px to stop iOS zooming
+   on focus — they were twice the size of the text around them. Text you type or pick: 14px on a
+   phone, 13px on a desk. Fields are inset (pressed into the surface); things you press are raised. */
+.cat-in,.form-input,.form-select,.nsel,textarea.cat-in,textarea.form-input{font-size:13px;line-height:1.4}
+.form-input,.form-select{box-shadow:var(--sh-in)}
+.form-input:focus,.cat-in:focus{box-shadow:var(--sh-in),0 0 0 2px color-mix(in srgb,var(--acc) 35%,transparent)}
+input::placeholder,textarea::placeholder{color:var(--m2);opacity:1}
+@media (max-width:768px){
+  .cat-in,.form-input,.form-select,.nsel,textarea.cat-in,textarea.form-input{font-size:14px}
+}
+
+/* List picker: the face of a hidden <select> (see _nselUpgrade). */
+.nsel-src{display:none!important}
+.nsel{display:flex;align-items:center;gap:8px;text-align:left;cursor:pointer;-webkit-appearance:none;appearance:none;
+  min-width:0;max-width:100%;background:var(--bg);box-shadow:var(--sh-in);border:0;border-radius:12px;color:var(--txt);
+  padding:8px 12px;min-height:40px;font-family:inherit;font-weight:500}
+.nsel:active{box-shadow:var(--sh-press)}
+.nsel:disabled{opacity:.5;cursor:not-allowed}
+.nsel-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nsel-chev{flex:none;font-size:11px;color:var(--m)}
+.nsel .pal-dots,.nsel-opt .pal-dots{display:inline-flex;gap:3px;flex:none}
+.nsel .pal-dots i,.nsel-opt .pal-dots i,.seg-btn .pal-dots i{width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.nsel .nsel-thumb{width:34px;height:20px;border-radius:5px;object-fit:cover;flex:none}
+.nsel-panel{max-height:78vh}
+.nsel-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding:6px 4px 10px;margin:0 -4px;-webkit-overflow-scrolling:touch}
+.nsel-group{font-size:11px;font-weight:700;color:var(--m);padding:8px 4px 0}
+.nsel-opt{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:8px 14px;border:0;border-radius:14px;
+  background:var(--bg);box-shadow:var(--sh-sm);color:var(--txt);font-size:14px;font-weight:500;text-align:left;cursor:pointer;font-family:inherit}
+.nsel-opt span{flex:1;min-width:0}
+.nsel-opt.on{box-shadow:var(--sh-in);color:var(--acc);font-weight:700}
+.nsel-opt b{color:var(--acc);font-size:13px}
+.nsel-opt:active{box-shadow:var(--sh-press)}
+.nsel-opt:disabled{opacity:.45}
+.nsel-opt .nsel-thumb{width:64px;height:36px;border-radius:8px;object-fit:cover;flex:none;box-shadow:var(--sh-sm)}
+
+/* Magazine detail: samples side by side, the style gallery as one sideways strip. */
+#detail-content .cat-sample-pair{grid-template-columns:1fr 1fr!important;gap:10px;margin-top:4px}
+#detail-content .cat-sample-pair img{width:100%;border-radius:12px;box-shadow:var(--sh-sm);display:block}
+#detail-content .cat-sample-pair figcaption{font-size:11px;color:var(--m)}
+.cat-preview-img:not([src]),.cat-preview-img[src=""]{visibility:hidden}
+.cat-block .cat-gallery{gap:10px}
+.cat-block .cat-gal-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:6px 8px;margin:-6px -8px}
+.cat-block .cat-gal-grid{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;
+  padding:8px 10px 12px;margin:0 -10px;-webkit-overflow-scrolling:touch}
+.cat-block .cat-gal-grid::-webkit-scrollbar,.cat-block .cat-gal-chips::-webkit-scrollbar{display:none}
+.cat-block .cat-gal-tile{flex:0 0 68%;scroll-snap-align:start;background:var(--bg);box-shadow:var(--sh-sm);text-align:left}
+.cat-block .cat-gal-tile.is-picked{box-shadow:var(--sh-in);outline:0}
+.cat-gal-attrs{font-size:10px;color:var(--m);line-height:1.35}
+.cat-gal-tile.is-picked .cat-gal-attrs{color:var(--acc)}
+
+/* Phone: the two toolbar actions sit side by side as compact buttons; their sentences are for the
+   desk, where there is room (the title attribute keeps them reachable). */
+@media (max-width:768px){
+  .cat-toolbar-actions{grid-template-columns:1fr 1fr;gap:12px}
+  .cat-toolbar-actions .act-card{padding:10px 12px;align-items:center;gap:10px}
+  .cat-toolbar-actions .ac-desc{display:none}
+  .cat-toolbar-actions .ac-title{font-size:13px}
+}
+.section-hd{flex-wrap:wrap;row-gap:8px}
+.section-hd .save-btn,.act-btn,.save-btn{white-space:nowrap}
+/* Phone: tab rows scroll sideways instead of wrapping into a second row of the same control. */
+@media (max-width:768px){
+  .tab-bar{display:flex;flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tab-bar::-webkit-scrollbar{display:none}
+  .tab-bar .tab-btn{flex:none;white-space:nowrap}
+}
+/* An icon inside a button is the button's face, not a second raised plate on top of it. */
+.act-btn .ni,.save-btn .ni{box-shadow:none;background:transparent;width:20px;height:20px}
+/* 画風 cards: pictures at the hero's own shape, not a square that fills the phone. */
+.ip-shot{aspect-ratio:16/10}
+@media (max-width:768px){
+  .cat-toolbar-actions .ac-title{white-space:nowrap;font-size:12.5px}
+  .cat-toolbar-actions .ac-ico{width:28px;height:28px;border-radius:10px}
+}
+.wiki-cat-summary{text-transform:none;letter-spacing:.02em}
+@media (max-width:768px){
+  .hp-ground-switch{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:6px 8px;margin:-6px -8px 8px}
+  .hp-ground-switch::-webkit-scrollbar{display:none}
+  .hp-ground-switch .cat-quick{flex:none;white-space:nowrap}
+}

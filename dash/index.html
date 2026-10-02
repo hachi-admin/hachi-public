@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <!-- The one file that cannot carry a ?v= query, because it is the URL being asked for.
      GitHub Pages serves it with max-age=600, so a reader could hold this document for ten minutes
      (much longer with a tab left open) while dashboard.css and app.js came back fresh from their
@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=77">
-<link rel="stylesheet" href="dashboard.css?v=77">
+<link rel="stylesheet" href="../shared/neu.css?v=81">
+<link rel="stylesheet" href="dashboard.css?v=81">
 </head>
 <body>
 
@@ -425,7 +425,7 @@
   <section class="page" id="page-wiki" data-dest="knowledge">
     <div class="page-hd">
       <div class="page-title">Wiki</div>
-      <input class="wiki-search-input" id="wiki-search" type="text" placeholder="Search…" oninput="_wikiSearchInput(this.value)" />
+      <input class="wiki-search-input" id="wiki-search" type="text" placeholder="Wikiを検索…" oninput="_wikiSearchInput(this.value)" />
     </div>
     <!-- Tab bar: Wiki pages (Firestore) | Files (GitHub raw) -->
     <div class="tab-bar" role="tablist" style="margin-bottom:10px">
@@ -870,7 +870,7 @@
         <div class="page-title">Discord チャンネル</div>
         <div class="page-sub">チャンネルレジストリ・エージェントルーティング</div>
       </div>
-      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Fetch from Discord</button>
+      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Discordから取得</button>
     </div>
 
     <!-- Bot permissions info -->
@@ -1081,8 +1081,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=77"></script>
-<script src="x-affiliate.js?v=77"></script>
-<script src="app.js?v=77"></script>
+<script src="../shared/ui.js?v=81"></script>
+<script src="x-affiliate.js?v=81"></script>
+<script src="app.js?v=81"></script>
 </body>
 </html>

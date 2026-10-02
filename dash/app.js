@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '77';
+const DASH_BUILD = '81';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1224,14 +1224,14 @@ function _renderTopics() {
   // inside each other's clearance — the crowding was the shadows overlapping, not the labels.
   const toolbar = `<div class="qs-card cat-toolbar">
     <div class="cat-toolbar-actions">
-      <button class="act-card" onclick="scoutTopicsNow()">
+      <button class="act-card" onclick="scoutTopicsNow()" title="note のトレンドを調べ、続けて書けるテーマを提案します">
         <span class="ac-ico"><i class="ni ni-sources" aria-hidden="true"></i></span>
         <span class="ac-txt">
           <span class="ac-title">マガジンを探す</span>
           <span class="ac-desc">note のトレンドを調べ、続けて書けるテーマを提案します。承認するとそのテーマで定期的に記事が生成されます。</span>
         </span>
       </button>
-      <button class="act-card" onclick="showArticleFromUrl()">
+      <button class="act-card" onclick="showArticleFromUrl()" title="URL の内容を踏まえた考察記事を1本だけ書きます">
         <span class="ac-ico"><i class="ni ni-articles" aria-hidden="true"></i></span>
         <span class="ac-txt">
           <span class="ac-title">URLから書く</span>
@@ -2505,6 +2505,16 @@ function openCategoryDetail(id) {
 function _seg(id, opts, cur, { on = '', hint = true } = {}) {
   const val = cur ?? '';
   const chosen = opts.find((o) => o.id === val);
+  // Up to four fit a row and are read at a glance; past that, a list is quicker than scrolling chips.
+  if (opts.length > 4) {
+    return `<div class="seg-wrap">
+      <select id="${id}" class="cat-in" data-hints='${esc(JSON.stringify(Object.fromEntries(opts.map((o) => [o.id, o.hint || '']))))}'
+        onchange="_styleHint('${id}')${on ? `;${on.replace(/%v/g, 'this.value')}` : ''}">
+        ${opts.map((o) => `<option value="${esc(o.id)}"${o.id === val ? ' selected' : ''}>${esc(o.label || o.id)}</option>`).join('')}
+      </select>
+      ${hint ? `<em class="cat-hint" id="${id}-hint">${esc(chosen?.hint || '')}</em>` : ''}
+    </div>`;
+  }
   return `<div class="seg-wrap">
     <div class="seg" role="radiogroup">
       <input type="hidden" id="${id}" value="${esc(val)}">
@@ -2985,7 +2995,7 @@ function _visualSection(c) {
       <div id="cat-preview-status-${c.id}" class="cat-hint" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="cat-row cat-wide"><span>文字スタイル</span>
-      <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}" hidden
+      <select id="cat-preset-${c.id}" class="cat-in" data-native data-selected="${esc(v.heroPreset || '')}" hidden
         onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="文字スタイル">
         <option value="">未設定（要指定）</option>
       </select>
@@ -3005,15 +3015,15 @@ function _visualSection(c) {
     <div class="cat-row"><span>文字の横位置</span>${_seg(`cat-align-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], v.align || '', { on, hint: false })}</div>
     <div class="cat-row"><span>文字の縦位置</span>${_seg(`cat-anchor-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], v.anchor || '', { on, hint: false })}</div>
     <div class="cat-row"><span>見出し画像の画風</span>
-      <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
+      <select id="cat-imgprompt-${c.id}" class="cat-in" data-decor="recipe" data-selected="${esc(v.imagePrompt || '')}">
         <option value="">自動（記事ごとに選ぶ）</option>
       </select></div>
     <div class="cat-row"><span>本文中の画風</span>
-      <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
+      <select id="cat-figprompt-${c.id}" class="cat-in" data-decor="recipe" data-selected="${esc(v.figurePrompt || '')}">
         <option value="">自動（記事ごとに選ぶ）</option>
       </select></div>
     <div class="cat-row"><span>配色</span>
-      <select id="cat-palette-${c.id}" class="cat-in" data-selected="${esc(v.palette || '')}"
+      <select id="cat-palette-${c.id}" class="cat-in" data-decor="palette" data-selected="${esc(v.palette || '')}"
         onchange="_showCatPalette('${c.id}');${on}" aria-label="配色">
         <option value="">スタイルの配色のまま</option>
       </select>
@@ -3158,11 +3168,15 @@ function _renderCatGallery(catId) {
   const curated = usable.filter((p) => p.styleSpec?.engine === 'satori');
   const legacy = usable.filter((p) => p.styleSpec?.engine !== 'satori');
   const want = _catVal(`cat-preset-${catId}`);
+  // The pinned style leads the row, so the strip opens on what is in force.
+  curated.sort((a, b) => (b.id === want) - (a.id === want));
+  const names = _autoNames(usable, (x) => _styleAttrs(x.styleSpec));
   const tile = (p) => `<button type="button" class="cat-gal-tile" data-preset="${esc(p.id)}"
       onclick="_pickCatPreset('${catId}','${esc(p.id)}')" title="${esc(p.description || p.name)}">
       <span class="cat-gal-img" data-preset="${esc(p.id)}"><span class="cat-gal-wait">…</span></span>
-      <span class="cat-gal-name">${esc(p.name)}</span></button>`;
-  const chip = (val, label) => `<button type="button" class="cat-quick" data-preset="${val}"
+      <span class="cat-gal-name">${esc(names[p.id]?.nick || p.name)}</span>
+      <span class="cat-gal-attrs">${esc((names[p.id]?.attrs || []).join('・'))}</span></button>`;
+  const chip = (val, label) => `<button type="button" class="seg-btn cat-quick" data-preset="${val}"
       onclick="_pickCatPreset('${catId}','${val}')">${label}</button>`;
   const photo = _catSampleInput(CATEGORIES.find((x) => x.id === catId)).photoUrl;
   host.innerHTML = `<div class="cat-gal-chips">${chip('', '未設定')}${chip(HP_AUTO, '自由指定（記事ごとに選ぶ）')}
@@ -3229,7 +3243,7 @@ function _markCatGallery(catId) {
   document.querySelectorAll(`#cat-gallery-${catId} [data-preset]`).forEach((el) => {
     if (!el.matches('button')) return;
     const on = el.dataset.preset === want;
-    el.classList.toggle(el.classList.contains('cat-quick') ? 'is-on' : 'is-picked', on);
+    el.classList.toggle(el.classList.contains('cat-quick') ? 'on' : 'is-picked', on);
     el.setAttribute('aria-pressed', String(on));
   });
 }
@@ -3258,10 +3272,6 @@ function _fillCatPaletteOptions(catId) {
   if (want && !(_palettes || []).some((p) => p.id === want)) {
     sel.insertAdjacentHTML('beforeend', `<option value="${esc(want)}" selected>${esc(want)}（削除済み）</option>`);
   }
-  _selectChips(`cat-palette-${catId}`, (v) => {
-    const p = (_palettes || []).find((x) => x.id === v);
-    return p ? `<span class="pal-dots"><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i></span>` : '';
-  });
   _showCatPalette(catId);
 }
 
@@ -3290,41 +3300,17 @@ function _fillCatImagePromptOptionsFor(selId, kind) {
      <select> cannot carry an image, so the option text stays text and the picture is shown by the
      panels below, which draw over the chosen recipe's samples. The count is printed here so an
      operator can see which recipes have been sampled at all. */
-  const shots = (r) => ((r.samples || []).length ? ` ・見本${r.samples.length}` : '');
   sel.innerHTML = '<option value="">自動（記事ごとに選ぶ）</option>'
-    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}${shots(r)}</option>`).join('');
+    + usable.map((r) => `<option value="${esc(r.id)}"${r.id === want ? ' selected' : ''}>${esc(r.name || r.id)}</option>`).join('');
   if (want && !usable.some((r) => r.id === want)) {
     sel.insertAdjacentHTML('beforeend',
       `<option value="${esc(want)}" selected>${esc(want)}（無効または削除済み）</option>`);
   }
 }
 
-/* A filled <select> shown as a chip row. The select stays (hidden) as the value saveCategory and
-   the preview read; the chips only drive it. Dropdowns are forced to 16px on phones so iOS will
-   not zoom on focus, which made them twice the size of everything around them. */
-function _selectChips(selId, decorate) {
-  const sel = document.getElementById(selId);
-  if (!sel) return;
-  sel.hidden = true;
-  let box = document.getElementById(`${selId}-chips`);
-  if (!box) { box = document.createElement('div'); box.id = `${selId}-chips`; box.className = 'seg'; sel.after(box); }
-  const label = (o) => o.textContent.replace(/ ・見本\d+$/, '').replace('（記事ごとに選ぶ）', '').replace('スタイルの配色のまま', 'スタイルのまま');
-  box.innerHTML = [...sel.options].map((o) => `<button type="button" class="seg-btn${o.value === sel.value ? ' on' : ''}"
-    data-v="${esc(o.value)}">${decorate ? decorate(o.value) : ''}${esc(label(o))}</button>`).join('');
-  box.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => {
-    sel.value = b.dataset.v;
-    box.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('on', x === b));
-    sel.dispatchEvent(new Event('change'));
-  }));
-  const on = box.querySelector('.on');
-  if (on) box.scrollLeft = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2;
-}
-
 function _fillCatImagePromptOptions(catId) {
   _fillCatImagePromptOptionsFor(`cat-imgprompt-${catId}`, 'hero');
   _fillCatImagePromptOptionsFor(`cat-figprompt-${catId}`, 'figure');
-  _selectChips(`cat-imgprompt-${catId}`);
-  _selectChips(`cat-figprompt-${catId}`);
 }
 
 async function refreshCatPreview(id) {
@@ -3827,6 +3813,9 @@ function _hpSetFaceFilter(face) {
   _renderHeroPresets();   // re-render clears the cached panels, then the observer redraws them
 }
 
+// Wiki folders are stored as English keys; the operator reads Japanese.
+const _WIKI_CAT_JA = { finance: 'コスト・財務', news: 'ニュース', report: 'レポート', note_article: 'note記事', general: 'その他' };
+
 function _hpFaceBar(presets) {
   const faces = [...new Set(presets.map((p) => p.styleSpec?.face).filter(Boolean))];
   if (faces.length < 2) return '';
@@ -4209,6 +4198,104 @@ function _hpLayoutChips(s = {}) {
     out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
 }
 
+/* ── List picker ────────────────────────────────────────────────────────────────
+ * Every <select> on the dashboard is shown as a neumorphic field that opens a bottom-sheet list.
+ * The native control drew a white OS box (and on phones had to be 16px so iOS would not zoom on
+ * focus), which matched nothing around it and cut long names mid-word. The <select> stays in the
+ * DOM, hidden, as the source of truth: code keeps reading .value, inline onchange keeps firing,
+ * and options filled in later are picked up. Opt out with data-native.
+ * Decorations (palette dots, recipe thumbnails) come from data-decor → _NSEL_DECOR.
+ */
+const _NSEL_DECOR = {
+  palette: (v) => {
+    const p = (typeof _palettes !== 'undefined' && _palettes || []).find((x) => x.id === v);
+    return p ? `<span class="pal-dots"><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i></span>` : '';
+  },
+  recipe: (v) => {
+    const r = (typeof _imagePrompts !== 'undefined' && _imagePrompts || []).find((x) => x.id === v);
+    const u = r?.samples?.find?.((x) => x?.url)?.url;
+    return u ? `<img class="nsel-thumb" src="${esc(u)}" alt="" loading="lazy">` : '';
+  },
+};
+const _nselLabel = (o) => (o?.textContent || '').trim();
+function _nselSync(sel) {
+  const btn = sel._nsel; if (!btn) return;
+  const o = sel.options[sel.selectedIndex];
+  const decor = _NSEL_DECOR[sel.dataset.decor]?.(sel.value) || '';
+  btn.innerHTML = `${decor}<span class="nsel-val">${esc(_nselLabel(o) || '—')}</span><span class="nsel-chev" aria-hidden="true">▾</span>`;
+  btn.disabled = sel.disabled;
+  btn.hidden = sel.hidden;
+}
+function _nselUpgrade(sel) {
+  if (sel._nsel || sel.multiple || sel.dataset.native != null) return;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `nsel ${sel.className}`.trim();
+  if (sel.getAttribute('style')) btn.setAttribute('style', sel.getAttribute('style'));
+  btn.setAttribute('aria-haspopup', 'listbox');
+  if (sel.getAttribute('aria-label') || sel.title) btn.setAttribute('aria-label', sel.getAttribute('aria-label') || sel.title);
+  btn.addEventListener('click', (e) => { e.stopPropagation(); _nselOpen(sel); });
+  sel._nsel = btn;
+  sel.classList.add('nsel-src');
+  sel.after(btn);
+  // Code that assigns .value directly fires no event; keep the face in step anyway.
+  const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(sel, 'value', { configurable: true, get() { return proto.get.call(this); },
+    set(v) { proto.set.call(this, v); _nselSync(this); } });
+  new MutationObserver(() => _nselSync(sel)).observe(sel, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'disabled'] });
+  sel.addEventListener('change', () => _nselSync(sel));
+  _nselSync(sel);
+}
+function _nselOpen(sel) {
+  let sheet = document.getElementById('nsel-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'nsel-sheet'; sheet.className = 'act-sheet';
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.remove('open'); });
+    document.body.appendChild(sheet);
+  }
+  const title = sel.closest('label,.cat-row,.cat-field')?.querySelector('span,.cat-label')?.textContent?.trim()
+    || sel.getAttribute('aria-label') || '選択';
+  const decor = _NSEL_DECOR[sel.dataset.decor];
+  const rows = [];
+  for (const el of sel.children) {
+    if (el.tagName === 'OPTGROUP') {
+      rows.push(`<div class="nsel-group">${esc(el.label)}</div>`);
+      for (const o of el.children) rows.push(o);
+    } else rows.push(el);
+  }
+  sheet.innerHTML = `<div class="act-sheet-panel nsel-panel" role="listbox" aria-label="${esc(title)}">
+    <div class="act-sheet-title">${esc(title)}</div>
+    <div class="nsel-list">${rows.map((o) => typeof o === 'string' ? o
+      : `<button type="button" class="nsel-opt${o.value === sel.value ? ' on' : ''}" role="option" aria-selected="${o.value === sel.value}"
+          data-v="${esc(o.value)}"${o.disabled ? ' disabled' : ''}>${decor ? decor(o.value) : ''}<span>${esc(_nselLabel(o))}</span>${o.value === sel.value ? '<b aria-hidden="true">✓</b>' : ''}</button>`).join('')}</div>
+    <button class="act-sheet-btn is-cancel" type="button">閉じる</button>
+  </div>`;
+  sheet.querySelector('.is-cancel').onclick = () => sheet.classList.remove('open');
+  sheet.querySelectorAll('.nsel-opt').forEach((b) => b.addEventListener('click', () => {
+    sheet.classList.remove('open');
+    if (b.dataset.v === sel.value) return;
+    sel.value = b.dataset.v;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
+  requestAnimationFrame(() => {
+    sheet.classList.add('open');
+    sheet.querySelector('.nsel-opt.on')?.scrollIntoView({ block: 'center' });
+  });
+}
+(() => {
+  const scan = (root) => root.querySelectorAll?.('select').forEach(_nselUpgrade);
+  const start = () => {
+    scan(document);
+    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => {
+      if (n.nodeType !== 1) return;
+      if (n.tagName === 'SELECT') _nselUpgrade(n); else scan(n);
+    }))).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+
 /* ── Card actions ──────────────────────────────────────────────────────────────
  * A row of 編集／複製／無効化／削除 under every card read as a form, not a list, and on a phone the
  * four buttons were each a third of a thumb wide. Now a card has one primary action — tapping it —
@@ -4261,7 +4348,7 @@ function _closeSwipes(except) {
   document.querySelectorAll('[data-acts].is-swiped').forEach((c) => {
     if (c === except) return;
     c.classList.remove('is-swiped');
-    const inner = c.querySelector('.act-card-in'); if (inner) inner.style.transform = '';
+    const inner = c.querySelector('.sw-card-in'); if (inner) inner.style.transform = '';
   });
 }
 (() => {
@@ -4273,7 +4360,7 @@ function _closeSwipes(except) {
     const card = e.target.closest('[data-acts]');
     if (!card || e.button > 0) { if (!e.target.closest('.act-strip')) _closeSwipes(); return; }
     _closeSwipes(card);
-    const inner = card.querySelector('.act-card-in');
+    const inner = card.querySelector('.sw-card-in');
     const stripW = card.querySelector('.act-strip')?.offsetWidth || 0;
     g = { card, inner, stripW, x: e.clientX, y: e.clientY, mode: null, own: !!e.target.closest(OWN),
       base: card.classList.contains('is-swiped') ? -stripW : 0 };
@@ -4342,7 +4429,7 @@ function _heroPresetCard(p) {
       ...(off ? [{ label: '削除', danger: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '', run: () => _deleteHeroPreset(p.id) }] : []),
     ],
   });
-  return `<div class="hp-card act-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="act-card-in">${acts.more}
+  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">${acts.more}
     ${/* Four panels, not one: 長さ×揃え. A style is judged on whether it survives a long headline
           and whether it still reads pushed to one side, and a single representative sample shows
           neither. Drawing costs no image generation — this is type over a flat field — so the only
@@ -5839,7 +5926,7 @@ function _imagePromptCard(r) {
       ...(off && !r.isSystem ? [{ label: '削除', danger: true, run: () => _deleteImagePrompt(r.id) }] : []),
     ],
   });
-  return `<div class="hp-card act-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="act-card-in">${acts.more}
+  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">${acts.more}
     <div class="ip-shots" style="grid-template-columns:repeat(${Math.max(1, Math.min(3, samples.length))},1fr)">
       ${samples.length
     ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
@@ -8277,7 +8364,7 @@ function _renderWikiTree(pages) {
          <div class="wiki-rail">${recent.map(_wikiCard).join('')}</div>
        </div>` +
       Object.entries(groups).map(([cat,ps])=>`<details class="wiki-cat-group">
-        <summary class="docs-section-label wiki-cat-summary">${esc(cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
+        <summary class="docs-section-label wiki-cat-summary">${esc(_WIKI_CAT_JA[cat.toLowerCase()] || cat)} <span class="wiki-cat-count">${ps.length}</span></summary>
         <div class="wiki-col">${ps.map(_wikiCard).join('')}</div>
       </details>`).join('');
   }
@@ -9014,7 +9101,7 @@ async function _deleteChannelTag(channelId, tagId) {
 
 async function _fetchDiscordGuilds() {
   const btn = document.getElementById('fetch-guilds-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
+  if (btn) { btn.disabled = true; btn.textContent = '取得中…'; }
   try {
     const res = await fetch(apiUrl('/api/discord/guilds'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
@@ -9032,7 +9119,7 @@ async function _fetchDiscordGuilds() {
   } catch (e) {
     showToast('Error fetching guilds: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '↻ Fetch from Discord'; }
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Discordから取得'; }
   }
 }
 
