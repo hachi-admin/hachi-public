@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '73';
+const DASH_BUILD = '74';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4132,6 +4132,88 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeLigh
 const _HP_FACE = { sans: 'サンズ', black: '極太', kaku: '角ゴ', maru: '丸ゴ', mplus: 'M+', mincho: '明朝', pop: 'ポップ',
   dela: 'デラ極太', decol: '装飾明朝', opti: 'オプティ明朝', hand: '手書き' };
 
+/* ── Automatic names: short nickname ＋ what it actually is ──────────────────────
+ * Hand-given names drift: 「ナイト・レポート（透け）」 says how it differs from one sibling and
+ * nothing once a third appears. The attribute half is derived from the spec, so two styles that
+ * read the same here really are the same, and a new variant names itself. The nickname is the
+ * human part (the stored name minus any parenthetical); ①② separates exact twins.
+ */
+function _colorName(c) {
+  const m = String(c || '').match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  let r, g, b;
+  if (m) {
+    const h = m[1].length === 3 ? m[1].replace(/./g, (x) => x + x) : m[1];
+    [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  } else {
+    const q = String(c || '').match(/rgba?\(([^)]+)\)/i);
+    if (!q) return '';
+    [r, g, b] = q[1].split(',').map((x) => parseFloat(x));
+  }
+  const max = Math.max(r, g, b) / 255, min = Math.min(r, g, b) / 255, l = (max + min) / 2, d = max - min;
+  if (d < 0.12) return l > 0.85 ? '白' : l < 0.18 ? '黒' : '灰';
+  let h = max === r / 255 ? ((g - b) / 255 / d) % 6 : max === g / 255 ? (b - r) / 255 / d + 2 : (r - g) / 255 / d + 4;
+  h = (h * 60 + 360) % 360;
+  const dark = l < 0.32;
+  if (h < 15 || h >= 340) return dark ? '深紅' : '赤';
+  if (h < 40) return dark ? '茶' : '橙';
+  if (h < 62) return dark ? 'オリーブ' : '黄';
+  if (h < 150) return dark ? '深緑' : '緑';
+  if (h < 185) return 'ミント';
+  if (h < 205) return '水色';
+  if (h < 250) return dark ? '紺' : '青';
+  if (h < 290) return '紫';
+  return '桃';
+}
+const _alphaOf = (c) => { const q = String(c || '').match(/rgba\([^)]*,\s*([\d.]+)\)/i); return q ? Number(q[1]) : 1; };
+const _nickname = (name, id) => String(name || id || '').replace(/[（(][^）)]*[）)]\s*$/, '').trim();
+
+function _styleAttrs(s = {}) {
+  const out = [];
+  if (s.face) out.push(_HP_FACE[s.face] ?? s.face);
+  if (s.panel) {
+    const tint = s.panel.tint, a = _alphaOf(tint), col = _colorName(tint);
+    const light = col === '白' || col === '灰';
+    out.push(`${light ? '白' : '暗い'}ガラス${a < (light ? 0.6 : 0.4) ? '薄め' : ''}`);
+  }
+  const strokes = s.strokes ?? (s.stroke ? [s.stroke] : []);
+  if (strokes.length > 1) out.push('二重縁');
+  else if (strokes.length) out.push(`${_colorName(strokes[0]?.color)}縁`);
+  if (s.extrude) out.push('立体');
+  if (s.glow || s.glows) out.push('発光');
+  if (s.seriesBand) out.push('連載帯');
+  if (s.typography?.eyebrow?.tag?.split) out.push('誌名タグ');
+  const hl = s.highlight;
+  if (hl?.color) out.push(`${_colorName(hl.color)}${hl.strokes?.length ? '袋文字' : '強調'}`);
+  else if (s.metal) out.push('メタル');
+  return out;
+}
+
+const _RECIPE_WORDS = [
+  [/photo|documentary|realis/i, '実写風'], [/illustrat|drawing/i, 'イラスト'], [/watercolou?r/i, '水彩'],
+  [/isometric|diorama|miniature|bento/i, '箱庭'], [/\b3d\b|render|clay/i, '立体'], [/collage/i, 'コラージュ'],
+  [/film|cinematic|35mm/i, '映画調'], [/neon/i, 'ネオン'], [/anime|manga/i, 'アニメ'], [/paper.?cut|papercraft/i, '切り絵'],
+  [/ink|sumi/i, '墨'], [/minimal|flat/i, 'ミニマル'], [/vintage|retro/i, 'レトロ'], [/night|dark/i, '夜'],
+];
+function _recipeAttrs(r = {}) {
+  const text = [r.spec?.style, r.spec?.mood, r.spec?.lighting, ...(r.keywords || [])].filter(Boolean).join(' ');
+  const words = [];
+  for (const [re, w] of _RECIPE_WORDS) if (re.test(text) && !words.includes(w)) words.push(w);
+  return [_IP_SOURCE_SHORT[r.sourceMode] || 'AI生成', ...words.slice(0, 3)];
+}
+const _IP_SOURCE_SHORT = { ai: 'AI生成', web: 'Web写真', web_then_stylise: 'Web写真加工' };
+
+/* Same nickname and same attributes → number them in list order, so the two never look alike. */
+function _autoNames(list, attrsOf) {
+  const full = list.map((x) => `${_nickname(x.name, x.id)}｜${attrsOf(x).join('・')}`);
+  const seen = {}, total = {};
+  full.forEach((f) => { total[f] = (total[f] || 0) + 1; });
+  return Object.fromEntries(list.map((x, i) => {
+    const f = full[i];
+    const n = total[f] > 1 ? '①②③④⑤⑥⑦⑧⑨'[(seen[f] = (seen[f] || 0) + 1) - 1] || '' : '';
+    return [x.id, { nick: _nickname(x.name, x.id) + n, attrs: attrsOf(x) }];
+  }));
+}
+
 function _hpTypoChips(s = {}) {
   const chip = (t, title) => `<span class="cat-chip"${title ? ` title="${esc(title)}"` : ''}>${esc(t)}</span>`;
   const out = [];
@@ -4187,8 +4269,119 @@ function _hpLayoutChips(s = {}) {
     out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
 }
 
+/* ── Card actions ──────────────────────────────────────────────────────────────
+ * A row of 編集／複製／無効化／削除 under every card read as a form, not a list, and on a phone the
+ * four buttons were each a third of a thumb wide. Now a card has one primary action — tapping it —
+ * and the rest live in a sheet reached three ways, because each is what some hand expects:
+ * ⋯ (visible, desktop), long-press (phone habit), swipe-left (reveals up to three as a strip).
+ * Actions are closures kept per card key, so the markup carries no inline handler strings.
+ */
+const _CARD_ACTS = new Map();
+function _actCard(key, { title, primary, items = [] }) {
+  _CARD_ACTS.set(key, { title, primary, items });
+  const strip = items.filter((it) => !it.noStrip).slice(0, 3);
+  return {
+    attrs: `data-acts="${esc(key)}"`,
+    more: `<button class="act-more" aria-label="その他の操作" onclick="event.stopPropagation();_openCardSheet('${esc(key)}')">⋯</button>`,
+    strip: `<div class="act-strip">${strip.map((it, i) =>
+      `<button class="act-strip-btn${it.danger ? ' is-danger' : ''}" onclick="event.stopPropagation();_runCardAct('${esc(key)}',${items.indexOf(it)})">${esc(it.short || it.label)}</button>`).join('')}</div>`,
+  };
+}
+function _runCardAct(key, i) {
+  _closeCardSheet(); _closeSwipes();
+  const it = _CARD_ACTS.get(key)?.items?.[i];
+  if (it) it.run();
+}
+function _openCardSheet(key) {
+  const acts = _CARD_ACTS.get(key); if (!acts) return;
+  _closeSwipes();
+  let sheet = document.getElementById('act-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'act-sheet'; sheet.className = 'act-sheet';
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) _closeCardSheet(); });
+    document.body.appendChild(sheet);
+  }
+  const all = [...(acts.primary ? [{ ...acts.primary, primary: true }] : []), ...acts.items];
+  sheet.innerHTML = `<div class="act-sheet-panel" role="menu">
+    ${acts.title ? `<div class="act-sheet-title">${esc(acts.title)}</div>` : ''}
+    ${all.map((it, i) => `<button class="act-sheet-btn${it.danger ? ' is-danger' : ''}" role="menuitem" data-i="${i}">
+      <span>${esc(it.label)}</span>${it.hint ? `<small>${esc(it.hint)}</small>` : ''}</button>`).join('')}
+    <button class="act-sheet-btn is-cancel" data-i="-1">閉じる</button>
+  </div>`;
+  sheet.querySelectorAll('.act-sheet-btn').forEach((b) => b.addEventListener('click', () => {
+    const i = Number(b.dataset.i);
+    _closeCardSheet();
+    if (i >= 0) all[i].run();
+  }));
+  requestAnimationFrame(() => sheet.classList.add('open'));
+}
+function _closeCardSheet() { document.getElementById('act-sheet')?.classList.remove('open'); }
+function _closeSwipes(except) {
+  document.querySelectorAll('[data-acts].is-swiped').forEach((c) => {
+    if (c === except) return;
+    c.classList.remove('is-swiped');
+    const inner = c.querySelector('.act-card-in'); if (inner) inner.style.transform = '';
+  });
+}
+(() => {
+  // Taps on these do their own thing; the card's primary action must not also fire.
+  const OWN = 'button,select,input,textarea,a,label,[onclick],.act-strip';
+  let g = null;
+  const end = () => { if (g?.timer) clearTimeout(g.timer); g = null; };
+  document.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('[data-acts]');
+    if (!card || e.button > 0) { if (!e.target.closest('.act-strip')) _closeSwipes(); return; }
+    _closeSwipes(card);
+    const inner = card.querySelector('.act-card-in');
+    const stripW = card.querySelector('.act-strip')?.offsetWidth || 0;
+    g = { card, inner, stripW, x: e.clientX, y: e.clientY, mode: null, own: !!e.target.closest(OWN),
+      base: card.classList.contains('is-swiped') ? -stripW : 0 };
+    g.timer = setTimeout(() => {
+      if (!g || g.mode) return;
+      g.mode = 'press';
+      navigator.vibrate?.(10);
+      _openCardSheet(card.dataset.acts);
+    }, 480);
+  }, { passive: true });
+  document.addEventListener('pointermove', (e) => {
+    if (!g) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      clearTimeout(g.timer);
+      g.mode = Math.abs(dx) > Math.abs(dy) && g.stripW ? 'swipe' : 'scroll';
+      if (g.mode === 'swipe') { g.inner.style.transition = 'none'; g.card.classList.add('is-swiping'); }
+    }
+    if (g.mode === 'swipe') g.inner.style.transform = `translateX(${Math.max(-g.stripW, Math.min(0, g.base + dx))}px)`;
+  }, { passive: true });
+  document.addEventListener('pointerup', (e) => {
+    if (!g) return;
+    const { card, inner, stripW, mode, own, base } = g;
+    end();
+    if (mode === 'swipe') {
+      inner.style.transition = '';
+      card.classList.remove('is-swiping');
+      const cur = new DOMMatrixReadOnly(getComputedStyle(inner).transform).m41;
+      const keep = cur < -stripW / 2;
+      card.classList.toggle('is-swiped', keep);
+      inner.style.transform = keep ? `translateX(${-stripW}px)` : '';
+      return;
+    }
+    if (mode || own) return;
+    if (card.classList.contains('is-swiped')) { _closeSwipes(); return; }
+    _CARD_ACTS.get(card.dataset.acts)?.primary?.run();
+  });
+  document.addEventListener('pointercancel', end);
+  // Long-press on a phone otherwise opens the image callout / text selection on top of the sheet.
+  document.addEventListener('contextmenu', (e) => {
+    const card = e.target.closest('[data-acts]');
+    if (!card) return;
+    e.preventDefault();
+    if (!document.getElementById('act-sheet')?.classList.contains('open')) _openCardSheet(card.dataset.acts);
+  });
+})();
+
 function _heroPresetCard(p) {
-  const tags = (p.mood || []).map(t => `<span class="cat-chip">${esc(t)}</span>`).join('');
   const sysLabel = p.isSystem
     ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>'
     : '<span class="chip" style="background:#34D39933;color:#34D399">custom</span>';
@@ -4198,7 +4391,18 @@ function _heroPresetCard(p) {
   const off = p.enabled === false;
   const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
   const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
-  return `<div class="hp-card${off ? ' is-off' : ''}">
+  /* System presets are deletable once disabled: the seeder recreated any id it could not find, so
+     one is retired in place instead — the tombstone stops the seeder and every reader skips it. */
+  const acts = _actCard(`hp:${p.id}`, {
+    title: p.name,
+    primary: { label: '編集', run: () => _editHeroPreset(p.id) },
+    items: [
+      { label: '複製', hint: 'このスタイルを元に新しく作る', run: () => _duplicateHeroPreset(p.id) },
+      { label: off ? '有効化' : '無効化', hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
+      ...(off ? [{ label: '削除', danger: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '', run: () => _deleteHeroPreset(p.id) }] : []),
+    ],
+  });
+  return `<div class="hp-card act-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="act-card-in">${acts.more}
     ${/* Four panels, not one: 長さ×揃え. A style is judged on whether it survives a long headline
           and whether it still reads pushed to one side, and a single representative sample shows
           neither. Drawing costs no image generation — this is type over a flat field — so the only
@@ -4208,33 +4412,20 @@ function _heroPresetCard(p) {
     `<figure class="hp-shot" data-variant="${i}"><div class="hp-shot-img"></div><figcaption>${l}</figcaption></figure>`).join('')}
     </div>
     <div class="hp-card-body">
-      <div class="hp-card-name">${esc(p.name)}</div>
-      <div class="hp-card-id">${esc(p.id)}</div>
+      ${(() => { const n = _autoNames(_heroPresets.length ? _heroPresets : [p], (x) => _styleAttrs(x.styleSpec))[p.id]
+        ?? { nick: _nickname(p.name, p.id), attrs: _styleAttrs(p.styleSpec) };
+        return `<div class="hp-card-name" title="${esc(p.name)}">${esc(n.nick)}</div>
+      <div class="hp-card-attrs" title="${esc(p.id)}">${esc(n.attrs.join('・'))}</div>`; })()}
       <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}${_hpUsedBy(p.id)}</div>
       ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
       ${/* What the letters are made of, and how they sit — the two things this screen manages.
             The ground is deliberately absent: it belongs to the template and is chosen per article.
             See docs/reference/HERO_TEXT_STYLE.ja.md in hachi-core. */ ''}
-      <div class="hp-card-chips">${_hpTypoChips(p.styleSpec)}</div>
-      ${_hpLayoutChips(p.styleSpec)}
-      ${tags ? `<div class="hp-card-chips">${tags}</div>` : ''}
+      ${/* 書体・縁・強調 are in the derived name line above; the raw palette id and the English mood
+            tags were the agent's vocabulary, not something to judge a style by. */ ''}
       <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
-    <div class="hp-card-acts">
-      <button class="act-btn" onclick="_editHeroPreset('${esc(p.id)}')">編集</button>
-      <button class="act-btn" onclick="_duplicateHeroPreset('${esc(p.id)}')" title="このスタイルを元に新しいスタイルを作ります">複製</button>
-      <button class="act-btn" onclick="_toggleHeroPreset('${esc(p.id)}',${off})"
-        title="無効にすると、エージェントの選択肢から外れます（削除はされません）">${off ? '有効化' : '無効化'}</button>
-      ${/* System presets are deletable now. Deleting one used to be refused because the seeder
-            recreated any id it could not find, so the row came back; it is retired in place
-            instead, which keeps the tombstone that stops the seeder and removes it from every
-            reader. Same gate as before otherwise: disable it first. */ ''}
-      ${off
-        ? `<button class="act-btn" onclick="_deleteHeroPreset('${esc(p.id)}')" style="color:var(--red)">削除</button>` : ''}
-    </div>
-    ${off && p.isSystem
-      ? '<div class="hp-card-note">既定のスタイルを削除すると一覧とエージェントの選択肢から外れます。次のデプロイで戻ることはありません。</div>' : ''}
-  </div>`;
+  </div></div>`;
 }
 
 /* Withdraw a preset without deleting it.
@@ -5698,15 +5889,27 @@ function _imagePromptCard(r) {
      showing them here was the generator's input leaking into the card meant for judging its
      output — the same leak image-curator's own doc comment warns against for the Discord card. The
      Japanese description is the recipe's content as far as this display is concerned. */
-  return `<div class="hp-card${off ? ' is-off' : ''}">
+  const acts = _actCard(`ip:${r.id}`, {
+    title: r.name || r.id,
+    primary: { label: '編集', run: () => _openRecipeEditor(r.id) },
+    items: [
+      { label: samples.length ? '見本を作り直す' : '見本を作る', short: '見本', hint: '3枚生成して見本にする（画像生成が走ります）', run: () => _genImagePromptSamples(r.id) },
+      ...(samples.length ? [{ label: isApproved ? '相談する' : '承認へ', noStrip: true, hint: 'Discord に承認カードを送る', run: () => _proposeImagePrompt(r.id) }] : []),
+      { label: off ? '有効化' : '無効化', hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
+      ...(off && !r.isSystem ? [{ label: '削除', danger: true, run: () => _deleteImagePrompt(r.id) }] : []),
+    ],
+  });
+  return `<div class="hp-card act-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="act-card-in">${acts.more}
     <div class="ip-shots" style="grid-template-columns:repeat(${Math.max(1, Math.min(3, samples.length))},1fr)">
       ${samples.length
     ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
     : '<div class="ip-shots-empty">見本がまだありません</div>'}
     </div>
     <div class="hp-card-body">
-      <div class="hp-card-name">${esc(r.name || r.id)}</div>
-      <div class="hp-card-id">${esc(r.id)}</div>
+      ${(() => { const n = _autoNames(_imagePrompts.length ? _imagePrompts : [r], _recipeAttrs)[r.id]
+        ?? { nick: _nickname(r.name, r.id), attrs: _recipeAttrs(r) };
+        return `<div class="hp-card-name" title="${esc(r.name || r.id)}">${esc(n.nick)}</div>
+      <div class="hp-card-attrs" title="${esc(r.id)}">${esc(n.attrs.join('・'))}</div>`; })()}
       <div class="hp-card-chips">
         <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
@@ -5721,20 +5924,9 @@ function _imagePromptCard(r) {
       ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
       ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
     </div>
-    <div class="hp-card-acts">
-      <button class="act-btn" onclick="_openRecipeEditor('${esc(r.id)}')" title="名前・説明・画づくりの指示を直します">編集</button>
-      <button class="act-btn" data-ip-gen="${esc(r.id)}" onclick="_genImagePromptSamples('${esc(r.id)}')"
-        title="このレシピで3枚生成して見本として保存します（画像生成が走ります）">${samples.length ? '見本を作り直す' : '見本を作る'}</button>
-      <button class="act-btn" onclick="_toggleImagePrompt('${esc(r.id)}',${off})"
-        title="無効にすると、記事の生成時に選ばれなくなります">${off ? '有効化' : '無効化'}</button>
-      ${samples.length ? `<button class="act-btn" onclick="_proposeImagePrompt('${esc(r.id)}')"
-        title="Discord に承認カードを送ります。承認済みのレシピでも、変更を相談したいときに送れます">${isApproved ? '変更をDiscordで相談' : '承認へ'}</button>` : ''}
-      ${off && !r.isSystem
-        ? `<button class="act-btn" onclick="_deleteImagePrompt('${esc(r.id)}')" style="color:var(--red)">削除</button>` : ''}
-    </div>
     ${off && r.isSystem
-      ? '<div class="hp-card-note">既定のレシピは削除できません。無効のままにしておけば選ばれません。</div>' : ''}
-  </div>`;
+      ? '<div class="hp-card-note">既定の画風は削除できません。無効のままにしておけば選ばれません。</div>' : ''}
+  </div></div>`;
 }
 
 /* Generating costs real image calls and takes tens of seconds, so the button says so and stays
@@ -5754,17 +5946,17 @@ async function _requestImagePromptSamples(id) {
 function _genImagePromptSamples(id) {
   showConfirm('このレシピで画像を3枚生成して見本にします（画像生成の課金・1分ほど）。',
     () => _genImagePromptSamplesNow(id),
-    document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`) ?? undefined);
+    undefined);
 }
 
 async function _genImagePromptSamplesNow(id) {
-  const btn = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
-  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  const card = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
+  card?.classList.add('is-busy');
   showToast('3枚生成しています…（1分ほどかかります）', 'info');
   const r = await _requestImagePromptSamples(id);
   if (!r.ok) {
     showToast(r.error || '見本を生成できませんでした', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '見本を作る'; }
+    card?.classList.remove('is-busy');
     return;
   }
   showToast('見本を保存しました', 'success');
@@ -5880,7 +6072,7 @@ async function _deleteImagePrompt(id) {
     showToast('削除しました', 'success');
     // Same reasoning as the hero presets: drop the row, leave the rest of the screen alone.
     _imagePrompts = _imagePrompts.filter((x) => x.id !== id);
-    document.querySelector(`.hp-card [data-ip-gen="${CSS.escape(id)}"]`)?.closest('.hp-card')?.remove();
+    document.querySelector(`.hp-card[data-ip-gen="${CSS.escape(id)}"]`)?.remove();
   } catch (e) {
     showToast(`削除できませんでした: ${e.message}`, 'error');
   }
