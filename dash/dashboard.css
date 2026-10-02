@@ -2914,3 +2914,8 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cal-m-cell.sel { box-shadow: var(--sh-in), inset 0 0 0 2px var(--accent); }
 .cal-jobs-hd { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cal-jobs-close { margin-left: auto; min-height: 36px; font-size: 13px; }
+
+.cat-sample-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cat-sample-pair figure { margin: 0; }
+.cat-sample-pair figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+@media (max-width: 560px) { .cat-sample-pair { grid-template-columns: 1fr; } }

@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '72';
+const DASH_BUILD = '73';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -391,7 +391,7 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['calendar','カレンダー'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','カテゴリ'], ['hero-presets','サムネタイトル'], ['image-prompts','絵のレシピ'] ] },
+  articles:  { label: '記事', pages: [ ['articles','マガジン'], ['hero-presets','文字スタイル'], ['image-prompts','画風'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
@@ -411,7 +411,7 @@ const _destOf = (pageId) =>
  * `asPage` resolves the one collision in the table above: `articles` is both a destination key and
  * the id of that destination's first page. Resolving destinations first (which is right for a nav
  * pill) meant the カテゴリ sub-tab asked for the *destination*, which restores `_lastPage` — and
- * once サムネタイトル had been visited, `_lastPage.articles` was `hero-presets`. So the tab returned
+ * once 文字スタイル had been visited, `_lastPage.articles` was `hero-presets`. So the tab returned
  * you to the page you were trying to leave, and カテゴリ became unreachable for the rest of the
  * session. Callers that know they mean a page say so.
  */
@@ -1227,7 +1227,7 @@ function _renderTopics() {
       <button class="act-card" onclick="scoutTopicsNow()">
         <span class="ac-ico"><i class="ni ni-sources" aria-hidden="true"></i></span>
         <span class="ac-txt">
-          <span class="ac-title">カテゴリを探す</span>
+          <span class="ac-title">マガジンを探す</span>
           <span class="ac-desc">note のトレンドを調べ、続けて書けるテーマを提案します。承認するとそのテーマで定期的に記事が生成されます。</span>
         </span>
       </button>
@@ -1239,8 +1239,8 @@ function _renderTopics() {
         </span>
       </button>
       ${/* 未設定を埋める used to stand here, and does not any more.
-            It existed because the eleven categories predating the styling rule had no サムネタイトル and
-            no 絵のレシピ, and a toolbar button was the way to fix them in bulk. That backlog is gone —
+            It existed because the eleven categories predating the styling rule had no 文字スタイル and
+            no 画風, and a toolbar button was the way to fix them in bulk. That backlog is gone —
             the styles and recipes are assigned, and new categories are styled at creation — so the
             button's whole remaining job was to keep a count on screen. A count is not a reason to
             press anything, and the number it showed was the *image* backlog, which the button could
@@ -1248,7 +1248,7 @@ function _renderTopics() {
             the detail panel, where the row being charged for is the one you are looking at. */ ''}
     </div>
     <div class="cat-toolbar-views" role="tablist">
-      <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">カテゴリ <b>${CATEGORIES.length}</b></button>
+      <button class="cat-view-btn${_catView === 'categories' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'categories'}" onclick="setCatView('categories')">マガジン <b>${CATEGORIES.length}</b></button>
       <button class="cat-view-btn${_catView === 'approvals' ? ' active' : ''}${PROPOSALS.length ? ' has-badge' : ''}" role="tab" aria-selected="${_catView === 'approvals'}" onclick="setCatView('approvals')">承認待ち <b>${PROPOSALS.length}</b></button>
       <button class="cat-view-btn${_catView === 'articles' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'articles'}" onclick="setCatView('articles')">記事 <b>${CAT_ARTICLES.length}</b></button>
       <button class="cat-view-btn${_catView === 'reception' ? ' active' : ''}" role="tab" aria-selected="${_catView === 'reception'}" onclick="setCatView('reception')">note の反応</button>
@@ -1273,7 +1273,7 @@ function _renderTopics() {
 // through /api/proposals, which runs the exact executor Discord's button handler calls, so a
 // decision made here queues the same task or sets the same status a click would.
 const _PROP_KIND_LABEL = {
-  article_idea: '記事案', category: 'カテゴリ提案', visionary: 'ビジョン', hero: '見た目',
+  article_idea: '記事案', category: 'マガジン提案', visionary: 'ビジョン', hero: '見た目',
   experiment_result: '実験結果', channel_audit: 'チャンネル監査', craft_study: '文体調査',
   note_study: 'note調査', efficiency_audit: '効率監査', advisor: '相談',
   scout: 'トピック偵察', craft: '文体の提案', design_approval: 'デザイン承認', category_prompt: '編集方針',
@@ -1769,7 +1769,7 @@ async function calDownloadBundle(id, fileName, btn) {
 
 function _buildCategoryCards() {
   if (!CATEGORIES.length) {
-    return `<div style="color:var(--m);font-size:11px;padding:8px 0">カテゴリがありません。「カテゴリを探す」で提案を生成できます。</div>`;
+    return `<div style="color:var(--m);font-size:11px;padding:8px 0">マガジンがありません。「マガジンを探す」で提案を生成できます。</div>`;
   }
   const order = { suggested: 0, active: 1, paused: 2, blocked: 3 };
   const cards = [...CATEGORIES]
@@ -1866,7 +1866,7 @@ function _catTileMapBar(c, v) {
    *
    * 見出しの絵・本文中の絵・配色 move to the detail panel in both states. The two recipes change what
    * would be *generated* later, so their effect is not visible on the tile anyway; 配色 is not a
-   * choice at all any more — it follows the サムネタイトル above it. */
+   * choice at all any more — it follows the 文字スタイル above it. */
   const row = (key, label, kind, cur, handler) => `
     <label class="acard-mapf">
       <span>${label}</span>
@@ -1893,12 +1893,12 @@ function _catTileMapBar(c, v) {
     const t = c.createdAt;
     const ms = typeof t === 'string' ? Date.parse(t) : ((t?._seconds ?? t?.seconds ?? NaN) * 1000);
     const left = Number.isFinite(ms) ? Math.max(0, Math.round((ms + 2 * 86400e3 - Date.now()) / 3600e3)) : null;
-    return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、サムネタイトルのスタイルと絵のレシピを自動で選び、見本を作ります（pro課金・30秒ほど）。${left != null ? `<b>未承認のままだと、あと${left}時間で自動的に削除されます。</b>` : '未承認のまま2日たつと自動的に削除されます。'}</div>`;
+    return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、文字スタイルと画風を自動で選び、見本を作ります（pro課金・30秒ほど）。${left != null ? `<b>未承認のままだと、あと${left}時間で自動的に削除されます。</b>` : '未承認のまま2日たつと自動的に削除されます。'}</div>`;
   }
   if (c.status !== 'active') return '';
   return `<div class="acard-map" onclick="event.stopPropagation()">
-    ${row('preset', 'サムネタイトル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
-    ${row('img', '絵のレシピ', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
+    ${row('preset', '文字スタイル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
+    ${row('img', '画風', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
   </div>`;
 }
 
@@ -1909,7 +1909,7 @@ function _catTileMapBar(c, v) {
 
    The swatch is now the only place the three colours appear on a tile: the labelled 配色 row was
    removed along with the other tuning controls, because it was never a control — it reports what the
-   サムネタイトル above it produced, and three squares next to that select say so in a tenth of the
+   文字スタイル above it produced, and three squares next to that select say so in a tenth of the
    space. `palette` and `paletteSource` are still decided by GET /api/article-categories; this is a
    deliberately trivial second resolution (the pinned style's palette, or nothing) that never
    reproduces the `visual.palette` fallback, so the server's answer wins on the next real read. */
@@ -1924,7 +1924,7 @@ function _refreshCatPalette(c, preset) {
   if (!pal) { chip?.remove(); return; }
   const swatches = [pal.fill, pal.stroke, pal.emphasis]
     .map((h) => `<i style="background:${esc(h)}"></i>`).join('');
-  const title = `配色「${esc(pal.name)}」— 固定したサムネタイトル由来（塗り ${esc(pal.fill)} / 縁 ${esc(pal.stroke)} / 強調 ${esc(pal.emphasis)}）`;
+  const title = `配色「${esc(pal.name)}」— 固定した文字スタイル由来（塗り ${esc(pal.fill)} / 縁 ${esc(pal.stroke)} / 強調 ${esc(pal.emphasis)}）`;
   if (chip) { chip.title = title; chip.innerHTML = swatches; return; }
   card.querySelector('.acard-foot')?.insertAdjacentHTML('beforeend',
     `<span class="cat-chip cat-pal via-preset" title="${title}">${swatches}</span>`);
@@ -1970,7 +1970,7 @@ function _categoryTile(c) {
   const statusClass = c.status === 'active' ? 'done' : c.status === 'suggested' ? 'running' : c.status === 'blocked' ? 'failed' : 'idle';
   const quick = _CAT_QUICK[c.status];
   /* Whether a mapping exists is visualised two ways: the thumbnail itself (rendered lazily below,
-     for the common "サムネタイトルのスタイル固定" case), and a small marker for pins harder to see
+     for the common "文字スタイル固定" case), and a small marker for pins harder to see
      at a glance — an icon rather than text, since a category grid is scanned, not read, and
      spelling out 見出しの絵/本文の絵 would be the longest text on the card for something most
      categories leave on 自動. */
@@ -1987,7 +1987,7 @@ function _categoryTile(c) {
           carry the headline on its own extended backdrop), so it cannot be answered by re-lettering
           a single stored ground for free the way the four-panel grid did. Each slot costs a
           pro-tier generation and is made on request (regenCategorySamplePattern), drawn in the
-          category's own pinned サムネタイトル so what is judged here is the real thing. */ ''}
+          category's own pinned 文字スタイル so what is judged here is the real thing. */ ''}
     ${/* No picture before approval: a suggestion is a question about the topic, and its samples
          are made when it is approved. */ c.status === 'suggested' ? '' : _catPatternGrid(c, v)}
     ${_catTileMapBar(c, v)}
@@ -2012,13 +2012,13 @@ function _categoryTile(c) {
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
         ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
         ${/* The three colours this category will actually be drawn in. Normally they come from its
-              pinned サムネタイトル — every seeded style names a palette, and a style's palette outranks
+              pinned 文字スタイル — every seeded style names a palette, and a style's palette outranks
               a category's — so `via-preset` is the ordinary case rather than the exception.
               The API returns `paletteSource: 'style'` and a null palette when nothing is pinned at
               all; presenting the colours of whichever style the article happens to get as a decision
               would be a lie, so nothing is shown. */ ''}
         ${c.palette ? `<span class="cat-chip cat-pal${c.paletteSource === 'preset' ? ' via-preset' : ''}"
-          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定したサムネタイトル由来' : 'カテゴリ既定（スタイル未指定時）'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
+          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定した文字スタイル由来' : 'マガジン既定（スタイル未指定時）'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
           ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
       </div>
     </div>
@@ -2188,7 +2188,7 @@ function _catShotHeads(c) {
 /* The category's own authored copy, when it has been written.
  *
  * `visual.sampleLines` is written by `hero-style` from the category's definition, readers and
- * palette — the same call that pins its サムネタイトル. It exists so these panels stop depending on
+ * palette — the same call that pins its 文字スタイル. It exists so these panels stop depending on
  * whether the pipeline has run: a category with nothing published used to show one panel, and one
  * with a single article showed the same words twice under two different captions. The copy is
  * authored lines rather than a title string, so the line breaks are decided once and both this
@@ -2295,7 +2295,7 @@ async function _loadCatShots(id) {
    * subject — and it made the grid unreadable as an answer to the question actually being asked,
    * which is whether *this* headline is legible on *this* picture.
    *
-   * So the ground is held constant and only the type moves, which is exactly what the サムネタイトル
+   * So the ground is held constant and only the type moves, which is exactly what the 文字スタイル
    * catalogue does with `_HP_VARIANTS`: one background, 短文/長文 × 中央/左. One variable at a time.
    * The recipe's samples remain the fallback for a category that has never had a picture generated —
    * there, a borrowed ground is strictly better than a synthetic one, and it is at least drawn in
@@ -2424,8 +2424,8 @@ async function _loadCatThumbInto(id) {
   const host = document.querySelector(`#page-articles [data-cat-thumb="${CSS.escape(id)}"]`);
   if (!c || !host) return;
 
-  /* A merged sample, if one has been made: the mapped 絵のレシピ's picture with the mapped
-     サムネタイトル drawn over it — what a thumbnail from this category will actually look like.
+  /* A merged sample, if one has been made: the mapped 画風's picture with the mapped
+     文字スタイル drawn over it — what a thumbnail from this category will actually look like.
      Shown in preference to the title-only preview below, which renders the lettering against a
      synthetic placeholder and so cannot show the one thing worth checking (whether the type
      survives the picture). Not generated here: it costs a pro-tier image call, so it is made by
@@ -3016,11 +3016,15 @@ function _visualSection(c, section) {
    * vanishes on the recipe's actual photograph. This runs the real pipeline once and keeps the
    * result, because a generation costs a pro-tier image call and must be asked for rather than
    * happening whenever the panel opens. */
-  const sample = v.sampleUrl
-    ? `<img src="${esc(v.sampleUrl)}" class="cat-sample-img" alt="${esc(c.name)} のサムネ見本" loading="lazy"
-         onclick="_openLightbox('${esc(v.sampleUrl)}','${esc(c.name)}')">
-       <div class="cat-hint">絵のレシピ＋サムネタイトルを合成した実物です${v.sampleAt ? `（${relTime(v.sampleAt)}）` : ''}</div>`
-    : '<div class="cat-hint">まだ合成見本がありません。下で絵のレシピとサムネタイトルを選んでから作成してください。</div>';
+  /* The magazine's real samples — 中央 and サイド — not the single legacy composite, which stopped
+     being updated when samples moved to two patterns and was showing a 12-day-old picture. */
+  const shots = ['center', 'side'].map((k) => [k, v.samples?.[k]]).filter(([, x]) => x?.url);
+  const sample = shots.length
+    ? `<div class="cat-sample-pair">${shots.map(([k, x]) => `<figure>
+         <img src="${esc(x.url)}" class="cat-sample-img" alt="${esc(c.name)}（${k === 'center' ? '中央' : 'サイド'}）" loading="lazy"
+           onclick="_openLightbox('${esc(x.url)}','${esc(c.name)}')">
+         <figcaption>${k === 'center' ? '中央' : 'サイド'}${x.at ? `・${relTime(x.at)}` : ''}</figcaption></figure>`).join('')}</div>`
+    : '<div class="cat-hint">まだ見本がありません。画風と文字スタイルを選ぶと作られます。</div>';
 
   return section('見た目', summary, `
     <div class="cat-sample-wrap neu-well">
@@ -3045,16 +3049,16 @@ function _visualSection(c, section) {
            picker all read it); the gallery drives it. Renders are free: the bare sample photo is
            reused, no image is generated. -->
       <div class="cat-field cat-wide">
-        <span class="cat-label">サムネタイトルのスタイル</span>
+        <span class="cat-label">文字スタイル</span>
         <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}" hidden
-          onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="サムネタイトルのスタイル">
+          onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="文字スタイル">
           <option value="">未設定（要指定）</option>
         </select>
         <div id="cat-gallery-${c.id}" class="cat-gallery" aria-label="スタイルを見比べて選ぶ">
           <div class="cat-hint">読み込み中…</div>
         </div>
-        <span class="cat-hint">このカテゴリの写真と見本の見出しで描いています。押すと選ばれ、上のプレビューに反映されます。
-          選ぶと、このカテゴリの記事は毎回この装飾で描かれます。話題の幅が広く一つに決められないときだけ「自由指定」に。</span>
+        <span class="cat-hint">このマガジンの写真と見本の見出しで描いています。押すと選ばれ、上のプレビューに反映されます。
+          選ぶと、このマガジンの記事は毎回この装飾で描かれます。話題の幅が広く一つに決められないときだけ「自由指定」に。</span>
       </div>
       <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
            visual.imagePrompt/figurePrompt have been on the category document and honoured by
@@ -3063,14 +3067,14 @@ function _visualSection(c, section) {
            before. Independent choices: a category can fix its cover, its in-body pictures, both,
            or neither. -->
       <label class="cat-field">
-        <span class="cat-label">見出し画像の絵のレシピ</span>
+        <span class="cat-label">見出し画像の画風</span>
         <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
           <option value="">自動（記事ごとに選ぶ）</option>
         </select>
-        <span class="cat-hint">サムネタイトル（表紙）の写真・挿絵の作風を固定します</span>
+        <span class="cat-hint">文字スタイル（表紙）の写真・挿絵の作風を固定します</span>
       </label>
       <label class="cat-field">
-        <span class="cat-label">本文中の絵のレシピ</span>
+        <span class="cat-label">本文中の画風</span>
         <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
           <option value="">自動（記事ごとに選ぶ）</option>
         </select>
@@ -3691,7 +3695,7 @@ async function catAction(id, action) {
 }
 
 function deleteCategory(id) {
-  showConfirm('このカテゴリを完全に削除しますか？（生成済みの記事は残ります）', async () => {
+  showConfirm('このマガジンを完全に削除しますか？（生成済みの記事は残ります）', async () => {
     await fetch(apiUrl(`/api/article-categories/${id}`), { method: 'DELETE', headers: _authHeaders() }).catch(() => {});
     showToast('削除しました。', 'success');
     closeDetail(); _loadTopics();
@@ -3747,7 +3751,7 @@ async function submitArticleFromUrl() {
 }
 
 async function scoutTopicsNow() {
-  showToast('カテゴリを探しています…（数十秒かかります）', 'info');
+  showToast('マガジンを探しています…（数十秒かかります）', 'info');
   await fetch(apiUrl('/api/article-categories/scout'), { method: 'POST', headers: _authHeaders() }).catch(() => {});
   setTimeout(_loadTopics, 8000);
 }
@@ -3770,7 +3774,7 @@ async function _loadHeroPresets() {
     /* The vocabulary before the cards, because the cards need it.
        Each card now names its palette (「黒字・白フチ・藍」) rather than printing a bare hex, and the
        catalogue those names come from arrives with the vocabulary. Rendering first meant that
-       opening the サムネタイトル tab directly — rather than reaching it via カテゴリ, which happens to
+       opening the 文字スタイル tab directly — rather than reaching it via カテゴリ, which happens to
        load the same list — showed thirteen cards with no colours on them. Awaited rather than
        re-rendered on arrival: it is one small request, and a card that changes under the reader is
        worse than one that appears a moment later. */
@@ -3795,7 +3799,7 @@ function _renderHeroPresets() {
   if (!listEl) return;
   if (!_heroPresets.length) {
     listEl.className = '';
-    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">テンプレートがありません</div>';
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">スタイルがありません</div>';
     return;
   }
   listEl.className = '';
@@ -3814,7 +3818,7 @@ function _renderHeroPresets() {
   listEl.innerHTML = _hpFaceBar(_heroPresets)
     + (shown.length
       ? shelf('厳選スタイル', `HTML/CSSで描く${curated.length}種。実際の写真の中央・サイドで表示しています`, curated)
-        + shelf('使用中の以前のスタイル', 'カテゴリが今も使っているSVGのスタイル', inUse)
+        + shelf('使用中の以前のスタイル', 'マガジンが今も使っているSVGのスタイル', inUse)
         + (idle.length ? `<details class="hp-shelf-more"><summary>使われていない以前のスタイル（${idle.length}）</summary>
             <div class="hp-card-grid">${idle.map(_heroPresetCard).join('')}</div></details>` : '')
       : '<div style="font-size:11px;color:var(--m);padding:12px">この書体のスタイルはありません</div>');
@@ -3861,8 +3865,8 @@ function _observeHeroPreviews() {
  * hand-picked ramps unrelated to anything else in the style. Nothing left in the catalogue needs a
  * particular ground to be judged.
  *
- * And a ground was never a property of a style anyway: a サムネタイトル preset describes the
- * lettering, the background comes from 絵のレシピ, and `tests/unit/hero-preset-ground.test.js`
+ * And a ground was never a property of a style anyway: a 文字スタイル preset describes the
+ * lettering, the background comes from 画風, and `tests/unit/hero-preset-ground.test.js`
  * pins that a preset carries no ground at all. The switch was offering a choice about the
  * *preview*, in a row of controls that otherwise describe the style — which reads as though the
  * style had a background to choose.
@@ -4005,8 +4009,31 @@ async function _ensureCategoriesForPreview() {
   return CATEGORIES;
 }
 
+/* At most two live renders at a time. Every style card asked for two at once — 38 requests for
+   19 styles — and the slow ones timed out into 「描けません」. */
+let _previewSlots = 2;
+const _previewWaiters = [];
+async function _withPreviewSlot(fn) {
+  if (_previewSlots <= 0) await new Promise((r) => _previewWaiters.push(r));
+  _previewSlots -= 1;
+  try { return await fn(); } finally { _previewSlots += 1; _previewWaiters.shift()?.(); }
+}
+
 async function _loadSatoriPreviewInto(p, grid) {
   const cats = await _ensureCategoriesForPreview();
+  /* A style a magazine is pinned to already has its real 中央/サイド samples stored on that
+     magazine — show those instead of rendering a stand-in. */
+  const pinnedTo = cats.find((c) => c.visual?.heroPreset === p.id && c.visual?.samples?.center?.url);
+  if (pinnedTo) {
+    for (const [i, pattern] of ['center', 'side'].entries()) {
+      const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
+      const url = pinnedTo.visual.samples?.[pattern]?.url;
+      if (!host || !url) continue;
+      const alt = `${p.name}（${pinnedTo.name}・${pattern === 'center' ? '中央' : 'サイド'}）`;
+      host.innerHTML = `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" onclick="_openLightbox('${esc(url)}','${esc(alt)}')">`;
+    }
+    return;
+  }
   const withPhotos = (c) => c?.visual?.samples?.center?.photoUrl || c?.visual?.samples?.side?.photoUrl;
   const cat = cats.find((c) => c.visual?.heroPreset === p.id && withPhotos(c))
     || cats.find((c) => c.id === p.sampleCategory);
@@ -4024,8 +4051,8 @@ async function _loadSatoriPreviewInto(p, grid) {
         photoUrl, lines, emphasis: [], width: 640, article: p.name,
       }),
     }).catch(() => null);
-    let res = await draw();
-    if (!res?.ok) { await new Promise((r) => setTimeout(r, 1200)); res = await draw(); }
+    let res = await _withPreviewSlot(draw);
+    if (!res?.ok) { await new Promise((r) => setTimeout(r, 1200)); res = await _withPreviewSlot(draw); }
     if (!res?.ok) { host.innerHTML = '<div class="hp-card-shot-fail">描けません</div>'; continue; }
     const url = URL.createObjectURL(await res.blob());
     const alt = `${p.name} の見本（${pattern === 'center' ? '中央' : 'サイド'}）`;
@@ -4240,7 +4267,7 @@ function _hpNormalizeVariants(v) {
 
 function _showNewPresetForm() {
   _hpEditingId = null;
-  document.getElementById('hp-editor-title').textContent = '新規テンプレートを作成';
+  document.getElementById('hp-editor-title').textContent = '新しいスタイルを作成';
   document.getElementById('hp-id').value = '';
   document.getElementById('hp-id').disabled = false;
   document.getElementById('hp-name').value = '';
@@ -4654,7 +4681,7 @@ function _hpControl(key, desc, value, unset = false) {
      * show its three colours beside the current choice.
      *
      * 「未設定」 remains selectable but is no longer the norm: every seeded style now names a palette,
-     * because a サムネタイトル is a choice of three related colours as much as of a typeface, and a
+     * because a 文字スタイル is a choice of three related colours as much as of a typeface, and a
      * style that leaves them to the template has not chosen a look. Left in for custom styles being
      * built up a key at a time, and labelled as the gap it is.
      *
@@ -4726,7 +4753,7 @@ function _hpControl(key, desc, value, unset = false) {
   const deadHint = deadWithLines
     ? '<div class="hp-ctl-hint">⚠ この見本は固定行（exampleLines）を使っているため、この項目は描画に反映されません。見本の行ごとの設定（大きさ・色・書体・発光）を使ってください。</div>'
     : '';
-  const unsetHint = unset ? '<div class="hp-ctl-hint">未設定 — 触ると設定されます（テンプレートの値のまま）</div>' : '';
+  const unsetHint = unset ? '<div class="hp-ctl-hint">未設定 — 触ると設定されます（スタイルの既定値のまま）</div>' : '';
   return `<div class="hp-ctl${deadWithLines ? ' hp-ctl-dead' : ''}${unset ? ' hp-ctl-unset' : ''}">${head}${body}${unsetHint}${deadHint}</div>`;
 }
 
@@ -4742,7 +4769,7 @@ const HP_CORE_KEYS = ['palette', 'text'];
 
 /* The background is not this catalogue's to fix.
  *
- * A サムネタイトル preset describes the *lettering*; what sits behind it comes from 絵のレシピ and
+ * A 文字スタイル preset describes the *lettering*; what sits behind it comes from 画風 and
  * from the article's own picture, and differs article to article. A preset that pins `ground` or
  * `usesPhoto` overrides that choice for every article it is ever applied to — so these are taken
  * out of the editor rather than left as a control that quietly outranks the picture.
@@ -4881,7 +4908,7 @@ function _hpGroundNotice(spec) {
   if (!set.length) return '';
   return `<div class="hp-grp hp-ground-note">
     <div class="hp-ctl-hint">この見本は背景も固定しています（<code>${set.map(esc).join(', ')}</code>）。
-    背景は「絵のレシピ」と記事の画像が決めるため、外すことをおすすめします。</div>
+    背景は「画風」と記事の画像が決めるため、外すことをおすすめします。</div>
     <button class="act-btn" onclick="_hpClearGround()">背景の指定を外す</button>
   </div>`;
 }
@@ -5584,7 +5611,7 @@ async function _saveHeroPreset() {
 }
 
 async function _deleteHeroPreset(id) {
-  if (!confirm(`テンプレート「${id}」を削除しますか？`)) return;
+  if (!confirm(`スタイル「${id}」を削除しますか？`)) return;
   try {
     const res = await fetch(apiUrl(`/api/hero-presets/${id}`), { method: 'DELETE', headers: _authHeaders() });
     const data = await res.json().catch(() => ({}));
@@ -5652,7 +5679,9 @@ function _renderImagePrompts() {
     return;
   }
   listEl.className = 'hp-card-grid';
-  listEl.innerHTML = _imagePrompts.map(_imagePromptCard).join('');
+  // Switched-off recipes go last: they are kept for reference, not offered.
+  const ordered = [..._imagePrompts].sort((a, b) => (a.enabled === false) - (b.enabled === false));
+  listEl.innerHTML = ordered.map(_imagePromptCard).join('');
 }
 
 const _IP_KIND = { hero: '見出し画像', figure: '図解' };
@@ -5670,7 +5699,7 @@ function _imagePromptCard(r) {
      output — the same leak image-curator's own doc comment warns against for the Discord card. The
      Japanese description is the recipe's content as far as this display is concerned. */
   return `<div class="hp-card${off ? ' is-off' : ''}">
-    <div class="ip-shots">
+    <div class="ip-shots" style="grid-template-columns:repeat(${Math.max(1, Math.min(3, samples.length))},1fr)">
       ${samples.length
     ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
     : '<div class="ip-shots-empty">見本がまだありません</div>'}
@@ -5762,7 +5791,7 @@ function _openRecipeEditor(id = null) {
   if (id && !r) return;
   _ipEditingId = id;
   const $ = (k) => document.getElementById(`ip-edit-${k}`);
-  $('title').textContent = r ? `「${r.name || r.id}」を編集` : '絵のレシピを空から書く';
+  $('title').textContent = r ? `「${r.name || r.id}」を編集` : '画風を空から書く';
   $('id').value = r?.id || '';
   $('id').disabled = !!r;
   $('kind').value = r?.kind || 'hero';
@@ -5964,7 +5993,7 @@ async function _submitNewRecipe() {
   }
   const data = await res.json();
   _closeNewRecipeModal();
-  showToast(data.confidence === 'low' ? '作成しました（参考画像の傾向がばらついていました。内容を確認してください）' : '絵のレシピを作成しました', 'success');
+  showToast(data.confidence === 'low' ? '作成しました（参考画像の傾向がばらついていました。内容を確認してください）' : '画風を作成しました', 'success');
   _loadImagePrompts();
 }
 

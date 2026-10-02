@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=72">
-<link rel="stylesheet" href="dashboard.css?v=72">
+<link rel="stylesheet" href="../shared/neu.css?v=73">
+<link rel="stylesheet" href="dashboard.css?v=73">
 </head>
 <body>
 
@@ -195,7 +195,7 @@
        own text — so each card leads with the pictures it actually produced. -->
   <section class="page" id="page-image-prompts" data-dest="articles">
     <div class="page-hd">
-      <div class="page-title">絵のレシピ</div>
+      <div class="page-title">画風</div>
       <button class="act-btn" onclick="_openNewRecipeModal()" style="font-size:11px">＋ 参考画像から作る</button>
       <button class="act-btn" onclick="_openRecipeEditor()" style="font-size:11px">＋ 空から書く</button>
       <button class="refresh-btn" onclick="_loadImagePrompts()" style="font-size:11px">&#8635; 更新</button>
@@ -208,7 +208,7 @@
        never hand-types style/composition/lighting/... vocabulary they may not have. -->
   <div class="lightbox-ov" id="ip-new-modal" onclick="_closeNewRecipeModal()">
     <div class="neu-well" style="background:var(--surf);max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()">
-      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">参考画像から絵のレシピを作る</div>
+      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">参考画像から画風を作る</div>
       <div class="cat-hint" style="margin-bottom:12px">似た見た目の画像を1〜5枚。共通する画づくり（構図・光・質感・トーン）をAIが言葉にします。写っている被写体そのものではなく、その作風が抽出されます。「生成する」でAIの画像解析が1回走ります（少額の課金）。見本の画像はまだ作られません。</div>
       <label class="cat-field">
         <span class="cat-label">参考画像（最大5枚）</span>
@@ -237,7 +237,7 @@
        sent to the image model verbatim, which is why they are labelled as prompt text. -->
   <div class="lightbox-ov" id="ip-edit-modal" onclick="_closeRecipeEditor()">
     <div class="neu-well" style="background:var(--surf);max-width:640px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()" role="dialog" aria-labelledby="ip-edit-title">
-      <div id="ip-edit-title" style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">絵のレシピを編集</div>
+      <div id="ip-edit-title" style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">画風を編集</div>
       <div class="cat-hint" style="margin-bottom:12px">名前と説明は一覧用。「画づくり」の各欄はそのまま画像モデルに渡る指示文です（英語のほうが安定します）。保存しても見本は作り直されません。</div>
       <div class="cat-grid">
         <label class="cat-field">
@@ -285,15 +285,15 @@
   <!-- ── HERO PRESETS ──────────────────────────── -->
   <section class="page" id="page-hero-presets" data-dest="articles">
     <div class="page-hd">
-      <div class="page-title">サムネタイトルテンプレート</div>
-      <button class="act-btn" onclick="_showNewPresetForm()" style="font-size:11px">＋ 新規テンプレート</button>
+      <div class="page-title">文字スタイル</div>
+      <button class="act-btn" onclick="_showNewPresetForm()" style="font-size:11px">＋ 新しいスタイル</button>
       <button class="refresh-btn" onclick="_loadHeroPresets()" style="font-size:11px">&#8635; 更新</button>
     </div>
     <div id="hero-presets-list" class="feed-box"></div>
 
     <!-- Edit / Create drawer -->
     <div id="hero-preset-editor" style="display:none;margin-top:20px;padding:18px;background:var(--surf);border-radius:14px;box-shadow:var(--sh)">
-      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:14px" id="hp-editor-title">テンプレートを編集</div>
+      <div style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:14px" id="hp-editor-title">スタイルを編集</div>
 
       <!-- Two-column: form (left) + live preview (right). Both grids are classes rather than
            inline styles, because a `style=` attribute cannot be reached by a media query. While
@@ -1081,8 +1081,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=72"></script>
-<script src="x-affiliate.js?v=72"></script>
-<script src="app.js?v=72"></script>
+<script src="../shared/ui.js?v=73"></script>
+<script src="x-affiliate.js?v=73"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>
