@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '74';
+const DASH_BUILD = '75';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2496,33 +2496,38 @@ function openCategoryDetail(id) {
   _ensureImagePrompts().then(() => _fillCatImagePromptOptions(c.id));
 }
 
-/* The four settings that actually get changed, above the fold and saving on change.
- *
- * They existed already — 頻度 under 読者と頻度, the other three under 記事のかたち — but reaching
- * one meant opening the right fold, changing a select, scrolling to 保存 and pressing it, then
- * waiting for the panel to close and the list to reload. Four interactions and a full round trip
- * to answer "make this weekly instead of daily", which is the most common edit on this screen.
- *
- * Ids are prefixed `catq-` so they do not collide with the section controls below, which
- * `saveCategory` reads by id; each writes through immediately and re-renders the panel so the two
- * copies of a setting can never disagree about what is stored.
+/* ── Controls a thumb can work ────────────────────────────────────────────────
+ * The panel used to be selects inside folds inside a sheet: open a fold, open a select, pick, scroll
+ * to 保存. Everything with a handful of values is now a row of chips you tap once (scrolls sideways
+ * when there are more than fit), numbers are sliders, and only the magazine's name is typed.
+ * Each chip row keeps a hidden input under the old id, so saveCategory / the preview read it as before.
  */
-function _catQuickBar(c, style) {
-  const opts = (list, cur) => (list || [])
-    .map((o) => `<option value="${esc(o.id)}"${o.id === cur ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
-  const field = (key, label, list, cur, path) => `
-    <label class="cat-quickf"><span>${label}</span>
-      <select class="cat-in" id="catq-${key}-${c.id}"
-        onchange="quickSetCategory('${c.id}','${path}',this.value)">${opts(list, cur)}</select>
-    </label>`;
-  return `<div class="cat-quickbar neu-well">
-    ${field('freq', '頻度', CAT_META?.frequencies, c.frequency, 'frequency')}
-    ${field('format', '形式', CAT_META?.formats, style.format, 'style.format')}
-    ${field('voice', '語り口', CAT_META?.voices, style.voice, 'style.voice')}
-    ${field('depth', '情報量', CAT_META?.depths, style.depth, 'style.depth')}
+function _seg(id, opts, cur, { on = '', hint = true } = {}) {
+  const val = cur ?? '';
+  const chosen = opts.find((o) => o.id === val);
+  return `<div class="seg-wrap">
+    <div class="seg" role="radiogroup">
+      <input type="hidden" id="${id}" value="${esc(val)}">
+      ${opts.map((o) => `<button type="button" class="seg-btn${o.id === val ? ' on' : ''}" role="radio"
+        aria-checked="${o.id === val}" data-v="${esc(o.id)}" data-hint="${esc(o.hint || '')}"
+        onclick="_segPick(this)${on ? `;${on.replace(/%v/g, `'${esc(o.id)}'`)}` : ''}">${esc(o.label || o.id)}</button>`).join('')}
+    </div>
+    ${hint ? `<em class="cat-hint" id="${id}-hint">${esc(chosen?.hint || '')}</em>` : ''}
   </div>`;
 }
+function _segPick(btn) {
+  const g = btn.closest('.seg');
+  const input = g.querySelector('input[type=hidden]');
+  input.value = btn.dataset.v;
+  g.querySelectorAll('.seg-btn').forEach((b) => { const on = b === btn; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  const h = document.getElementById(`${input.id}-hint`);
+  if (h) h.textContent = btn.dataset.hint || '';
+}
+const _opts = (list) => (list || []).map((o) => ({ id: o.id, label: o.label || o.id, hint: o.hint || '' }));
 
+/* Saves on tap. These are the settings most often changed, and each is a single value, so there
+   is nothing to batch: the tap is the decision. The panel is not re-rendered — that threw away
+   whatever else was being adjusted — unless the server stored something other than what was sent. */
 async function quickSetCategory(id, path, value) {
   const [head, tail] = path.split('.');
   const body = tail ? { [head]: { [tail]: value } } : { [head]: value };
@@ -2530,16 +2535,37 @@ async function quickSetCategory(id, path, value) {
     method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).catch(() => null);
-  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); openCategoryDetail(id); return; }
   const data = await res.json().catch(() => null);
-  // Re-render from what the server stored, not from what was clicked — normalizeStyle can reject a
-  // value, and a panel that kept showing the rejected one would be lying about the category.
   if (data?.category) {
     const i = CATEGORIES.findIndex((x) => x.id === id);
     if (i >= 0) CATEGORIES[i] = data.category;
-    openCategoryDetail(id);
+    const stored = tail ? data.category[head]?.[tail] : data.category[head];
+    if (stored !== undefined && stored !== value) openCategoryDetail(id);
   }
-  showToast('変更しました。', 'success');
+  showToast('保存しました', 'success');
+}
+
+function _quickToggle(c, path, label, on, hint) {
+  return `<label class="cat-field cat-toggle">
+    <span>${esc(label)}</span>
+    <span class="cat-switch">
+      <input type="checkbox"${on ? ' checked' : ''} onchange="quickSetCategory('${c.id}','${path}',this.checked)">
+      <span class="cat-switch-track" aria-hidden="true"></span>
+    </span>
+    <small>${esc(hint)}</small>
+  </label>`;
+}
+
+/* 相談する: anything better said in words than set with a control — the editorial line, how the
+   headlines read, a new look — goes to Discord as one card, and the operator answers it there.
+   The answer is drafted into choices by the editorial agent (knowledge/category-consult.js). */
+async function consultCategory(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '送っています…'; }
+  const res = await fetch(apiUrl(`/api/article-categories/${id}/consult`), { method: 'POST', headers: _authHeaders() }).catch(() => null);
+  if (btn) { btn.disabled = false; btn.textContent = '相談する'; }
+  showToast(res?.ok ? 'Discord に相談カードを送りました。返信で変えたいことを書いてください。' : '送れませんでした',
+    res?.ok ? 'success' : 'error');
 }
 
 function _categoryEditor(c) {
@@ -2547,135 +2573,99 @@ function _categoryEditor(c) {
   const t = c.targeting || {};
   const r = c.rating || {};
   const style = c.style || {};
-  const m = c.monetization || {};
+  const v = c.visual || {};
   const fmt = _CAT_FMT[style.format] || 'analysis';
   const lbl = (list, id) => (list || []).find(o => o.id === id)?.label || id || '—';
   const freqLabel = lbl(CAT_META?.frequencies, c.frequency);
+  const q = (path) => `quickSetCategory('${c.id}','${path}',%v)`;
 
-  const sel = (id, opts) => `<select id="${id}" class="cat-in">${opts}</select>`;
-  const genderOpts = [['any', '男女問わず'], ['male', '男性中心'], ['female', '女性中心']].map(([v, l]) =>
-    `<option value="${v}"${v === (t.gender || 'any') ? ' selected' : ''}>${l}</option>`).join('');
-  const scaleOpts = [['mass', 'マス（幅広い）'], ['niche', 'ニッチ（狭く深い）']].map(([v, l]) =>
-    `<option value="${v}"${v === (t.scale || 'mass') ? ' selected' : ''}>${l}</option>`).join('');
-
-  /* What this category can actually do from where it is.
-   *
-   * The bar used to show all five buttons at every status, which was wrong in two directions.
-   * 「却下」 was a dead end — there was no way back from it, even though the resume endpoint maps
-   * blocked → active perfectly well. And 「今すぐ1本」 was offered on categories that were never
-   * approved, or were explicitly rejected; the endpoint has no status guard, so pressing it really
-   * did write and publish an article for a topic the operator had turned down.
-   *
-   * So the rule is: an action appears only where it means something. A button that is present but
-   * wrong is worse than one that is absent, because the operator reasonably assumes the interface
-   * would not offer an action it intends to refuse. */
-  const _act = (action, label, kind = '') =>
-    `<button class="act-btn${kind ? ` ${kind}` : ''}" onclick="catAction('${c.id}','${action}')">${label}</button>`;
-
-  const statusActions = {
-    suggested: `${_act('approve', '承認', 'resume')}${_act('reject', '却下', 'cancel')}`,
-    paused:    _act('resume', '再開', 'resume'),
-    active:    _act('pause', '停止', 'stop'),
-    // Rejected is a decision, not a deletion — it has to be reversible without going through
-    // delete-and-recreate, which would lose the editorial prompt and every article written under it.
-    blocked:   _act('resume', '復帰', 'resume'),
-  }[c.status] ?? '';
-
-  /* Writing one now only makes sense once the topic has been approved. `paused` still qualifies:
-     it means "nothing on the schedule", not "nothing at all", and an off-cadence one-off is a
-     legitimate reason to be on this screen. */
+  /* What this magazine can do from where it is — only actions that mean something at this status
+     (a rejected one can be brought back; 今すぐ1本 only once approved). The primary one stays in the
+     footer next to 保存; the rest, and 削除, live behind ⋯ so the irreversible button is never the
+     neighbour of the everyday one. */
+  const statusPrimary = {
+    suggested: ['approve', '承認'], paused: ['resume', '再開'], blocked: ['resume', '復帰'],
+  }[c.status];
   const canGenerate = c.status === 'active' || c.status === 'paused';
+  _CARD_ACTS.set(`cat:${c.id}`, {
+    title: c.name,
+    items: [
+      ...(c.status === 'suggested' ? [{ label: '却下', hint: '今後スカウトから再提案されません', run: () => catAction(c.id, 'reject') }] : []),
+      ...(c.status === 'active' ? [{ label: '停止', hint: '定期の生成を止める（再開できます）', run: () => catAction(c.id, 'pause') }] : []),
+      { label: '中央の見本を作り直す', hint: '画面の設定で描き直します（pro 課金・30秒ほど）', run: () => regenCategorySamplePattern(c.id, 'center') },
+      { label: 'サイドの見本を作り直す', hint: '画面の設定で描き直します（pro 課金・30秒ほど）', run: () => regenCategorySamplePattern(c.id, 'side') },
+      ...(canGenerate ? [{ label: '今すぐ1本書く', hint: '予定とは別に1本だけ書きます', run: () => generateNow(c.id) }] : []),
+      ...(c.promptPrevious && c.promptPrevious !== c.prompt
+        ? [{ label: '直前の編集方針に戻す', run: () => revertCategoryPrompt(c.id) }] : []),
+      { label: '削除', danger: true, hint: '元に戻せません（生成済みの記事は残ります）', run: () => deleteCategory(c.id) },
+    ],
+  });
 
-  // Only the editorial prompt is open by default — it is the lever that matters and the one thing
-  // you come here to change. Everything else states its current value on the closed row, so the
-  // panel answers "how is this configured" without expanding anything.
-  const section = (title, summary, body, open = false) => `
-    <details class="neu-sec"${open ? ' open' : ''}>
-      <summary>${title}<span class="sum-val">${summary}</span><span class="chev">▶</span></summary>
-      <div class="neu-sec-body">${body}</div>
-    </details>`;
+  const shots = ['center', 'side'].map((k) => [k, v.samples?.[k]]).filter(([, x]) => x?.url);
+  const ageMin = t.ageMin ?? 25, ageMax = t.ageMax ?? 45;
 
   return `
-    <div class="p-header">
+    <div class="p-header cat-head">
       <i class="ni ni-xl ni-fmt-${fmt}" aria-hidden="true"></i>
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="p-title">${esc(c.name)}</div>
         <div class="p-sub">${st.label} · ${freqLabel} · ${c.articleCount || 0}本${r.count ? ` · ★${r.average}` : ''}</div>
       </div>
+      <button class="act-more is-inline" aria-label="その他の操作" onclick="_openCardSheet('cat:${c.id}')">⋯</button>
     </div>
 
-    <div class="neu-well" style="font-size:11.5px;color:var(--m);line-height:1.65">${esc(c.definition || '')}</div>
+    ${shots.length ? `<div class="cat-sample-pair">${shots.map(([k, x]) => `<figure>
+      <img src="${esc(x.url)}" class="cat-sample-img" alt="${esc(c.name)}（${k === 'center' ? '中央' : 'サイド'}）" loading="lazy"
+        onclick="_openLightbox('${esc(x.url)}','${esc(c.name)}')">
+      <figcaption>${k === 'center' ? '中央' : 'サイド'}</figcaption></figure>`).join('')}</div>` : ''}
 
-    ${_catQuickBar(c, style)}
+    <button class="consult-btn" onclick="consultCategory('${c.id}',this)">相談する</button>
+    <div class="cat-hint" style="text-align:center;margin:-4px 0 6px">方針・見出しの書き方・新しい見た目など、言葉で頼みたいことは Discord で</div>
 
-    ${/* Read-only on purpose. This text goes into every writing brief this category ever produces,
-          so changing it is not a per-article edit — it redirects the whole stream. It now changes
-          the way an image recipe changes: drafted into a couple of concrete alternatives, shown
-          next to what is in force, and chosen with a button in Discord. */ ''}
-    ${/* The policy text itself is not shown. It is long, it is written for an agent rather than for
-          a person, and it is not edited here any more — so printing it only pushed everything that
-          *is* actionable below the fold. What stays is the way to change it. */ ''}
-    ${section('編集方針', 'Discordで変更', `
-      <div class="cat-hint">毎回の記事ブリーフにそのまま渡され、以後すべての記事に効きます。変更は Discord の承認カードで決めます。</div>
-      <div class="cat-prompt-acts">
-        <input class="form-input" id="cat-promptnote-${c.id}" type="text"
-          placeholder="どう変えたいか（例: もう少し軽く／事例を必ず1つ）— 空でも可">
-        <button class="act-btn" onclick="proposeCategoryPrompt('${c.id}')">Discordで変更を相談</button>
-      </div>
-      ${c.promptPrevious && c.promptPrevious !== c.prompt
-        ? `<button class="act-btn" style="margin-top:8px" onclick="revertCategoryPrompt('${c.id}')">直前の方針に戻す</button>` : ''}`)}
+    <div class="cat-block">
+      <div class="cat-block-hd">書き方 <small>タップで保存</small></div>
+      <div class="cat-row"><span>頻度</span>${_seg(`catq-freq-${c.id}`, _opts(CAT_META?.frequencies), c.frequency, { on: q('frequency') })}</div>
+      <div class="cat-row"><span>形式</span>${_seg(`catq-format-${c.id}`, _opts(CAT_META?.formats), style.format, { on: q('style.format') })}</div>
+      <div class="cat-row"><span>語り口</span>${_seg(`catq-voice-${c.id}`, _opts(CAT_META?.voices), style.voice, { on: q('style.voice') })}</div>
+      <div class="cat-row"><span>情報量</span>${_seg(`catq-depth-${c.id}`, _opts(CAT_META?.depths), style.depth, { on: q('style.depth') })}</div>
+      <div class="cat-row"><span>図版</span>${_seg(`catq-vd-${c.id}`, _opts(CAT_META?.visualDensities), style.visualDensity, { on: q('style.visualDensity') })}</div>
+      <div class="cat-row"><span>始め方</span>${_seg(`catq-approval-${c.id}`,
+        _opts(CAT_META?.approvalModes || [{ id: 'auto', label: '自動' }, { id: 'propose', label: '案を選ぶ' }]),
+        c.approvalMode ?? 'auto', { on: q('approvalMode') })}</div>
+      ${_quickToggle(c, 'style.enrichQA', '読者の疑問を織り込む', style.enrichQA !== false, '1本あたり2エージェント分のコスト')}
+      ${_quickToggle(c, 'style.heroTitle', '見出し画像にタイトルを入れる', style.heroTitle !== false, 'note のタイムラインでは画像が先に読まれます')}
+    </div>
 
-    ${_visualSection(c, section)}
+    ${_visualSection(c)}
 
-    ${section('動かし方',
-      `${(c.approvalMode ?? 'auto') === 'propose' ? '案を選ぶ' : '自動'} · ${lbl(CAT_META?.visualDensities, style.visualDensity)} · ${style.enrichQA ? '読者Q&A有' : '読者Q&A無'} · ${style.heroTitle === false ? '画像文字なし' : '画像に文字'}`, `
-      ${/* The 「記事のかたち」 section used to sit above this one holding 形式・語り口・情報量・ビジュアル.
-            The first three were identical selects over identical options to the quick bar a few
-            pixels higher — the same decision offered twice on one screen, and disagreeing about when
-            it takes effect, since the quick bar saves on change and these waited for 保存. Removing
-            them left a section with one control and a summary line restating it, so the one control
-            moved here: how many pictures an article carries is the same kind of decision as whether
-            to weave in reader questions. Six sections became five. */ ''}
-      <div class="cat-run neu-well">
-        ${_styleField(c, 'visualDensity', 'ビジュアル', CAT_META?.visualDensities)}
-        <label class="cat-field"><span>サイクルの開始</span>
-          ${sel(`cat-approval-${c.id}`, (CAT_META?.approvalModes || [{ id: 'auto', label: '自動' }, { id: 'propose', label: '案を選ぶ' }])
-            .map(o => `<option value="${o.id}"${o.id === (c.approvalMode ?? 'auto') ? ' selected' : ''}>${esc(o.label)}</option>`).join(''))}
-          <small>「案を選ぶ」にすると、記事案を3〜4本出して #approvals で選んでから執筆します。</small>
-        </label>
-        ${_catToggle(c, 'enrichQA', '読者の疑問を織り込む', style.enrichQA !== false,
-          '書き上げたあと、読者が抱く疑問を洗い出して本文に溶かし込みます。1本あたり2エージェント分のコスト。')}
-        ${_catToggle(c, 'heroTitle', '見出し画像にタイトルを入れる', style.heroTitle !== false,
-          'note のタイムラインでは画像が先に読まれます。10〜15字を大きく載せます。')}
-      </div>`)}
+    <div class="cat-block">
+      <div class="cat-block-hd">読者</div>
+      <div class="cat-row"><span>年齢 <b id="cat-age-lbl-${c.id}">${ageMin}〜${ageMax}歳</b></span>
+        <div class="cat-range2">
+          <input type="range" id="cat-agemin-${c.id}" min="10" max="80" step="1" value="${ageMin}" oninput="_ageSlide('${c.id}','min')">
+          <input type="range" id="cat-agemax-${c.id}" min="10" max="80" step="1" value="${ageMax}" oninput="_ageSlide('${c.id}','max')">
+        </div></div>
+      <div class="cat-row"><span>性別</span>${_seg(`cat-gender-${c.id}`, [{ id: 'any', label: '問わず' }, { id: 'male', label: '男性中心' }, { id: 'female', label: '女性中心' }], t.gender || 'any', { hint: false })}</div>
+      <div class="cat-row"><span>規模</span>${_seg(`cat-scale-${c.id}`, [{ id: 'mass', label: 'マス' }, { id: 'niche', label: 'ニッチ' }], t.scale || 'mass', { hint: false })}</div>
+      <input type="hidden" id="cat-spec-${c.id}" value="${esc(t.specialization || '')}">
+      ${t.specialization ? `<div class="cat-hint">専門性: ${esc(t.specialization)}（変えるときは相談する）</div>` : ''}
+    </div>
 
-    ${section('読者と頻度',
-      `${t.ageMin ?? 25}〜${t.ageMax ?? 45}歳 · ${(t.scale || 'mass') === 'niche' ? 'ニッチ' : 'マス'} · ${freqLabel}`, `
-      <div class="cat-grid neu-well">
-        <label class="cat-field"><span>年齢</span><span class="cat-age">
-          <input type="number" class="cat-in" id="cat-agemin-${c.id}" value="${t.ageMin ?? 25}" min="10" max="99">
-          <span>〜</span>
-          <input type="number" class="cat-in" id="cat-agemax-${c.id}" value="${t.ageMax ?? 45}" min="10" max="99">
-        </span></label>
-        <label class="cat-field"><span>性別</span>${sel(`cat-gender-${c.id}`, genderOpts)}</label>
-        <label class="cat-field"><span>読者規模</span>${sel(`cat-scale-${c.id}`, scaleOpts)}</label>
-        <label class="cat-field cat-wide"><span>専門性</span>
-          <input type="text" class="cat-in" id="cat-spec-${c.id}" value="${esc(t.specialization || '')}"
-            placeholder="空欄なら専門を前提としない"></label>
-      </div>`)}
-
-    ${section('収益化', lbl(CAT_META?.monetizationModes, m.mode || 'none'),
-      `<div class="neu-well">${_moneyField(c)}</div>`)}
+    <div class="cat-block">
+      <div class="cat-block-hd">収益化</div>
+      ${_moneyField(c)}
+    </div>
 
     <div class="p-actions">
-      <button class="save-btn" onclick="saveCategory('${c.id}')">保存</button>
-      ${statusActions}
-      ${canGenerate ? `<button class="act-btn" onclick="generateNow('${c.id}')">今すぐ1本</button>` : ''}
-      <!-- Deleting is the only action here that cannot be undone — 却下 is a status the category
-           comes back from. That difference is what the danger tier marks, and it has to be visible
-           without hovering, because the device this is mostly read on has no hover. -->
-      <button class="act-btn danger" onclick="deleteCategory('${c.id}')">削除</button>
+      <button class="save-btn" onclick="saveCategory('${c.id}')">見た目と読者を保存</button>
+      ${statusPrimary ? `<button class="act-btn resume" onclick="catAction('${c.id}','${statusPrimary[0]}')">${statusPrimary[1]}</button>` : ''}
     </div>`;
+}
+
+function _ageSlide(id, which) {
+  const lo = document.getElementById(`cat-agemin-${id}`), hi = document.getElementById(`cat-agemax-${id}`);
+  if (Number(lo.value) > Number(hi.value)) (which === 'min' ? hi : lo).value = (which === 'min' ? lo : hi).value;
+  document.getElementById(`cat-age-lbl-${id}`).textContent = `${lo.value}〜${hi.value}歳`;
 }
 
 /* ── note reception ──────────────────────────────────────────────────────────
@@ -2939,24 +2929,17 @@ function _styleHint(selectId) {
 // the number changes anything — it sets the minimum length the article must reach.
 function _moneyField(c) {
   const m = c.monetization || {};
-  const opts = CAT_META?.monetizationModes || [];
   const cur = m.mode || 'none';
-  const chosen = opts.find(o => o.id === cur) || {};
-  return `<div class="cat-grid cat-money">
-    <label class="cat-field cat-style-field"><span>方針</span>
-      <select id="cat-money-${c.id}" class="cat-in" onchange="_moneyChanged('${c.id}')"
-        data-hints='${esc(JSON.stringify(Object.fromEntries(opts.map(o => [o.id, o.hint || '']))))}'>
-        ${opts.map(o => `<option value="${o.id}"${o.id === cur ? ' selected' : ''}>${esc(o.label || o.id)}</option>`).join('')}
-      </select>
-      <em class="cat-hint" id="cat-money-${c.id}-hint">${esc(chosen.hint || '')}</em></label>
-    <label class="cat-field" id="cat-price-wrap-${c.id}" style="${cur === 'paid' ? '' : 'display:none'}">
-      <span>想定価格（円）</span>
-      <input type="number" class="cat-in" id="cat-price-${c.id}" value="${m.priceYen || 0}" min="0" max="50000" step="100"
-        onchange="_moneyChanged('${c.id}')">
-      <em class="cat-hint" id="cat-price-${c.id}-hint">${esc(_priceHint(m.priceYen || 0))}</em></label>
-    <label class="cat-field cat-wide"><span>メモ（ライターへの補足指示）</span>
-      <input type="text" class="cat-in" id="cat-moneynote-${c.id}" value="${esc(m.notes || '')}"
-        placeholder="例: 入門書を紹介できる回があれば記録すること"></label>
+  const price = m.priceYen || 0;
+  return `<div class="cat-money">
+    ${_seg(`cat-money-${c.id}`, _opts(CAT_META?.monetizationModes), cur, { on: `_moneyChanged('${c.id}')` })}
+    <div class="cat-row" id="cat-price-wrap-${c.id}" style="${cur === 'paid' ? '' : 'display:none'}">
+      <span>想定価格 <b id="cat-price-lbl-${c.id}">${price}円</b></span>
+      <input type="range" class="cat-range" id="cat-price-${c.id}" min="0" max="3000" step="100" value="${price}"
+        oninput="_moneyChanged('${c.id}')">
+      <em class="cat-hint" id="cat-price-${c.id}-hint">${esc(_priceHint(price))}</em>
+    </div>
+    <input type="hidden" id="cat-moneynote-${c.id}" value="${esc(m.notes || '')}">
   </div>`;
 }
 
@@ -2971,12 +2954,13 @@ function _priceHint(yen) {
 }
 
 function _moneyChanged(id) {
-  _styleHint(`cat-money-${id}`);
   const mode = _catVal(`cat-money-${id}`);
   const wrap = document.getElementById(`cat-price-wrap-${id}`);
   if (wrap) wrap.style.display = mode === 'paid' ? '' : 'none';
   const ph = document.getElementById(`cat-price-${id}-hint`);
   if (ph) ph.textContent = _priceHint(_catVal(`cat-price-${id}`));
+  const pl = document.getElementById(`cat-price-lbl-${id}`);
+  if (pl) pl.textContent = `${_catVal(`cat-price-${id}`)}円`;
 }
 
 const _catVal = (id) => document.getElementById(id)?.value ?? '';
@@ -2989,150 +2973,78 @@ const _catVal = (id) => document.getElementById(id)?.value ?? '';
  *
  * Blank means "decide from the article", which is what every category does today, so an untouched
  * magazine keeps behaving exactly as it does now. */
-function _visualSection(c, section) {
+function _visualSection(c) {
   const v = c.visual || {};
-  const tplOpts = [{ id: '', label: '自動（記事に合わせる）' }, ...(CAT_META?.heroTemplates || [])]
-    .map((t) => `<option value="${esc(t.id)}"${t.id === (v.template || '') ? ' selected' : ''}>${esc(t.label)}</option>`)
-    .join('');
-
-  const swatch = (id, value, label, hint) => `
-    <label class="cat-field">
-      <span class="cat-label">${label}</span>
-      <span class="cat-colour">
-        <input type="color" id="cat-${id}-${c.id}" value="${esc(value || '#888888')}"
-          class="cat-swatch" aria-label="${label}" oninput="_syncSwatch('${c.id}','${id}',true);queueCatPreview('${c.id}')">
-        <input type="text" id="cat-${id}hex-${c.id}" value="${esc(value || '')}" placeholder="未設定"
-          class="cat-in cat-hex" maxlength="7" spellcheck="false"
-          oninput="_syncSwatch('${c.id}','${id}');queueCatPreview('${c.id}')">
-      </span>
-      <span class="cat-hint">${hint}</span>
-    </label>`;
-
-  const summary = v.eyebrow || v.template || v.accent || v.align ? (v.eyebrow || '指定あり') : '自動';
-  /* The two halves shown together, on a real picture.
-   *
-   * The preview below this one draws the lettering over a synthetic placeholder, which is fine for
-   * judging the type and useless for judging the pair — pale type reads cleanly on flat grey and
-   * vanishes on the recipe's actual photograph. This runs the real pipeline once and keeps the
-   * result, because a generation costs a pro-tier image call and must be asked for rather than
-   * happening whenever the panel opens. */
-  /* The magazine's real samples — 中央 and サイド — not the single legacy composite, which stopped
-     being updated when samples moved to two patterns and was showing a 12-day-old picture. */
-  const shots = ['center', 'side'].map((k) => [k, v.samples?.[k]]).filter(([, x]) => x?.url);
-  const sample = shots.length
-    ? `<div class="cat-sample-pair">${shots.map(([k, x]) => `<figure>
-         <img src="${esc(x.url)}" class="cat-sample-img" alt="${esc(c.name)}（${k === 'center' ? '中央' : 'サイド'}）" loading="lazy"
-           onclick="_openLightbox('${esc(x.url)}','${esc(c.name)}')">
-         <figcaption>${k === 'center' ? '中央' : 'サイド'}${x.at ? `・${relTime(x.at)}` : ''}</figcaption></figure>`).join('')}</div>`
-    : '<div class="cat-hint">まだ見本がありません。画風と文字スタイルを選ぶと作られます。</div>';
-
-  return section('見た目', summary, `
-    <div class="cat-sample-wrap neu-well">
-      <div class="cat-sample-hd">合成見本</div>
-      ${sample}
-      <button class="act-btn" id="cat-sample-btn-${c.id}" onclick="regenCategorySample('${c.id}')"
-        title="画像を1枚生成します（pro課金）">${v.sampleUrl ? '見本を作り直す' : '見本を作る'}</button>
-    </div>
-    <div class="cat-preview-wrap neu-well">
+  const on = `queueCatPreview('${c.id}')`;
+  /* Tag words are picked from the name rather than typed: tap a word of the magazine's name to
+     make it a coloured tag. Re-drawn when the name changes. */
+  return `<div class="cat-block">
+    <div class="cat-block-hd">見た目</div>
+    <div class="cat-preview-wrap">
       <img id="cat-preview-${c.id}" class="cat-preview-img" alt="見出し画像プレビュー" loading="lazy">
       <div id="cat-preview-status-${c.id}" class="cat-hint" style="margin-top:6px">読み込み中…</div>
     </div>
-    <div class="cat-grid neu-well">
-      <label class="cat-field">
-        <span class="cat-label">サムネの型</span>
-        <select id="cat-tpl-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">${tplOpts}</select>
-        <span class="cat-hint">空欄なら記事の種類と読者層から自動で選びます</span>
-      </label>
-      <!-- The style is chosen by eye, on this magazine's own photograph and headline, rather than
-           from a list of names — 「連載コラム」 says nothing about whether it survives this photo.
-           The <select> stays as the saved value (saveCategory, refreshCatPreview and the tile
-           picker all read it); the gallery drives it. Renders are free: the bare sample photo is
-           reused, no image is generated. -->
-      <div class="cat-field cat-wide">
-        <span class="cat-label">文字スタイル</span>
-        <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}" hidden
-          onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="文字スタイル">
-          <option value="">未設定（要指定）</option>
-        </select>
-        <div id="cat-gallery-${c.id}" class="cat-gallery" aria-label="スタイルを見比べて選ぶ">
-          <div class="cat-hint">読み込み中…</div>
-        </div>
-        <span class="cat-hint">このマガジンの写真と見本の見出しで描いています。押すと選ばれ、上のプレビューに反映されます。
-          選ぶと、このマガジンの記事は毎回この装飾で描かれます。話題の幅が広く一つに決められないときだけ「自由指定」に。</span>
+    <div class="cat-row cat-wide"><span>文字スタイル</span>
+      <select id="cat-preset-${c.id}" class="cat-in" data-selected="${esc(v.heroPreset || '')}" hidden
+        onchange="queueCatPreview('${c.id}');_markCatGallery('${c.id}')" aria-label="文字スタイル">
+        <option value="">未設定（要指定）</option>
+      </select>
+      <div id="cat-gallery-${c.id}" class="cat-gallery" aria-label="スタイルを見比べて選ぶ">
+        <div class="cat-hint">読み込み中…</div>
       </div>
-      <!-- The picture, as distinct from the type treatment above it. Same story as heroPreset:
-           visual.imagePrompt/figurePrompt have been on the category document and honoured by
-           resolveRecipe (hero) / _generateImage (figure) — the figure side only as of the same
-           change that added this second field, since _generateImage never passed a pinned id
-           before. Independent choices: a category can fix its cover, its in-body pictures, both,
-           or neither. -->
-      <label class="cat-field">
-        <span class="cat-label">見出し画像の画風</span>
-        <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
-          <option value="">自動（記事ごとに選ぶ）</option>
-        </select>
-        <span class="cat-hint">文字スタイル（表紙）の写真・挿絵の作風を固定します</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">本文中の画風</span>
-        <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
-          <option value="">自動（記事ごとに選ぶ）</option>
-        </select>
-        <span class="cat-hint">記事本文に入る図版・挿絵の作風を固定します。見出し画像とは別に選べます</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">マガジン名</span>
-        <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
-          value="${esc(v.eyebrow || '')}" placeholder="未設定" oninput="queueCatPreview('${c.id}')">
-        <span class="cat-hint">毎回同じ位置に出るので、一覧で見分けがつくようになります</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">マガジン名の置き方</span>
-        <select id="cat-eyeplace-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
-          ${[['', '見出しの上'], ['corner', '角のマーク']]
-            .map(([val, l]) => `<option value="${val}"${val === (v.eyebrowPlacement || '') ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <span class="cat-hint">角のマークは写真を邪魔しにくく、連載らしく見えます</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">タグにする語</span>
-        <input type="text" id="cat-eyetags-${c.id}" class="cat-in" maxlength="60"
-          value="${esc((v.eyebrowEmphasis || []).join('、'))}" placeholder="なし" oninput="queueCatPreview('${c.id}')">
-        <span class="cat-hint">マガジン名のうち色付きのタグにする部分。「、」区切り。名前全体を入れると全体がタグになります</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">文字の横位置</span>
-        <select id="cat-align-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
-          ${[['', 'スタイルにまかせる'], ['left', '左揃え（雑誌的）'], ['center', '中央（ポスター的）'], ['right', '右揃え']]
-            .map(([val, l]) => `<option value="${val}"${val === (v.align || '') ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <span class="cat-hint">写真の主役と重なるときに動かします</span>
-      </label>
-      <label class="cat-field">
-        <span class="cat-label">文字の縦位置</span>
-        <select id="cat-anchor-${c.id}" class="cat-in" onchange="queueCatPreview('${c.id}')">
-          ${[['', 'スタイルにまかせる'], ['top', '上'], ['center', '中央'], ['bottom', '下']]
-            .map(([val, l]) => `<option value="${val}"${val === (v.anchor || '') ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <span class="cat-hint">顔や主役が写真の上にあるなら「下」に</span>
-      </label>
-      <div class="cat-field cat-wide">
-        <span class="cat-label">配色</span>
-        <select id="cat-palette-${c.id}" class="cat-in" data-selected="${esc(v.palette || '')}"
-          onchange="_showCatPalette('${c.id}');queueCatPreview('${c.id}')" aria-label="配色">
-          <option value="">スタイルの配色のまま</option>
-        </select>
-        <div id="cat-palette-strip-${c.id}" class="cat-pal-strip"></div>
-        <span class="cat-hint">塗り・縁・強調の3色の組。雑誌の色を毎回固定したいときだけ選びます。スタイルの色より優先されます</span>
-      </div>
-      <details class="cat-adv cat-wide"${v.accent ? ' open' : ''}>
-        <summary>細かい上書き（通常は不要）</summary>
-        ${swatch('accent', v.accent, '強調の色', 'スタイルと配色の強調色より優先されます。空欄でスタイルに戻ります')}
-      </details>
     </div>
-    <div style="font-size:9.5px;color:var(--m2);margin-top:8px;line-height:1.5">
-      A/Bテストが動いている間は、そちらの割り当てが優先されます。
-    </div>`);
+    <div class="cat-row"><span>マガジン名</span>
+      <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
+        value="${esc(v.eyebrow || '')}" placeholder="未設定" oninput="_renderEyeTags('${c.id}');${on}">
+    </div>
+    <div class="cat-row"><span>タグにする語 <small>タップで切替</small></span>
+      <input type="hidden" id="cat-eyetags-${c.id}" value="${esc((v.eyebrowEmphasis || []).join('、'))}">
+      <div class="seg is-multi" id="cat-eyetags-chips-${c.id}">${_eyeTagChips(c.id, v.eyebrow || '', v.eyebrowEmphasis || [])}</div>
+    </div>
+    <div class="cat-row"><span>名前の置き方</span>${_seg(`cat-eyeplace-${c.id}`, [{ id: '', label: '見出しの上' }, { id: 'corner', label: '角のマーク' }], v.eyebrowPlacement || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>文字の横位置</span>${_seg(`cat-align-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], v.align || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>文字の縦位置</span>${_seg(`cat-anchor-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], v.anchor || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>見出し画像の画風</span>
+      <select id="cat-imgprompt-${c.id}" class="cat-in" data-selected="${esc(v.imagePrompt || '')}">
+        <option value="">自動（記事ごとに選ぶ）</option>
+      </select></div>
+    <div class="cat-row"><span>本文中の画風</span>
+      <select id="cat-figprompt-${c.id}" class="cat-in" data-selected="${esc(v.figurePrompt || '')}">
+        <option value="">自動（記事ごとに選ぶ）</option>
+      </select></div>
+    <div class="cat-row"><span>配色</span>
+      <select id="cat-palette-${c.id}" class="cat-in" data-selected="${esc(v.palette || '')}"
+        onchange="_showCatPalette('${c.id}');${on}" aria-label="配色">
+        <option value="">スタイルの配色のまま</option>
+      </select>
+      <div id="cat-palette-strip-${c.id}" class="cat-pal-strip"></div></div>
+    ${/* Kept so 保存 writes back what is stored: the template is irrelevant to HTML styles, and the
+          accent override is a colour picker nobody should need — both are agent territory now. */ ''}
+    <input type="hidden" id="cat-tpl-${c.id}" value="${esc(v.template || '')}">
+    <input type="hidden" id="cat-accenthex-${c.id}" value="${esc(v.accent || '')}">
+  </div>`;
+}
+
+const _eyeWords = (name) => String(name || '').split(/[\s、,・／/｜|]+/).map((w) => w.trim()).filter(Boolean);
+function _eyeTagChips(id, name, chosen) {
+  const words = _eyeWords(name);
+  if (!words.length) return '<span class="cat-hint">マガジン名を入れると選べます</span>';
+  // A name with no separators is one word; tagging it means the whole name becomes the tag.
+  return words.map((w) => `<button type="button" class="seg-btn${chosen.includes(w) ? ' on' : ''}"
+    onclick="_toggleEyeTag('${id}',this)" data-v="${esc(w)}">${esc(w)}</button>`).join('');
+}
+function _toggleEyeTag(id, btn) {
+  btn.classList.toggle('on');
+  const box = document.getElementById(`cat-eyetags-chips-${id}`);
+  document.getElementById(`cat-eyetags-${id}`).value =
+    [...box.querySelectorAll('.seg-btn.on')].map((b) => b.dataset.v).join('、');
+  queueCatPreview(id);
+}
+function _renderEyeTags(id) {
+  const name = _catVal(`cat-eyebrow-${id}`);
+  const keep = _catVal(`cat-eyetags-${id}`).split('、').filter((w) => _eyeWords(name).includes(w));
+  document.getElementById(`cat-eyetags-${id}`).value = keep.join('、');
+  document.getElementById(`cat-eyetags-chips-${id}`).innerHTML = _eyeTagChips(id, name, keep);
 }
 
 /* Keep the picker and the hex box in step. The text box is the one that can be cleared — a colour
@@ -3436,7 +3348,6 @@ async function refreshCatPreview(id) {
    commits the pickers before rendering against them. Those must not close the panel the operator
    is still working in, nor claim "保存しました" for an action that has not finished yet. */
 async function saveCategory(id, { silent = false } = {}) {
-  const chk = (k) => !!document.getElementById(`cat-${k}-${id}`)?.checked;
   const body = {
     // `prompt` deliberately absent: it is changed by approving a rewrite in Discord, not by 保存.
     // Sending it from here would write back whatever the panel happened to be showing and quietly
@@ -3445,12 +3356,8 @@ async function saveCategory(id, { silent = false } = {}) {
        and PATCHes them on change. Leaving them here would be worse than redundant — `_catVal`
        returns '' for an element that is not on the page, so 保存 would send four empty values and
        silently undo whatever the quick bar had just set. */
-    approvalMode: _catVal(`cat-approval-${id}`),
-    style: {
-      visualDensity: _catVal(`cat-visualDensity-${id}`),
-      enrichQA: chk('enrichQA'),
-      heroTitle: chk('heroTitle'),
-    },
+    /* approvalMode and style.* are absent for the same reason: they save on tap now, and sending
+       them from here would overwrite a tap made after the panel opened with the panel's old copy. */
     monetization: {
       mode: _catVal(`cat-money-${id}`),
       priceYen: Number(_catVal(`cat-price-${id}`)) || 0,
@@ -3616,7 +3523,7 @@ async function _regenCategorySampleNow(id) {
      quick bar now owns and which no longer exists in the panel — so this silently became "never in
      the editor", and pressing 絵を作り直す from the open panel would have regenerated against the
      *stored* settings rather than the unsaved ones on screen. */
-  const inEditor = !!document.getElementById(`cat-approval-${id}`);
+  const inEditor = !!document.getElementById(`cat-agemin-${id}`);
   const btn = document.getElementById(`cat-sample-btn-${id}`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…（30秒ほど）'; }
   try {
@@ -3655,7 +3562,7 @@ async function regenCategorySamplePattern(id, pattern) {
     `${label}パターンを、${recipe ? `レシピ「${recipe}」` : '自動のレシピ'}のまま作ります。`
     + '（pro 課金・30秒ほど）。',
     () => _regenCategorySamplePatternNow(id, pattern),
-    document.getElementById(`cat-pattern-btn-${pattern}-${id}`) ?? undefined,
+    document.getElementById(`cat-pattern-btn-${pattern}-${id}`) ?? _catConfirmAnchor(id) ?? undefined,
   );
 }
 
@@ -3663,7 +3570,12 @@ async function _regenCategorySamplePatternNow(id, pattern) {
   const btn = document.getElementById(`cat-pattern-btn-${pattern}-${id}`);
   const original = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  // From the open panel the unsaved look on screen is what should be drawn, and the panel is
+  // refreshed afterwards so the new sample appears at its top.
+  const inEditor = !!document.getElementById(`cat-agemin-${id}`);
+  if (inEditor) showToast(`${pattern === 'center' ? '中央' : 'サイド'}の見本を作っています…（30秒ほど）`, 'info');
   try {
+    if (inEditor) await saveCategory(id, { silent: true });
     const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
       method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ force: true, pattern }),
@@ -3675,6 +3587,7 @@ async function _regenCategorySamplePatternNow(id, pattern) {
     }
     showToast('見本を作りました。', 'success');
     await _loadTopics();
+    if (inEditor) openCategoryDetail(id);
   } finally {
     if (btn) { btn.disabled = false; if (original) btn.textContent = original; }
   }
