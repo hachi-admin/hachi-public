@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '76';
+const DASH_BUILD = '77';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -3258,6 +3258,10 @@ function _fillCatPaletteOptions(catId) {
   if (want && !(_palettes || []).some((p) => p.id === want)) {
     sel.insertAdjacentHTML('beforeend', `<option value="${esc(want)}" selected>${esc(want)}（削除済み）</option>`);
   }
+  _selectChips(`cat-palette-${catId}`, (v) => {
+    const p = (_palettes || []).find((x) => x.id === v);
+    return p ? `<span class="pal-dots"><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i></span>` : '';
+  });
   _showCatPalette(catId);
 }
 
@@ -3295,9 +3299,32 @@ function _fillCatImagePromptOptionsFor(selId, kind) {
   }
 }
 
+/* A filled <select> shown as a chip row. The select stays (hidden) as the value saveCategory and
+   the preview read; the chips only drive it. Dropdowns are forced to 16px on phones so iOS will
+   not zoom on focus, which made them twice the size of everything around them. */
+function _selectChips(selId, decorate) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  sel.hidden = true;
+  let box = document.getElementById(`${selId}-chips`);
+  if (!box) { box = document.createElement('div'); box.id = `${selId}-chips`; box.className = 'seg'; sel.after(box); }
+  const label = (o) => o.textContent.replace(/ ・見本\d+$/, '').replace('（記事ごとに選ぶ）', '').replace('スタイルの配色のまま', 'スタイルのまま');
+  box.innerHTML = [...sel.options].map((o) => `<button type="button" class="seg-btn${o.value === sel.value ? ' on' : ''}"
+    data-v="${esc(o.value)}">${decorate ? decorate(o.value) : ''}${esc(label(o))}</button>`).join('');
+  box.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => {
+    sel.value = b.dataset.v;
+    box.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('on', x === b));
+    sel.dispatchEvent(new Event('change'));
+  }));
+  const on = box.querySelector('.on');
+  if (on) box.scrollLeft = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2;
+}
+
 function _fillCatImagePromptOptions(catId) {
   _fillCatImagePromptOptionsFor(`cat-imgprompt-${catId}`, 'hero');
   _fillCatImagePromptOptionsFor(`cat-figprompt-${catId}`, 'figure');
+  _selectChips(`cat-imgprompt-${catId}`);
+  _selectChips(`cat-figprompt-${catId}`);
 }
 
 async function refreshCatPreview(id) {

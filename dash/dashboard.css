@@ -2987,3 +2987,5 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cat-range2 input[type=range]::-moz-range-thumb,.cat-range::-moz-range-thumb{pointer-events:auto;width:24px;height:24px;border-radius:50%;background:var(--bg);box-shadow:var(--sh-sm);border:0}
 .cat-range::-webkit-slider-runnable-track{height:8px;border-radius:4px;box-shadow:var(--sh-in)}
 .cat-range::-webkit-slider-thumb{margin-top:-9px}
+.seg-btn .pal-dots{display:inline-flex;gap:2px;margin-right:6px;vertical-align:-1px}
+.seg-btn .pal-dots i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
