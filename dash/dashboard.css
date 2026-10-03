@@ -3227,7 +3227,6 @@ input.cat-in,input.form-input,textarea,select:not(.is-chip),.cat-switch-track,.c
 .ip-shot figcaption{position:absolute;top:12px;left:12px;right:auto;bottom:auto;padding:2px 8px;border-radius:8px;
   background:rgba(15,17,25,.6);color:#fff;font-size:var(--fs-xs);line-height:1.5;max-width:calc(100% - 24px)}
 .ip-shot.ip-shot-wait{display:flex;align-items:center;justify-content:center;font-size:var(--fs-xs);color:var(--m2)}
-.ip-shot.ip-shot-wait::before{content:'';display:block;padding-top:62.5%}
 .ip-shot.ip-shot-wait{position:relative}
 .ip-shot.ip-shot-wait>*,.ip-shot.ip-shot-wait{text-align:center}
 .ip-shot img{aspect-ratio:16/10}
@@ -3256,3 +3255,6 @@ body.sheet-open{overflow:hidden}
   padding:5px 9px;border-radius:10px;cursor:pointer;word-break:keep-all;overflow-wrap:anywhere}
 #scroll-index button.on{box-shadow:var(--d-on);color:var(--acc);font-weight:700}
 @media (prefers-reduced-motion:reduce){#scroll-index{transition:none}}
+.ip-shot.ip-shot-wait{flex-direction:column;gap:4px}
+.ip-wait-lbl{font-size:var(--fs-s);font-weight:700;color:var(--m)}
+.ip-shot.ip-shot-wait{aspect-ratio:16/10!important;justify-content:center}

@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '94';
+const DASH_BUILD = '96';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -5946,6 +5946,8 @@ function _renderImagePrompts() {
 const _IP_KIND = { hero: '見出し画像', figure: '図解' };
 const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画像→加工' };
 
+// The standard sample subjects — same order as knowledge/recipe-samples.js STANDARD_SUBJECTS.
+const _IP_SUBJECTS = ['人物', '風景', 'もの', '文字'];
 const _ipShots = (r) => (Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : []);
 
 function _imagePromptCard(r) {
@@ -5973,13 +5975,16 @@ function _imagePromptCard(r) {
      文字), filled in automatically by the server when one is missing; one still in review shows the
      single picture it was proposed with. Labels sit on the picture's corner, not under it. */
   const approved = !['pending', 'rejected'].includes(r.approval?.status);
-  const slots = approved ? 4 : 1;
   const words = (r.keywords || []).filter((k) => /[^\x00-\x7F]/.test(k)).slice(0, 4);
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
     <div class="ip-shots${approved ? '' : ' is-single'}">
-      ${Array.from({ length: slots }, (_, i) => samples[i]
-    ? `<figure class="ip-shot"><img src="${esc(samples[i].url)}" alt="${esc(samples[i].label || '')}" loading="lazy" onclick="_openLightbox('${esc(samples[i].url)}','${esc(samples[i].label || '')}')">${samples[i].label ? `<figcaption>${esc(samples[i].label)}</figcaption>` : ''}</figure>`
-    : `<div class="ip-shot ip-shot-wait">${approved ? '自動で作成中' : '見本なし'}</div>`).join('')}
+      ${(approved ? _IP_SUBJECTS : [null]).map((label) => {
+    // Only the four standard subjects are shown; samples under older labels (週次市場…) are not.
+    const s = label ? samples.find((x) => x.label === label) : samples[0];
+    return s
+      ? `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(label || '')}')">${label ? `<figcaption>${label}</figcaption>` : ''}</figure>`
+      : `<div class="ip-shot ip-shot-wait">${label ? `<span class="ip-wait-lbl">${label}</span>作成中` : '見本なし'}</div>`;
+  }).join('')}
     </div>
     <div class="hp-card-body">${acts.more}
       <div class="hp-card-name" title="${esc(r.id)}">${_jaWrap(_nickname(r.name, r.id))}</div>
