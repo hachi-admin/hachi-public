@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '91';
+const DASH_BUILD = '94';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4262,6 +4262,68 @@ function _hpLayoutChips(s = {}) {
     out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
 }
 
+/* ── Scroll index ─────────────────────────────────────────────────────────────
+ * While a long list is scrolled natively, a small menu of its items floats beside the scrollbar:
+ * where you are, and a tap to jump. Nothing in the list changes size or place — it is an overlay,
+ * shown while scrolling (or while touched) and gone ~1.5s after. Neumorphic like everything else:
+ * the menu is a raised surface, the current item is pressed in.
+ */
+const _SCROLL_INDEX = [
+  ['#page-articles .acard[data-id]', (el) => el.querySelector('.acard-name')?.textContent],
+  // The full stored name: nicknames repeat across variants (やさしいガラス / やさしいガラス（薄め）).
+  ['#hero-presets-list .hp-card', (el) => el.querySelector('.hp-card-name')?.title || el.querySelector('.hp-card-name')?.textContent],
+  ['#image-prompts-list .hp-card', (el) => el.querySelector('.hp-card-name')?.textContent],
+];
+(() => {
+  let box = null, items = [], hideT = 0, touching = false, scroller = null;
+  const visibleItems = () => {
+    for (const [sel, name] of _SCROLL_INDEX) {
+      const els = [...document.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
+      if (els.length >= 6) return els.map((el) => ({ el, name: (name(el) || '').trim() }));
+    }
+    return [];
+  };
+  const ensure = () => {
+    if (box) return box;
+    box = document.createElement('nav');
+    box.id = 'scroll-index'; box.setAttribute('aria-label', '一覧の目次');
+    box.addEventListener('pointerdown', () => { touching = true; clearTimeout(hideT); });
+    box.addEventListener('pointerup', () => { touching = false; schedule(); });
+    document.body.appendChild(box);
+    return box;
+  };
+  const schedule = () => { clearTimeout(hideT); hideT = setTimeout(() => { if (!touching) box?.classList.remove('show'); }, 1500); };
+  const render = () => {
+    const now = visibleItems();
+    if (!now.length) { box?.classList.remove('show'); return; }
+    ensure();
+    if (now.length !== items.length || now.some((x, i) => x.el !== items[i]?.el)) {
+      items = now;
+      box.innerHTML = items.map((x, i) => `<button type="button" data-i="${i}">${_jaWrap(x.name)}</button>`).join('');
+      box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+        const t = items[Number(b.dataset.i)]?.el;
+        if (!t) return;
+        const sc = scroller && scroller !== document ? scroller : document.scrollingElement;
+        sc.scrollTo({ top: sc.scrollTop + t.getBoundingClientRect().top - (scroller?.getBoundingClientRect?.().top ?? 0) - 16, behavior: 'smooth' });
+      }));
+    }
+    const mid = innerHeight * 0.35;
+    let cur = 0;
+    items.forEach((x, i) => { if (x.el.getBoundingClientRect().top <= mid) cur = i; });
+    box.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === cur));
+    box.querySelector('button.on')?.scrollIntoView({ block: 'nearest' });
+    box.classList.add('show');
+    schedule();
+  };
+  let raf = 0;
+  // Capture phase: the page scrolls inside .page-area, not the window, and scroll does not bubble.
+  document.addEventListener('scroll', (e) => {
+    if (e.target?.closest?.('#scroll-index,.seg,.pick-strip,.cat-gal-grid,.tab-bar,#detail-panel,#hero-preset-editor')) return;
+    scroller = e.target;
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(render);
+  }, { passive: true, capture: true });
+})();
+
 /* ── Card actions ──────────────────────────────────────────────────────────────
  * A row of 編集／複製／無効化／削除 under every card read as a form, not a list, and on a phone the
  * four buttons were each a third of a thumb wide. Now a card has one primary action — tapping it —
@@ -4383,7 +4445,6 @@ function _heroPresetCard(p) {
   const apLabel = `<span class="chip" title="${esc(apTitle)}" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>`;
   const off = p.enabled === false;
   const offLabel = off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : '';
-  const updAt = p.updatedAt ? relTime(p.updatedAt) : '—';
   /* System presets are deletable once disabled: the seeder recreated any id it could not find, so
      one is retired in place instead — the tombstone stops the seeder and every reader skips it. */
   const acts = _actCard(`hp:${p.id}`, {
@@ -4409,14 +4470,13 @@ function _heroPresetCard(p) {
         ?? { nick: _nickname(p.name, p.id), attrs: _styleAttrs(p.styleSpec) };
         return `<div class="hp-card-name" title="${esc(p.name)}">${esc(n.nick)}</div>
       <div class="hp-card-attrs" title="${esc(p.id)}">${esc(n.attrs.join('・'))}</div>`; })()}
-      <div class="hp-card-chips">${sysLabel}${apLabel}${offLabel}${_hpUsedBy(p.id)}</div>
+      <div class="hp-card-chips">${['pending', 'rejected'].includes(p.approval?.status) ? apLabel : ''}${offLabel}${_hpUsedBy(p.id)}</div>
       ${p.description ? `<div class="hp-card-desc">${esc(p.description)}</div>` : ''}
       ${/* What the letters are made of, and how they sit — the two things this screen manages.
             The ground is deliberately absent: it belongs to the template and is chosen per article.
             See docs/reference/HERO_TEXT_STYLE.ja.md in hachi-core. */ ''}
       ${/* 書体・縁・強調 are in the derived name line above; the raw palette id and the English mood
             tags were the agent's vocabulary, not something to judge a style by. */ ''}
-      <div class="hp-card-upd">更新: ${updAt}</div>
     </div>
   </div></div>`;
 }
@@ -4476,8 +4536,7 @@ function _showNewPresetForm() {
   _syncHpSummaries();
   _renderSampleTabs();
   _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
-  document.getElementById('hero-preset-editor').style.display = '';
-  document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
+  _hpSheet(true);
 }
 
 function _editHeroPreset(id) {
@@ -4505,13 +4564,29 @@ function _editHeroPreset(id) {
   _syncHpSummaries();
   _renderSampleTabs();
   _loadStyleVocab().then(() => { _renderStyleForm(); _renderLineForm(); });
-  document.getElementById('hero-preset-editor').style.display = '';
-  document.getElementById('hero-preset-editor').scrollIntoView({ behavior: 'smooth' });
+  _hpSheet(true);
   _refreshPreview();
 }
 
+/* The editor opens as a sheet over the list, where you tapped — it used to unfold below the
+   last card, so editing the first style meant scrolling past all twenty. */
+function _hpSheet(open) {
+  const ed = document.getElementById('hero-preset-editor');
+  let bd = document.getElementById('hp-sheet-backdrop');
+  if (!bd) {
+    bd = document.createElement('div'); bd.id = 'hp-sheet-backdrop';
+    bd.addEventListener('click', () => _closeHeroPresetEditor());
+    document.body.appendChild(bd);
+  }
+  ed.style.display = open ? '' : 'none';
+  ed.classList.toggle('as-sheet', open);
+  bd.classList.toggle('open', open);
+  document.body.classList.toggle('sheet-open', open);
+  if (open) ed.scrollTop = 0;
+}
+
 function _closeHeroPresetEditor() {
-  document.getElementById('hero-preset-editor').style.display = 'none';
+  _hpSheet(false);
   _hpEditingId = null;
 }
 
@@ -5865,15 +5940,7 @@ function _renderImagePrompts() {
   listEl.className = 'hp-card-grid';
   // Switched-off recipes go last: they are kept for reference, not offered.
   const ordered = [..._imagePrompts].sort((a, b) => (a.enabled === false) - (b.enabled === false));
-  /* A look is judged on three pictures side by side; recipes made from one reference picture had
-     one. Say how many are short and let the operator buy the rest in one press — it is their spend. */
-  const short = ordered.filter((r) => r.enabled !== false && _ipShots(r).length < 3);
-  const missing = short.reduce((n, r) => n + 3 - _ipShots(r).length, 0);
-  const banner = short.length ? `<div class="ip-fill-banner">
-      <span>見本が3枚に足りない画風が <b>${short.length}件</b>（あと${missing}枚）</span>
-      <button class="act-btn" id="ip-fill-all" onclick="_fillAllImagePromptSamples()">まとめて作る</button>
-    </div>` : '';
-  listEl.innerHTML = banner + ordered.map(_imagePromptCard).join('');
+  listEl.innerHTML = ordered.map(_imagePromptCard).join('');
 }
 
 const _IP_KIND = { hero: '見出し画像', figure: '図解' };
@@ -5896,37 +5963,38 @@ function _imagePromptCard(r) {
     title: r.name || r.id,
     primary: { label: '編集', run: () => _openRecipeEditor(r.id) },
     items: [
-      { label: samples.length ? '見本を作り直す' : '見本を作る', short: '見本', hint: '3枚生成して見本にする（画像生成が走ります）', run: () => _genImagePromptSamples(r.id) },
+      { label: samples.length ? '見本を作り直す' : '見本を作る', short: '見本', hint: '人物・風景・もの・文字の4枚を作り直す（承認前は1枚・画像生成が走ります）', run: () => _genImagePromptSamples(r.id) },
       ...(samples.length ? [{ label: isApproved ? '相談する' : '承認へ', noStrip: true, hint: 'Discord に承認カードを送る', run: () => _proposeImagePrompt(r.id) }] : []),
       { label: off ? '有効化' : '無効化', hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
       ...(off && !r.isSystem ? [{ label: '削除', danger: true, run: () => _deleteImagePrompt(r.id) }] : []),
     ],
   });
+  /* The pictures are the card. An approved 画風 shows its four standard subjects (人物・風景・もの・
+     文字), filled in automatically by the server when one is missing; one still in review shows the
+     single picture it was proposed with. Labels sit on the picture's corner, not under it. */
+  const approved = !['pending', 'rejected'].includes(r.approval?.status);
+  const slots = approved ? 4 : 1;
+  const words = (r.keywords || []).filter((k) => /[^\x00-\x7F]/.test(k)).slice(0, 4);
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
-    <div class="ip-shots">
-      ${[0, 1, 2].map((i) => samples[i]
-    ? `<figure class="ip-shot"><img src="${esc(samples[i].url)}" alt="${esc(samples[i].label || '')}" loading="lazy" onclick="_openLightbox('${esc(samples[i].url)}','${esc(samples[i].label || '')}')"><figcaption>${esc(samples[i].label || '')}</figcaption></figure>`
-    : `<button type="button" class="ip-shot ip-shot-add" onclick="event.stopPropagation();_fillImagePromptSamples('${esc(r.id)}')"
-        aria-label="足りない見本を作る">＋</button>`).join('')}
+    <div class="ip-shots${approved ? '' : ' is-single'}">
+      ${Array.from({ length: slots }, (_, i) => samples[i]
+    ? `<figure class="ip-shot"><img src="${esc(samples[i].url)}" alt="${esc(samples[i].label || '')}" loading="lazy" onclick="_openLightbox('${esc(samples[i].url)}','${esc(samples[i].label || '')}')">${samples[i].label ? `<figcaption>${esc(samples[i].label)}</figcaption>` : ''}</figure>`
+    : `<div class="ip-shot ip-shot-wait">${approved ? '自動で作成中' : '見本なし'}</div>`).join('')}
     </div>
     <div class="hp-card-body">${acts.more}
-      ${(() => { const n = _autoNames(_imagePrompts.length ? _imagePrompts : [r], _recipeAttrs)[r.id]
-        ?? { nick: _nickname(r.name, r.id), attrs: _recipeAttrs(r) };
-        return `<div class="hp-card-name" title="${esc(r.name || r.id)}">${esc(n.nick)}</div>
-      <div class="hp-card-attrs" title="${esc(r.id)}">${esc(n.attrs.join('・'))}</div>`; })()}
+      <div class="hp-card-name" title="${esc(r.id)}">${_jaWrap(_nickname(r.name, r.id))}</div>
+      ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
       <div class="hp-card-chips">
-        <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
-        <select class="cat-in is-chip" title="絵の出所。web/web_then_styliseは記事の生成時に実写真を探します"
+        <select class="cat-in is-chip" title="絵の出所。Web画像を選ぶと記事の生成時に実写真を探します"
           onchange="_setImagePromptSourceMode('${esc(r.id)}',this.value)" onclick="event.stopPropagation()">
           ${Object.entries(_IP_SOURCE).map(([v, label]) =>
             `<option value="${v}"${r.sourceMode === v ? ' selected' : ''}>${esc(label)}</option>`).join('')}
         </select>
+        ${!approved ? `<span class="chip" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>` : ''}
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
-        ${r.isSystem ? '<span class="chip" style="background:var(--div);color:var(--m)">system</span>' : ''}
+        ${words.map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('')}
       </div>
-      ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
-      ${keywords ? `<div class="hp-card-chips">${keywords}</div>` : ''}
     </div>
     ${off && r.isSystem
       ? '<div class="hp-card-note">既定の画風は削除できません。無効のままにしておけば選ばれません。</div>' : ''}

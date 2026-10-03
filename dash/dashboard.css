@@ -3171,7 +3171,6 @@ select.is-chip{width:auto;min-height:28px!important;padding:3px 24px 3px 11px!im
 .hp-shot-img,.ip-shot img{border-radius:var(--frame-in-r);overflow:hidden}
 .ip-shot{aspect-ratio:auto!important}
 .ip-shot img{aspect-ratio:16/10;height:auto!important}
-.ip-shot figcaption{position:static!important;background:none!important;color:var(--m)!important;font-size:var(--fs-xs);padding:4px 2px 0!important;text-align:center}
 .ip-shot-add{aspect-ratio:auto;min-height:72px}
 /* detail panel: samples, preview, galleries */
 #detail-content .cat-sample-pair figure,.cat-preview-wrap{padding:var(--frame-pad);border-radius:var(--frame-r);box-shadow:var(--sh-press);background:var(--bg)}
@@ -3220,3 +3219,40 @@ input.cat-in,input.form-input,textarea,select:not(.is-chip),.cat-switch-track,.c
 .mob-tab-bar .mob-tab.active .ni,.mob-tab-bar .mob-tab.active{box-shadow:none}
 .mob-tab-bar .mob-tab.active .ni{box-shadow:var(--d-on)!important}
 .hp-ground-switch{border-radius:16px;padding:6px 10px}
+
+/* ── 画風 cards: pictures first ── */
+.ip-shots{grid-template-columns:1fr 1fr!important}
+.ip-shots.is-single{grid-template-columns:1fr!important}
+.ip-shot{position:relative}
+.ip-shot figcaption{position:absolute;top:12px;left:12px;right:auto;bottom:auto;padding:2px 8px;border-radius:8px;
+  background:rgba(15,17,25,.6);color:#fff;font-size:var(--fs-xs);line-height:1.5;max-width:calc(100% - 24px)}
+.ip-shot.ip-shot-wait{display:flex;align-items:center;justify-content:center;font-size:var(--fs-xs);color:var(--m2)}
+.ip-shot.ip-shot-wait::before{content:'';display:block;padding-top:62.5%}
+.ip-shot.ip-shot-wait{position:relative}
+.ip-shot.ip-shot-wait>*,.ip-shot.ip-shot-wait{text-align:center}
+.ip-shot img{aspect-ratio:16/10}
+
+/* ── 文字スタイル editor as a sheet over the list ── */
+#hero-preset-editor.as-sheet{position:fixed;left:0;right:0;bottom:0;top:6vh;z-index:9500;margin:0!important;overflow-y:auto;
+  border-radius:22px 22px 0 0!important;padding:20px 16px calc(24px + env(safe-area-inset-bottom))!important;box-shadow:var(--sh-lg)!important;
+  background:var(--bg)!important;-webkit-overflow-scrolling:touch}
+@media (min-width:900px){#hero-preset-editor.as-sheet{left:50%;transform:translateX(-50%);width:min(1100px,94vw);top:4vh}}
+#hp-sheet-backdrop{position:fixed;inset:0;z-index:9400;background:rgba(10,12,20,.3);display:none}
+#hp-sheet-backdrop.open{display:block}
+.hp-sheet-close{position:sticky;top:0;float:right;z-index:2}
+body.sheet-open{overflow:hidden}
+
+/* ── 7: spacing — every card keeps its padding on all four sides ── */
+:root{--pad-card:14px}
+.hp-card-body{padding:12px var(--pad-card) var(--pad-card)!important}
+
+/* ── Scroll index beside the native scrollbar (overlay; the list itself never moves) ── */
+#scroll-index{position:fixed;right:10px;top:22vh;max-height:56vh;width:min(42vw,170px);z-index:900;overflow-y:auto;scrollbar-width:none;
+  display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:16px;background:var(--bg);box-shadow:var(--d-raise);
+  opacity:0;transform:translateX(12px);pointer-events:none;transition:opacity .18s,transform .18s}
+#scroll-index::-webkit-scrollbar{display:none}
+#scroll-index.show{opacity:1;transform:none;pointer-events:auto}
+#scroll-index button{border:0;background:none;text-align:left;font:inherit;font-size:var(--fs-xs);line-height:1.35;color:var(--m);
+  padding:5px 9px;border-radius:10px;cursor:pointer;word-break:keep-all;overflow-wrap:anywhere}
+#scroll-index button.on{box-shadow:var(--d-on);color:var(--acc);font-weight:700}
+@media (prefers-reduced-motion:reduce){#scroll-index{transition:none}}
