@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '102';
+const DASH_BUILD = '104';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6028,6 +6028,10 @@ async function _loadImagePrompts() {
     if (!res.ok) { listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">Error ${res.status}</div>`; return; }
     const data = await res.json();
     _imagePrompts = data.recipes || [];
+    // Recipes a live magazine uses count as approved (same rule as recipe-samples.js).
+    const cats = await _ensureCategoriesForPreview().catch(() => []);
+    _ipInUse = new Set(cats.filter((c) => c.status === 'active')
+      .flatMap((c) => [c.visual?.imagePrompt, c.visual?.figurePrompt]).filter(Boolean));
     _renderImagePrompts();
   } catch (e) {
     listEl.innerHTML = `<div style="font-size:11px;color:var(--error);padding:12px">${esc(e.message)}</div>`;
@@ -6062,6 +6066,7 @@ const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画
 
 // The standard sample subjects — same order as knowledge/recipe-samples.js STANDARD_SUBJECTS.
 const _IP_SUBJECTS = ['人物', '風景', 'もの', '文字'];
+let _ipInUse = new Set();
 const _ipShots = (r) => (Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : []);
 
 function _imagePromptCard(r) {
@@ -6089,16 +6094,20 @@ function _imagePromptCard(r) {
      文字), filled in automatically by the server when one is missing; one still in review shows the
      single picture it was proposed with. Labels sit on the picture's corner, not under it. */
   // Same rule as knowledge/recipe-samples.js isRecipeApproved: no record = a suggestion → one picture.
-  const approved = r.approval?.status === 'approved' || (!r.approval?.status && !!r.isSystem);
+  const approved = r.approval?.status === 'approved' || (!r.approval?.status && (!!r.isSystem || _ipInUse.has(r.id)));
+  const rejected = r.approval?.status === 'rejected';
   const words = (r.keywords || []).filter((k) => /[^\x00-\x7F]/.test(k)).slice(0, 4);
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
     <div class="ip-shots${approved ? '' : ' is-single'}">
       ${(approved ? _IP_SUBJECTS : [null]).map((label) => {
     // Approved: the four standard subjects (older labels like 週次市場 are not shown).
     // A suggestion: its one picture, whatever it was drawn for, with no caption.
-    const s = label ? samples.find((x) => x.label === label) : samples[0];
+    // Until the standard set is drawn, a picture made under another label stands in for the first gap.
+    const spare = samples.filter((x) => !_IP_SUBJECTS.includes(x.label));
+    const gapIdx = label ? _IP_SUBJECTS.filter((l) => !samples.some((x) => x.label === l)).indexOf(label) : -1;
+    const s = label ? (samples.find((x) => x.label === label) || (gapIdx >= 0 ? spare[gapIdx] : null)) : samples[0];
     return s
-      ? `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(label || '')}')">${label ? `<figcaption>${label}</figcaption>` : ''}</figure>`
+      ? `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(label || '')}')">${label && s.label === label ? `<figcaption>${label}</figcaption>` : ''}</figure>`
       : `<div class="ip-shot ip-shot-wait">${label ? `<span class="ip-wait-lbl">${label}</span>作成中` : '見本なし'}</div>`;
   }).join('')}
     </div>
@@ -6117,6 +6126,11 @@ function _imagePromptCard(r) {
         ${words.map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('')}
       </div>
     </div>
+    ${!approved ? `<div class="ip-decide">
+      ${rejected ? '<span class="cat-hint">却下済み</span>' : ''}
+      <button class="act-btn" onclick="event.stopPropagation();_decideImagePrompt('${esc(r.id)}','rejected')"${rejected ? ' disabled' : ''}>却下</button>
+      <button class="act-btn resume" onclick="event.stopPropagation();_decideImagePrompt('${esc(r.id)}','approved')">承認</button>
+    </div>` : ''}
     ${off && r.isSystem
       ? '<div class="hp-card-note">既定の画風は削除できません。無効のままにしておけば選ばれません。</div>' : ''}
   </div></div>`;
@@ -6137,6 +6151,16 @@ async function _requestImagePromptSamples(id, { fill = false } = {}) {
 }
 
 /* Fill up to three, keeping the samples a recipe already has (the server's `fill` mode). */
+/* Approving makes it a full entry: the server fills its four standard samples within the hour. */
+async function _decideImagePrompt(id, status) {
+  const res = await fetch(apiUrl(`/api/image-prompts/${id}/approval`), {
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+  }).catch(() => null);
+  if (!res?.ok) { showToast('反映できませんでした', 'error'); return; }
+  showToast(status === 'approved' ? '承認しました。人物・風景・もの・文字の見本を1時間以内に作ります' : '却下しました', 'success');
+  _loadImagePrompts();
+}
+
 function _fillImagePromptSamples(id) {
   const r = _imagePrompts.find((x) => x.id === id);
   const n = 3 - _ipShots(r || {}).length;
