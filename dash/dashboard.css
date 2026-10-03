@@ -3245,16 +3245,9 @@ body.sheet-open{overflow:hidden}
 :root{--pad-card:14px}
 .hp-card-body{padding:12px var(--pad-card) var(--pad-card)!important}
 
-/* ── Scroll index beside the native scrollbar (overlay; the list itself never moves) ── */
-#scroll-index{position:fixed;right:10px;top:22vh;max-height:56vh;width:min(42vw,170px);z-index:900;overflow-y:auto;scrollbar-width:none;
-  display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:16px;background:var(--bg);box-shadow:var(--d-raise);
-  opacity:0;transform:translateX(12px);pointer-events:none;transition:opacity .18s,transform .18s}
-#scroll-index::-webkit-scrollbar{display:none}
-#scroll-index.show{opacity:1;transform:none;pointer-events:auto}
-#scroll-index button{border:0;background:none;text-align:left;font:inherit;font-size:var(--fs-xs);line-height:1.35;color:var(--m);
-  padding:5px 9px;border-radius:10px;cursor:pointer;word-break:keep-all;overflow-wrap:anywhere}
-#scroll-index button.on{box-shadow:var(--d-on);color:var(--acc);font-weight:700}
-@media (prefers-reduced-motion:reduce){#scroll-index{transition:none}}
-.ip-shot.ip-shot-wait{flex-direction:column;gap:4px}
-.ip-wait-lbl{font-size:var(--fs-s);font-weight:700;color:var(--m)}
-.ip-shot.ip-shot-wait{aspect-ratio:16/10!important;justify-content:center}
+/* ── Scroll label beside the native scrollbar thumb ── */
+#scroll-label{position:fixed;right:14px;z-index:900;max-width:46vw;padding:4px 10px;border-radius:10px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);box-shadow:var(--sh-sm);font-size:var(--fs-xs);color:var(--m);
+  line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+  opacity:0;transform:translateY(-50%);transition:opacity .2s}
+#scroll-label.show{opacity:1}

@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '96';
+const DASH_BUILD = '97';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4262,65 +4262,47 @@ function _hpLayoutChips(s = {}) {
     out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
 }
 
-/* ── Scroll index ─────────────────────────────────────────────────────────────
- * While a long list is scrolled natively, a small menu of its items floats beside the scrollbar:
- * where you are, and a tap to jump. Nothing in the list changes size or place — it is an overlay,
- * shown while scrolling (or while touched) and gone ~1.5s after. Neumorphic like everything else:
- * the menu is a raised surface, the current item is pressed in.
+/* ── Scroll label ─────────────────────────────────────────────────────────────
+ * The common pattern (Photos, Contacts): while a long list is scrolled natively, one small label
+ * rides beside the scrollbar's thumb naming the item you are on, and fades when scrolling stops.
+ * No menu, no taps — the native scrollbar does the work; this only says where you are.
  */
 const _SCROLL_INDEX = [
   ['#page-articles .acard[data-id]', (el) => el.querySelector('.acard-name')?.textContent],
-  // The full stored name: nicknames repeat across variants (やさしいガラス / やさしいガラス（薄め）).
   ['#hero-presets-list .hp-card', (el) => el.querySelector('.hp-card-name')?.title || el.querySelector('.hp-card-name')?.textContent],
   ['#image-prompts-list .hp-card', (el) => el.querySelector('.hp-card-name')?.textContent],
 ];
 (() => {
-  let box = null, items = [], hideT = 0, touching = false, scroller = null;
-  const visibleItems = () => {
+  let tag = null, hideT = 0, raf = 0;
+  const current = () => {
     for (const [sel, name] of _SCROLL_INDEX) {
       const els = [...document.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
-      if (els.length >= 6) return els.map((el) => ({ el, name: (name(el) || '').trim() }));
+      if (els.length < 6) continue;
+      const mid = innerHeight * 0.35;
+      let cur = els[0];
+      for (const el of els) if (el.getBoundingClientRect().top <= mid) cur = el;
+      return (name(cur) || '').trim();
     }
-    return [];
+    return '';
   };
-  const ensure = () => {
-    if (box) return box;
-    box = document.createElement('nav');
-    box.id = 'scroll-index'; box.setAttribute('aria-label', '一覧の目次');
-    box.addEventListener('pointerdown', () => { touching = true; clearTimeout(hideT); });
-    box.addEventListener('pointerup', () => { touching = false; schedule(); });
-    document.body.appendChild(box);
-    return box;
+  const show = (sc) => {
+    const label = current();
+    if (!label) { tag?.classList.remove('show'); return; }
+    if (!tag) { tag = document.createElement('div'); tag.id = 'scroll-label'; tag.setAttribute('aria-hidden', 'true'); document.body.appendChild(tag); }
+    tag.textContent = label;
+    // Follow the thumb: same fraction of the scroller's visible height as the scroll position.
+    const box = sc === document || !sc.getBoundingClientRect ? { top: 0, height: innerHeight } : sc.getBoundingClientRect();
+    const el = sc === document ? document.scrollingElement : sc;
+    const frac = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+    const y = box.top + 24 + frac * Math.max(0, box.height - 72);
+    tag.style.top = `${Math.min(innerHeight - 120, Math.max(80, y))}px`;
+    tag.classList.add('show');
+    clearTimeout(hideT); hideT = setTimeout(() => tag.classList.remove('show'), 900);
   };
-  const schedule = () => { clearTimeout(hideT); hideT = setTimeout(() => { if (!touching) box?.classList.remove('show'); }, 1500); };
-  const render = () => {
-    const now = visibleItems();
-    if (!now.length) { box?.classList.remove('show'); return; }
-    ensure();
-    if (now.length !== items.length || now.some((x, i) => x.el !== items[i]?.el)) {
-      items = now;
-      box.innerHTML = items.map((x, i) => `<button type="button" data-i="${i}">${_jaWrap(x.name)}</button>`).join('');
-      box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-        const t = items[Number(b.dataset.i)]?.el;
-        if (!t) return;
-        const sc = scroller && scroller !== document ? scroller : document.scrollingElement;
-        sc.scrollTo({ top: sc.scrollTop + t.getBoundingClientRect().top - (scroller?.getBoundingClientRect?.().top ?? 0) - 16, behavior: 'smooth' });
-      }));
-    }
-    const mid = innerHeight * 0.35;
-    let cur = 0;
-    items.forEach((x, i) => { if (x.el.getBoundingClientRect().top <= mid) cur = i; });
-    box.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === cur));
-    box.querySelector('button.on')?.scrollIntoView({ block: 'nearest' });
-    box.classList.add('show');
-    schedule();
-  };
-  let raf = 0;
   // Capture phase: the page scrolls inside .page-area, not the window, and scroll does not bubble.
   document.addEventListener('scroll', (e) => {
-    if (e.target?.closest?.('#scroll-index,.seg,.pick-strip,.cat-gal-grid,.tab-bar,#detail-panel,#hero-preset-editor')) return;
-    scroller = e.target;
-    cancelAnimationFrame(raf); raf = requestAnimationFrame(render);
+    if (e.target?.closest?.('.seg,.pick-strip,.cat-gal-grid,.tab-bar,#detail-panel,#hero-preset-editor')) return;
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(() => show(e.target));
   }, { passive: true, capture: true });
 })();
 
