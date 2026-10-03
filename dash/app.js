@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '84';
+const DASH_BUILD = '86';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1921,10 +1921,23 @@ function _catTileMapBar(c, v) {
     return `<div class="cat-hint" style="padding:0 2px;min-height:0">承認すると、文字スタイルと画風を自動で選び、見本を作ります（pro課金・30秒ほど）。${left != null ? `<b>未承認のままだと、あと${left}時間で自動的に削除されます。</b>` : '未承認のまま2日たつと自動的に削除されます。'}</div>`;
   }
   if (c.status !== 'active') return '';
-  return `<div class="acard-map" onclick="event.stopPropagation()">
-    ${row('preset', '文字スタイル', 'preset', v.heroPreset, `restyleCategorySample('${esc(c.id)}',this.value)`)}
-    ${row('img', '画風', 'hero', v.imagePrompt, `setCategoryRecipe('${esc(c.id)}','imagePrompt',this.value)`)}
-  </div>`;
+  /* Information, not controls. The tile used to carry two pickers that duplicated the detail panel;
+     what a scan of the grid needs is what each magazine *is*: who it is for, how it looks, in what
+     colours. Changing any of it is one tap away in the panel. Names fill in once the catalogues load. */
+  const t = c.targeting || {};
+  const reader = [
+    t.ageMin != null && t.ageMax != null ? `${t.ageMin}〜${t.ageMax}歳` : '',
+    t.gender === 'male' ? '男性中心' : t.gender === 'female' ? '女性中心' : '',
+    t.specialization ? String(t.specialization).split(/[（(]/)[0] : '',
+  ].filter(Boolean).join('・');
+  const pal = c.palette;
+  const fact = (k, val) => `<div class="acard-fact"><dt>${k}</dt><dd>${val}</dd></div>`;
+  return `<dl class="acard-facts">
+    ${reader ? fact('読者', esc(reader)) : ''}
+    ${fact('文字', `<span data-name-preset="${esc(v.heroPreset || '')}">${esc(v.heroPreset ? (_heroPresets.find((p) => p.id === v.heroPreset)?.name || '…') : '記事ごと')}</span>`)}
+    ${fact('画風', `<span data-name-recipe="${esc(v.imagePrompt || '')}">${esc(v.imagePrompt ? (_imagePrompts.find((r) => r.id === v.imagePrompt)?.name || '…') : '記事ごと')}</span>`)}
+    ${pal ? fact('色', `<span class="acard-pal"><i style="background:${esc(pal.fill)}"></i><i style="background:${esc(pal.stroke)}"></i><i style="background:${esc(pal.emphasis)}"></i></span>`) : ''}
+  </dl>`;
 }
 
 /* Repaint the palette swatch after the pinned style changed, without a full grid reload.
@@ -1999,7 +2012,6 @@ function _categoryTile(c) {
      at a glance — an icon rather than text, since a category grid is scanned, not read, and
      spelling out 見出しの絵/本文の絵 would be the longest text on the card for something most
      categories leave on 自動. */
-  const pins = [v.heroPreset && 'サムネの型', v.imagePrompt && '見出しの絵', v.figurePrompt && '本文の絵'].filter(Boolean);
   return `<div class="acard ${statusClass}" data-id="${c.id}" role="button" tabindex="0"
     aria-label="${esc(c.name)} の設定を開く"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCategoryDetail('${c.id}')}"
@@ -2015,9 +2027,10 @@ function _categoryTile(c) {
           category's own pinned 文字スタイル so what is judged here is the real thing. */ ''}
     ${/* No picture before approval: a suggestion is a question about the topic, and its samples
          are made when it is approved. */ c.status === 'suggested' ? '' : _catPatternGrid(c, v)}
-    ${_catTileMapBar(c, v)}
     <div class="acard-info">
       <div class="acard-name">${esc(c.name)}</div>
+      ${c.definition && c.status === 'active' ? `<div class="acard-concept">${esc(c.definition)}</div>` : ''}
+      ${_catTileMapBar(c, v)}
       <div class="acard-chips" style="margin-top:4px">
         <!-- _CAT_STATUS has always carried a colour per status and the chip never used it, so
              未承認 and 稼働中 read identically at a glance — the one thing you scan this grid for. -->
@@ -2035,16 +2048,7 @@ function _categoryTile(c) {
         <span class="acard-rating">${r.count ? `★${r.average}` : '—'}</span>
         <span class="acard-count">${c.articleCount || 0}本</span>
         ${earns ? `<span class="cat-chip earns" title="${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益化')}">${esc(_MONEY_LABEL[(c.monetization||{}).mode] || '収益')}</span>` : ''}
-        ${pins.length ? `<span class="cat-chip" title="固定: ${esc(pins.join(' / '))}">📌${pins.length}</span>` : ''}
-        ${/* The three colours this category will actually be drawn in. Normally they come from its
-              pinned 文字スタイル — every seeded style names a palette, and a style's palette outranks
-              a category's — so `via-preset` is the ordinary case rather than the exception.
-              The API returns `paletteSource: 'style'` and a null palette when nothing is pinned at
-              all; presenting the colours of whichever style the article happens to get as a decision
-              would be a lie, so nothing is shown. */ ''}
-        ${c.palette ? `<span class="cat-chip cat-pal${c.paletteSource === 'preset' ? ' via-preset' : ''}"
-          title="配色「${esc(c.palette.name)}」— ${c.paletteSource === 'preset' ? '固定した文字スタイル由来' : 'マガジン既定（スタイル未指定時）'}（塗り ${esc(c.palette.fill)} / 縁 ${esc(c.palette.stroke)} / 強調 ${esc(c.palette.emphasis)}）"
-          ><i style="background:${esc(c.palette.fill)}"></i><i style="background:${esc(c.palette.stroke)}"></i><i style="background:${esc(c.palette.emphasis)}"></i></span>` : ''}
+
       </div>
     </div>
   </div>`;
@@ -2060,16 +2064,12 @@ const _catThumbDone = new Set();
    the grid is useful before the pickers are, and blocking it on a catalogue fetch would leave the
    whole list blank while one select's options load. */
 function _fillCatTilePresetOptions() {
-  const sels = [...document.querySelectorAll('#page-articles .acard-map-sel')];
-  if (!sels.length) return;
-  const presets = sels.filter((s) => s.dataset.kind === 'preset');
-  const recipes = sels.filter((s) => s.dataset.kind !== 'preset');
-  if (presets.length) _ensureHeroPresets().then(() => presets.forEach(_fillPresetSelect));
-  // Two catalogues, two fetches, neither waiting on the other — a tile's lettering picker should
-  // not sit empty because the recipe catalogue is slow.
-  if (recipes.length) {
-    _ensureImagePrompts().then(() => recipes.forEach((s) => _fillCatImagePromptOptionsFor(s.id, s.dataset.kind)));
-  }
+  const set = (sel, list) => document.querySelectorAll(`#page-articles [${sel}]`).forEach((el) => {
+    const id = el.getAttribute(sel);
+    if (id) el.textContent = list.find((x) => x.id === id)?.name || id;
+  });
+  _ensureHeroPresets().then(() => set('data-name-preset', _heroPresets));
+  _ensureImagePrompts().then(() => set('data-name-recipe', _imagePrompts));
 }
 
 /* Approved categories get their picture without being asked twice.
@@ -3032,23 +3032,23 @@ function _visualSection(c) {
       <input type="text" id="cat-eyebrow-${c.id}" class="cat-in" maxlength="24"
         value="${esc(v.eyebrow || '')}" placeholder="未設定" oninput="_renderEyeTags('${c.id}');${on}">
     </div>
-    <div class="cat-row"><span>タグにする語 <small>タップで切替</small></span>
+    <div class="cat-row"><span>色を付ける語 <small>押した語がマガジン名の中で色付きの札になります</small></span>
       <input type="hidden" id="cat-eyetags-${c.id}" value="${esc((v.eyebrowEmphasis || []).join('、'))}">
       <div class="seg is-multi" id="cat-eyetags-chips-${c.id}">${_eyeTagChips(c.id, v.eyebrow || '', v.eyebrowEmphasis || [])}</div>
     </div>
-    <div class="cat-row"><span>名前の置き方</span>${_seg(`cat-eyeplace-${c.id}`, [{ id: '', label: '見出しの上' }, { id: 'corner', label: '角のマーク' }], v.eyebrowPlacement || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>マガジン名の位置</span>${_seg(`cat-eyeplace-${c.id}`, [{ id: '', label: '見出しのすぐ上' }, { id: 'corner', label: '画像の隅に小さく' }], v.eyebrowPlacement || '', { on, hint: false })}</div>
     <div class="cat-row"><span>文字の横位置</span>${_seg(`cat-align-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], v.align || '', { on, hint: false })}</div>
     <div class="cat-row"><span>文字の縦位置</span>${_seg(`cat-anchor-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], v.anchor || '', { on, hint: false })}</div>
     <div class="cat-row"><span>見出し画像の画風</span>
-      <select id="cat-imgprompt-${c.id}" class="cat-in" data-decor="recipe" data-selected="${esc(v.imagePrompt || '')}">
+      <select id="cat-imgprompt-${c.id}" class="cat-in" hidden data-selected="${esc(v.imagePrompt || '')}">
         <option value="">自動（記事ごとに選ぶ）</option>
       </select></div>
     <div class="cat-row"><span>本文中の画風</span>
-      <select id="cat-figprompt-${c.id}" class="cat-in" data-decor="recipe" data-selected="${esc(v.figurePrompt || '')}">
+      <select id="cat-figprompt-${c.id}" class="cat-in" hidden data-selected="${esc(v.figurePrompt || '')}">
         <option value="">自動（記事ごとに選ぶ）</option>
       </select></div>
     <div class="cat-row"><span>配色</span>
-      <select id="cat-palette-${c.id}" class="cat-in" data-decor="palette" data-selected="${esc(v.palette || '')}"
+      <select id="cat-palette-${c.id}" class="cat-in" hidden data-selected="${esc(v.palette || '')}"
         onchange="_showCatPalette('${c.id}');${on}" aria-label="配色">
         <option value="">スタイルの配色のまま</option>
       </select>
@@ -3192,21 +3192,24 @@ function _renderCatGallery(catId) {
   const usable = _heroPresets.filter((p) => p.enabled !== false);
   const curated = usable.filter((p) => p.styleSpec?.engine === 'satori');
   const legacy = usable.filter((p) => p.styleSpec?.engine !== 'satori');
-  const want = _catVal(`cat-preset-${catId}`);
+  const want = _catVal(`cat-preset-${catId}`) || document.getElementById(`cat-preset-${catId}`)?.dataset.selected || '';
   // The pinned style leads the row, so the strip opens on what is in force.
   curated.sort((a, b) => (b.id === want) - (a.id === want));
   const names = _autoNames(usable, (x) => _styleAttrs(x.styleSpec));
   const tile = (p) => `<button type="button" class="cat-gal-tile" data-preset="${esc(p.id)}"
       onclick="_pickCatPreset('${catId}','${esc(p.id)}')" title="${esc(p.description || p.name)}">
       <span class="cat-gal-img" data-preset="${esc(p.id)}"><span class="cat-gal-wait">…</span></span>
-      <span class="cat-gal-name">${esc(names[p.id]?.nick || p.name)}</span>
+      <span class="cat-gal-name">${_jaWrap(names[p.id]?.nick || p.name)}</span>
       <span class="cat-gal-attrs">${esc((names[p.id]?.attrs || []).join('・'))}</span></button>`;
-  const chip = (val, label) => `<button type="button" class="seg-btn cat-quick" data-preset="${val}"
-      onclick="_pickCatPreset('${catId}','${val}')">${label}</button>`;
   const photo = _catSampleInput(CATEGORIES.find((x) => x.id === catId)).photoUrl;
-  host.innerHTML = `<div class="cat-gal-chips">${chip('', '未設定')}${chip(HP_AUTO, '自由指定（記事ごとに選ぶ）')}
-      ${photo ? '' : '<span class="cat-hint">見本の写真がまだないので、仮の背景で描いています</span>'}</div>
-    <div class="cat-gal-grid">${curated.map(tile).join('')}</div>
+  /* 自由指定 is one of the choices, not a separate control — and there is no 未設定: a magazine
+     always has one of these, so offering "nothing" beside a picked style was a contradiction. */
+  const free = `<button type="button" class="cat-gal-tile is-text" data-preset="${HP_AUTO}"
+      onclick="_pickCatPreset('${catId}','${HP_AUTO}')"><span class="cat-gal-img"><span>記事ごとに<br>選ぶ</span></span>
+      <span class="cat-gal-name">自由指定</span><span class="cat-gal-attrs">話題に合わせて毎回選ぶ</span></button>`;
+  const tiles = want === HP_AUTO ? free + curated.map(tile).join('') : curated.map(tile).join('') + free;
+  host.innerHTML = `${photo ? '' : '<div class="cat-hint">見本の写真がまだないので、仮の背景で描いています</div>'}
+    <div class="cat-gal-grid">${tiles}</div>
     ${legacy.length ? `<details class="cat-adv"${legacy.some((p) => p.id === want) ? ' open' : ''}
         ontoggle="if(this.open)_drawCatGallery('${catId}')">
         <summary>以前のスタイル（${legacy.length}）</summary>
@@ -3297,6 +3300,7 @@ function _fillCatPaletteOptions(catId) {
   if (want && !(_palettes || []).some((p) => p.id === want)) {
     sel.insertAdjacentHTML('beforeend', `<option value="${esc(want)}" selected>${esc(want)}（削除済み）</option>`);
   }
+  _pickStrip(`cat-palette-${catId}`, _paletteFace);
   _showCatPalette(catId);
 }
 
@@ -3333,9 +3337,43 @@ function _fillCatImagePromptOptionsFor(selId, kind) {
   }
 }
 
+/* A hidden <select> chosen by eye: one tile per option, the current one first and pressed in.
+   Used where the choice is visual — a picture style, a colour set — and the name says little. */
+function _pickStrip(selId, face) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  let box = document.getElementById(`${selId}-strip`);
+  if (!box) { box = document.createElement('div'); box.id = `${selId}-strip`; box.className = 'pick-strip'; sel.after(box); }
+  const opts = [...sel.options];
+  const cur = sel.value || sel.dataset.selected || '';
+  opts.sort((x, y) => (y.value === cur) - (x.value === cur));
+  box.innerHTML = opts.map((o) => `<button type="button" class="pick-tile${o.value === cur ? ' on' : ''}" data-v="${esc(o.value)}"
+      aria-pressed="${o.value === cur}">${face(o.value, o.textContent.trim())}</button>`).join('');
+  box.querySelectorAll('.pick-tile').forEach((b) => b.addEventListener('click', () => {
+    sel.value = b.dataset.v;
+    box.querySelectorAll('.pick-tile').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
+}
+// Japanese names wrap only at their own separators (・ ／ 括弧), never mid-word.
+const _jaWrap = (s) => esc(s).replace(/([・／/）)×\s])/g, '$1<wbr>');
+const _recipeFace = (v, label) => {
+  const r = _imagePrompts.find((x) => x.id === v);
+  const u = r?.samples?.find?.((s) => s?.url)?.url;
+  return `<span class="pick-img">${u ? `<img src="${esc(u)}" alt="" loading="lazy">` : `<span>${v ? '見本なし' : '記事ごとに<br>選ぶ'}</span>`}</span>
+    <span class="pick-name">${_jaWrap(v ? (r?.name || label) : '自動')}</span>`;
+};
+const _paletteFace = (v, label) => {
+  const p = (_palettes || []).find((x) => x.id === v);
+  return `<span class="pick-dots">${p ? `<i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i>`
+    : '<i class="is-style"></i>'}</span><span class="pick-name">${_jaWrap(p ? (p.name || label) : 'スタイルのまま')}</span>`;
+};
+
 function _fillCatImagePromptOptions(catId) {
   _fillCatImagePromptOptionsFor(`cat-imgprompt-${catId}`, 'hero');
   _fillCatImagePromptOptionsFor(`cat-figprompt-${catId}`, 'figure');
+  _pickStrip(`cat-imgprompt-${catId}`, _recipeFace);
+  _pickStrip(`cat-figprompt-${catId}`, _recipeFace);
 }
 
 async function refreshCatPreview(id) {
@@ -4223,105 +4261,6 @@ function _hpLayoutChips(s = {}) {
   return `<div class="hp-card-chips hp-layout" title="組み方（既定は中央・全面）">${
     out.map((t) => `<span class="cat-chip">${esc(t)}</span>`).join('')}</div>`;
 }
-
-/* ── List picker ────────────────────────────────────────────────────────────────
- * Every <select> on the dashboard is shown as a neumorphic field that opens a bottom-sheet list.
- * The native control drew a white OS box (and on phones had to be 16px so iOS would not zoom on
- * focus), which matched nothing around it and cut long names mid-word. The <select> stays in the
- * DOM, hidden, as the source of truth: code keeps reading .value, inline onchange keeps firing,
- * and options filled in later are picked up. Opt out with data-native.
- * Decorations (palette dots, recipe thumbnails) come from data-decor → _NSEL_DECOR.
- */
-const _NSEL_DECOR = {
-  palette: (v) => {
-    const p = (typeof _palettes !== 'undefined' && _palettes || []).find((x) => x.id === v);
-    return p ? `<span class="pal-dots"><i style="background:${esc(p.fill)}"></i><i style="background:${esc(p.stroke)}"></i><i style="background:${esc(p.emphasis)}"></i></span>` : '';
-  },
-  recipe: (v) => {
-    const r = (typeof _imagePrompts !== 'undefined' && _imagePrompts || []).find((x) => x.id === v);
-    const u = r?.samples?.find?.((x) => x?.url)?.url;
-    return u ? `<img class="nsel-thumb" src="${esc(u)}" alt="" loading="lazy">` : '';
-  },
-};
-const _nselLabel = (o) => (o?.textContent || '').trim();
-function _nselSync(sel) {
-  const btn = sel._nsel; if (!btn) return;
-  const o = sel.options[sel.selectedIndex];
-  const decor = _NSEL_DECOR[sel.dataset.decor]?.(sel.value) || '';
-  const lbl = sel.dataset.label ? `<span class="nsel-lbl">${esc(sel.dataset.label)}</span>` : '';
-  btn.innerHTML = `${lbl}${decor}<span class="nsel-val">${esc(_nselLabel(o) || '—')}</span><span class="nsel-chev" aria-hidden="true"></span>`;
-  btn.disabled = sel.disabled;
-  btn.hidden = sel.hidden;
-}
-function _nselUpgrade(sel) {
-  if (sel._nsel || sel.multiple || sel.dataset.native != null) return;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = `nsel ${sel.className}`.trim();
-  if (sel.getAttribute('style')) btn.setAttribute('style', sel.getAttribute('style'));
-  btn.setAttribute('aria-haspopup', 'listbox');
-  if (sel.getAttribute('aria-label') || sel.title) btn.setAttribute('aria-label', sel.getAttribute('aria-label') || sel.title);
-  btn.addEventListener('click', (e) => { e.stopPropagation(); _nselOpen(sel); });
-  sel._nsel = btn;
-  sel.classList.add('nsel-src');
-  sel.after(btn);
-  // Code that assigns .value directly fires no event; keep the face in step anyway.
-  const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
-  Object.defineProperty(sel, 'value', { configurable: true, get() { return proto.get.call(this); },
-    set(v) { proto.set.call(this, v); _nselSync(this); } });
-  new MutationObserver(() => _nselSync(sel)).observe(sel, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'disabled'] });
-  sel.addEventListener('change', () => _nselSync(sel));
-  _nselSync(sel);
-}
-function _nselOpen(sel) {
-  let sheet = document.getElementById('nsel-sheet');
-  if (!sheet) {
-    sheet = document.createElement('div');
-    sheet.id = 'nsel-sheet'; sheet.className = 'act-sheet';
-    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.remove('open'); });
-    document.body.appendChild(sheet);
-  }
-  const title = sel.dataset.label || sel.closest('label,.cat-row,.cat-field')?.querySelector('span,.cat-label')?.textContent?.trim()
-    || sel.getAttribute('aria-label') || '選択';
-  const decor = _NSEL_DECOR[sel.dataset.decor];
-  const rows = [];
-  for (const el of sel.children) {
-    if (el.tagName === 'OPTGROUP') {
-      rows.push(`<div class="nsel-group">${esc(el.label)}</div>`);
-      for (const o of el.children) rows.push(o);
-    } else rows.push(el);
-  }
-  sheet.innerHTML = `<div class="act-sheet-panel nsel-panel" role="listbox" aria-label="${esc(title)}">
-    <div class="act-sheet-title">${esc(title)}</div>
-    <div class="nsel-list">${rows.map((o) => typeof o === 'string' ? o
-      : `<button type="button" class="nsel-opt${o.value === sel.value ? ' on' : ''}" role="option" aria-selected="${o.value === sel.value}"
-          data-v="${esc(o.value)}"${o.disabled ? ' disabled' : ''}>${decor ? decor(o.value) : ''}<span>${esc(_nselLabel(o))}</span>${o.value === sel.value ? '<b aria-hidden="true">✓</b>' : ''}</button>`).join('')}</div>
-    <button class="act-sheet-btn is-cancel" type="button">閉じる</button>
-  </div>`;
-  sheet.querySelector('.is-cancel').onclick = () => sheet.classList.remove('open');
-  sheet.querySelectorAll('.nsel-opt').forEach((b) => b.addEventListener('click', () => {
-    sheet.classList.remove('open');
-    if (b.dataset.v === sel.value) return;
-    sel.value = b.dataset.v;
-    sel.dispatchEvent(new Event('input', { bubbles: true }));
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-  }));
-  requestAnimationFrame(() => {
-    sheet.classList.add('open');
-    sheet.querySelector('.nsel-opt.on')?.scrollIntoView({ block: 'center' });
-  });
-}
-(() => {
-  const scan = (root) => root.querySelectorAll?.('select').forEach(_nselUpgrade);
-  const start = () => {
-    scan(document);
-    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => {
-      if (n.nodeType !== 1) return;
-      if (n.tagName === 'SELECT') _nselUpgrade(n); else scan(n);
-    }))).observe(document.body, { childList: true, subtree: true });
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
-})();
 
 /* ── Card actions ──────────────────────────────────────────────────────────────
  * A row of 編集／複製／無効化／削除 under every card read as a form, not a list, and on a phone the
