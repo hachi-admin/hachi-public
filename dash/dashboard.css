@@ -3257,3 +3257,11 @@ body.sheet-open{overflow:hidden}
 #scroll-label .dp,#scroll-label .d1{font-size:9px;opacity:.7}
 #scroll-label .d2{font-size:8.5px;opacity:.5}
 #scroll-label .d3{font-size:8px;opacity:.38}
+
+/* 文字スタイル detail */
+.ss-shot{display:flex;align-items:center;justify-content:center;aspect-ratio:1280/670;border-radius:var(--frame-in-r);overflow:hidden}
+.ss-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.ss-dot{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--bg);box-shadow:var(--d-raise);cursor:pointer;position:relative}
+.ss-dot::after{content:'';position:absolute;inset:8px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.ss-dot.on{box-shadow:var(--d-on)}
+#ss-emph{padding:8px 10px;gap:10px}

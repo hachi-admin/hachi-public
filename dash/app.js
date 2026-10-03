@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '101';
+const DASH_BUILD = '102';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4052,6 +4052,135 @@ async function _loadSatoriPreviewInto(p, grid) {
   }
 }
 
+/* ── 文字スタイル detail ─────────────────────────────────────────────────────────
+ * The same sheet as a magazine's: the real 中央/サイド pictures on top, then only what a hand does
+ * well — name, emphasis colour, palette, size, spacing, position, and the glass or outline strength
+ * when the style has one. Everything else (every styleSpec key, JSON) stays behind ⋯ 詳細設定.
+ * Edits redraw both pictures (debounced) and are saved together with 保存.
+ */
+let _ss = null; // { id, name, spec, lines: 'short'|'long' }
+const _ssClone = (o) => JSON.parse(JSON.stringify(o ?? {}));
+function openStyleSheet(id) {
+  const p = _heroPresets.find((x) => x.id === id);
+  if (!p) return;
+  _ss = { id, name: p.name || id, spec: _ssClone(p.styleSpec), lines: 'short' };
+  document.getElementById('detail-content').innerHTML = _styleSheetHtml(p);
+  document.getElementById('detail-panel')?.classList.add('panel-wide');
+  document.getElementById('detail-overlay').classList.add('open');
+  _ensurePalettes().then(() => { _ssRenderPalettes(); _ssRenderEmph(); });
+  _ssDraw();
+}
+const _ssAlpha = (c) => { const m = String(c || '').match(/rgba\([^)]*,\s*([\d.]+)\)/i); return m ? Number(m[1]) : 1; };
+const _ssSetAlpha = (c, a) => String(c || 'rgba(255,255,255,0.5)').replace(/rgba\(([^,]+),([^,]+),([^,]+),\s*[\d.]+\)/i, `rgba($1,$2,$3,${a})`);
+function _styleSheetHtml(p) {
+  const s = _ss.spec;
+  const key = `hp:${p.id}`;
+  const slider = (id, label, min, max, step, val, fmt) => `<div class="cat-row"><span>${label} <b id="${id}-v">${fmt(val)}</b></span>
+    <input type="range" class="cat-range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"
+      oninput="_ssSlide('${id}',this.value)"></div>`;
+  const outer = Array.isArray(s.strokes) && s.strokes.length ? s.strokes[s.strokes.length - 1] : null;
+  return `
+    <div class="p-header cat-head">
+      <div style="flex:1;min-width:0">
+        <div class="p-title">${esc(p.name)}</div>
+        <div class="p-sub">${esc(_styleAttrs(p.styleSpec).join('・'))}</div>
+      </div>
+      <button class="act-more is-inline" aria-label="その他の操作" onclick="_openCardSheet('${esc(key)}')">⋯</button>
+    </div>
+    <div class="cat-sample-pair" id="ss-shots">
+      ${['中央', 'サイド'].map((l, i) => `<figure><div class="ss-shot" data-i="${i}"><span class="cat-hint">描いています…</span></div><figcaption>${l}</figcaption></figure>`).join('')}
+    </div>
+    <div class="cat-row" style="margin-top:10px">${_seg('ss-lines', [{ id: 'short', label: '短い見出し' }, { id: 'long', label: '長い見出し' }], 'short', { on: "_ssLines(%v)", hint: false })}</div>
+
+    <div class="cat-block">
+      <div class="cat-row"><span>名前</span>
+        <input type="text" class="cat-in" id="ss-name" maxlength="40" value="${esc(_ss.name)}" oninput="_ss.name=this.value"></div>
+      <div class="cat-row"><span>強調の色</span><div class="pick-strip" id="ss-emph"></div></div>
+      <div class="cat-row"><span>配色</span><div class="pick-strip" id="ss-pal"></div></div>
+      ${slider('ss-size', '大きさ', 80, 200, 5, s.maxSize ?? 130, (v) => `${v}px`)}
+      ${slider('ss-track', '字間', -0.08, 0.08, 0.005, s.tracking ?? 0, (v) => (Number(v) < -0.01 ? '詰める' : Number(v) > 0.01 ? '広げる' : '標準'))}
+      <div class="cat-row"><span>横の位置</span>${_seg('ss-align', [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], s.align ?? '', { on: "_ssSet('align',%v)", hint: false })}</div>
+      <div class="cat-row"><span>縦の位置</span>${_seg('ss-anchor', [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], s.anchor ?? '', { on: "_ssSet('anchor',%v)", hint: false })}</div>
+      ${s.panel ? slider('ss-glass', 'ガラスの濃さ', 0.1, 0.9, 0.05, _ssAlpha(s.panel.tint), (v) => `${Math.round(v * 100)}%`) : ''}
+      ${outer ? slider('ss-stroke', '縁の太さ', 0.02, 0.16, 0.005, outer.em ?? 0.06, (v) => (v < 0.05 ? '細い' : v > 0.1 ? '太い' : '標準')) : ''}
+    </div>
+    <div class="p-actions">
+      <button class="save-btn" onclick="_ssSave()">保存</button>
+    </div>`;
+}
+function _ssSet(k, v) { if (v === '' || v == null) delete _ss.spec[k]; else _ss.spec[k] = v; _ssDraw(); }
+function _ssLines(v) { _ss.lines = v; _ssDraw(); }
+function _ssSlide(id, v) {
+  const n = Number(v), s = _ss.spec;
+  if (id === 'ss-size') s.maxSize = n;
+  if (id === 'ss-track') s.tracking = n;
+  if (id === 'ss-glass' && s.panel) s.panel.tint = _ssSetAlpha(s.panel.tint, n);
+  if (id === 'ss-stroke' && s.strokes?.length) {
+    // The outline set keeps its proportions: every stroke scales with the outer one.
+    const outer = s.strokes[s.strokes.length - 1], f = n / (outer.em || n);
+    s.strokes.forEach((st) => { st.em = Math.round((st.em || n) * f * 1000) / 1000; });
+  }
+  const lbl = document.getElementById(`${id}-v`);
+  if (lbl) lbl.textContent = id === 'ss-size' ? `${n}px` : id === 'ss-glass' ? `${Math.round(n * 100)}%`
+    : id === 'ss-track' ? (n < -0.01 ? '詰める' : n > 0.01 ? '広げる' : '標準') : (n < 0.05 ? '細い' : n > 0.1 ? '太い' : '標準');
+  _ssDraw();
+}
+function _ssRenderPalettes() {
+  const box = document.getElementById('ss-pal'); if (!box) return;
+  const cur = _ss.spec.palette || '';
+  const opts = [{ id: '' }, ...(_palettes || [])].sort((x, y) => (y.id === cur) - (x.id === cur));
+  box.innerHTML = opts.map((p) => `<button type="button" class="pick-tile${p.id === cur ? ' on' : ''}" onclick="_ssPick('palette','${esc(p.id)}',this)">${_paletteFace(p.id, p.name || '')}</button>`).join('');
+}
+function _ssRenderEmph() {
+  const box = document.getElementById('ss-emph'); if (!box) return;
+  const cur = (_ss.spec.highlight?.color || '').toUpperCase();
+  const set = new Set([cur, ...(_palettes || []).map((p) => String(p.emphasis || '').toUpperCase()), '#FFD400', '#29E1CB', '#E53935', '#2F6BFF', '#FFFFFF'].filter(Boolean));
+  box.innerHTML = [...set].map((c) => `<button type="button" class="ss-dot${c === cur ? ' on' : ''}" style="--c:${esc(c)}" aria-label="${esc(c)}" onclick="_ssPick('emph','${esc(c)}',this)"></button>`).join('');
+}
+function _ssPick(kind, v, btn) {
+  btn.parentElement.querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
+  btn.classList.add('on');
+  if (kind === 'palette') { if (v) _ss.spec.palette = v; else delete _ss.spec.palette; }
+  if (kind === 'emph') _ss.spec.highlight = { ...(_ss.spec.highlight || {}), color: v };
+  _ssDraw();
+}
+let _ssTimer = 0, _ssRun = 0;
+function _ssDraw() {
+  clearTimeout(_ssTimer);
+  _ssTimer = setTimeout(async () => {
+    const run = ++_ssRun;
+    const p = _heroPresets.find((x) => x.id === _ss.id); if (!p) return;
+    const cats = await _ensureCategoriesForPreview();
+    const withPhotos = (c) => c?.visual?.samples?.center?.photoUrl || c?.visual?.samples?.side?.photoUrl;
+    const cat = cats.find((c) => c.visual?.heroPreset === p.id && withPhotos(c)) || cats.find((c) => c.id === p.sampleCategory) || cats.find(withPhotos);
+    const lines = _hpNormalizeVariants(p.exampleLines)[_ss.lines] || _hpNormalizeVariants(p.exampleLines).standard;
+    for (const [i, pattern] of ['center', 'side'].entries()) {
+      const host = document.querySelector(`#ss-shots .ss-shot[data-i="${i}"]`);
+      if (!host) continue;
+      const zone = pattern === 'side' ? ((cat?.id || '').length % 2 === 0 ? 'left' : 'right') : 'full';
+      const res = await _withPreviewSlot(() => fetch(apiUrl('/api/hero-presets/preview'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+        body: JSON.stringify({ presetId: p.id, templateId: 'photo_scrim', styleSpec: { ..._ss.spec, textZone: zone },
+          photoUrl: cat?.visual?.samples?.[pattern]?.photoUrl || undefined, lines, emphasis: [], width: 640, article: _ss.name,
+          meta: { series: cat?.visual?.eyebrow || cat?.name || '' } }),
+      }).catch(() => null));
+      if (run !== _ssRun) return;
+      if (!res?.ok) { host.innerHTML = '<span class="cat-hint">描けませんでした</span>'; continue; }
+      const url = URL.createObjectURL(await res.blob());
+      host.innerHTML = `<img src="${url}" alt="" onclick="_openLightbox('${url}','')">`;
+    }
+  }, 500);
+}
+async function _ssSave() {
+  const res = await fetch(apiUrl(`/api/hero-presets/${_ss.id}`), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+    body: JSON.stringify({ name: _ss.name.trim() || _ss.id, styleSpec: _ss.spec }),
+  }).catch(() => null);
+  if (!res?.ok) { const e = await res?.json().catch(() => ({})); showToast(e?.error || '保存できませんでした', 'error'); return; }
+  showToast('保存しました', 'success');
+  closeDetail(); _loadHeroPresets();
+}
+
 /* Start a new style from an existing one — the usual way a catalogue grows, since most new styles
    are a variation (another colour, another face) on one that already works. Saved as a new id. */
 function _duplicateHeroPreset(id) {
@@ -4433,9 +4562,10 @@ function _heroPresetCard(p) {
      one is retired in place instead — the tombstone stops the seeder and every reader skips it. */
   const acts = _actCard(`hp:${p.id}`, {
     title: p.name,
-    primary: { label: '編集', run: () => _editHeroPreset(p.id) },
+    primary: { label: '編集', run: () => openStyleSheet(p.id) },
     items: [
       { label: '複製', hint: 'このスタイルを元に新しく作る', run: () => _duplicateHeroPreset(p.id) },
+      { label: '詳細設定（JSON）', hint: 'すべての項目を直接編集する（上級者向け）', run: () => _editHeroPreset(p.id) },
       { label: off ? '有効化' : '無効化', hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
       ...(off ? [{ label: '削除', danger: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '', run: () => _deleteHeroPreset(p.id) }] : []),
     ],
