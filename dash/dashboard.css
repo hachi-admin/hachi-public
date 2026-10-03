@@ -3269,3 +3269,28 @@ body.sheet-open{overflow:hidden}
 .ip-decide .act-btn{min-width:84px;justify-content:center}
 /* An empty sample slot keeps the picture's shape (it collapsed to a bar without this). */
 .ip-shot.ip-shot-wait{aspect-ratio:16/10!important;flex-direction:column;gap:4px}
+
+/* 形式 tiles: each drawn as its own skeleton */
+.fmt-strip .pick-tile{flex:0 0 34%}
+.fmt-skel{display:flex;flex-direction:column;gap:4px;padding:8px;border-radius:10px;box-shadow:var(--d-well);min-height:92px}
+.fmt-skel i{font-style:normal;font-size:9.5px;line-height:1.3;color:var(--m);padding:3px 6px;border-radius:6px;
+  background:color-mix(in srgb,var(--acc) 10%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fmt-tile.on .fmt-skel i{background:color-mix(in srgb,var(--acc) 22%,transparent);color:var(--acc)}
+.fmt-outline{list-style:none;margin:6px 0 12px;padding:0;display:flex;flex-direction:column;gap:10px}
+.fmt-outline li{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:12px;box-shadow:var(--d-well)}
+.fmt-outline b{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:var(--fs-xs);
+  color:var(--acc);box-shadow:var(--d-raise)}
+.fmt-outline strong{display:block;font-size:var(--fs-m);color:var(--txt)}
+.fmt-outline span{font-size:var(--fs-s);color:var(--m);line-height:1.5}
+.range-ends{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--m2);margin-top:-4px}
+
+/* Sheet header: ⋯ sits beside ×, same size, same row. */
+.cat-head{padding-right:96px;position:static!important}
+.cat-head .act-more.is-inline{position:absolute!important;top:14px;right:56px;width:34px;height:34px;font-size:15px}
+@media (max-width:768px){.cat-head .act-more.is-inline{top:10px;right:58px;width:40px;height:40px}}
+
+/* Coloured tags: a soft tint of the word's own hue. */
+.cat-chip.tag-tint{background:hsl(var(--h) 70% 50% / .14);color:hsl(var(--h) 55% 34%)}
+
+/* Scroll label: top-left, just under the tabs, out of the way of the cards. */
+#scroll-label{left:14px!important;right:auto!important;top:118px!important;align-items:flex-start!important;transform:none!important}

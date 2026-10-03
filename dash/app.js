@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '104';
+const DASH_BUILD = '105';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2501,10 +2501,42 @@ async function _loadCatThumbInto(id) {
 }
 
 // The full editor, opened in the shared detail overlay.
+/* Every change in the panel saves itself. Fields with their own quick PATCH (書き方) are excluded by
+   saveCategory's body; the rest are saved together, debounced. A new 画風 is the one change that
+   buys a fresh picture (composed for it); everything else only re-letters the stored photographs. */
+let _catSaveT = 0;
+function _catAutosave(id) {
+  clearTimeout(_catSaveT);
+  const lbl = document.getElementById(`cat-saved-${id}`); if (lbl) lbl.textContent = '保存中…';
+  _catSaveT = setTimeout(async () => {
+    const c = CATEGORIES.find((x) => x.id === id);
+    const recipeChanged = (_catVal(`cat-imgprompt-${id}`) || '') !== (c?.visual?.imagePrompt || '');
+    await saveCategory(id, { silent: true, reletterOnly: !recipeChanged });
+    const res = await fetch(apiUrl(`/api/article-categories/${id}`), { headers: _authHeaders() }).catch(() => null);
+    const fresh = res?.ok ? (await res.json().catch(() => null))?.category : null;
+    if (fresh) { const i = CATEGORIES.findIndex((x) => x.id === id); if (i >= 0) CATEGORIES[i] = fresh; }
+    const l2 = document.getElementById(`cat-saved-${id}`);
+    if (l2) l2.textContent = recipeChanged ? '保存しました（新しい画風で見本を描き直しています）' : '保存しました';
+  }, 900);
+}
+
 function openCategoryDetail(id) {
   const c = CATEGORIES.find(x => x.id === id);
   if (!c) return;
   document.getElementById('detail-content').innerHTML = _categoryEditor(c);
+  const host = document.getElementById('detail-content');
+  if (!host.dataset.autosave) {
+    host.dataset.autosave = '1';
+    const trigger = (e) => {
+      const t = e.target;
+      if (!t?.id || t.id.startsWith('catq-') || t.closest?.('.seg-wrap [id^="catq-"]')) return;
+      const m = t.id.match(/^cat-[a-z]+-(.+)$/) || t.closest?.('[id^="cat-gallery-"]')?.id.match(/^cat-gallery-(.+)$/);
+      const cid = document.querySelector('#detail-content [id^="cat-saved-"]')?.id.replace('cat-saved-', '');
+      if (cid) _catAutosave(cid);
+    };
+    host.addEventListener('change', trigger);
+    host.addEventListener('input', (e) => { if (e.target.matches('input[type=text]')) trigger(e); });
+  }
   document.getElementById('detail-panel')?.classList.add('panel-wide');
   const ov = document.getElementById('detail-overlay');
   ov.classList.add('open');
@@ -2554,6 +2586,11 @@ function _segPick(btn) {
   const g = btn.closest('.seg');
   const input = g.querySelector('input[type=hidden]');
   input.value = btn.dataset.v;
+  // Panel fields (not the quick-saved 書き方 ones, which PATCH themselves) save on tap.
+  if (!input.id.startsWith('catq-') && input.id.startsWith('cat-')) {
+    const cid = document.querySelector('#detail-content [id^="cat-saved-"]')?.id.replace('cat-saved-', '');
+    if (cid) _catAutosave(cid);
+  }
   g.querySelectorAll('.seg-btn').forEach((b) => { const on = b === btn; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
   const h = document.getElementById(`${input.id}-hint`);
   if (h) h.textContent = btn.dataset.hint || '';
@@ -2660,7 +2697,7 @@ function _categoryEditor(c) {
     <div class="cat-block">
       <div class="cat-block-hd">書き方 <small>タップで保存</small></div>
       <div class="cat-row"><span>頻度</span>${_seg(`catq-freq-${c.id}`, _opts(CAT_META?.frequencies), c.frequency, { on: q('frequency') })}</div>
-      <div class="cat-row"><span>形式</span>${_seg(`catq-format-${c.id}`, _opts(CAT_META?.formats), style.format, { on: q('style.format') })}</div>
+      <div class="cat-row"><span>形式 <small>タップで構成を見る</small></span>${_formatStrip(c.id, style.format)}</div>
       <div class="cat-row"><span>語り口</span>${_seg(`catq-voice-${c.id}`, _opts(CAT_META?.voices), style.voice, { on: q('style.voice') })}</div>
       <div class="cat-row"><span>情報量</span>${_seg(`catq-depth-${c.id}`, _opts(CAT_META?.depths), style.depth, { on: q('style.depth') })}</div>
       <div class="cat-row"><span>図版</span>${_seg(`catq-vd-${c.id}`, _opts(CAT_META?.visualDensities), style.visualDensity, { on: q('style.visualDensity') })}</div>
@@ -2691,10 +2728,47 @@ function _categoryEditor(c) {
       ${_moneyField(c)}
     </div>
 
-    <div class="p-actions">
-      <button class="save-btn" onclick="saveCategory('${c.id}')">見た目と読者を保存</button>
-      ${statusPrimary ? `<button class="act-btn resume" onclick="catAction('${c.id}','${statusPrimary[0]}')">${statusPrimary[1]}</button>` : ''}
-    </div>`;
+    <div class="cat-hint" id="cat-saved-${c.id}" style="text-align:center;margin-top:12px">変更はその場で保存されます</div>
+    ${statusPrimary ? `<div class="p-actions"><button class="act-btn resume" onclick="catAction('${c.id}','${statusPrimary[0]}')">${statusPrimary[1]}</button></div>` : ''}`;
+}
+
+/* 形式, chosen the way a style is: a strip of tiles, each drawn as its own skeleton (the sections
+   the writer must produce, from STYLE_LABELS.format[].outline). Tapping one opens the whole
+   structure; choosing is the button there. */
+function _formatStrip(catId, cur) {
+  const fs = [...(CAT_META?.formats || [])].sort((x, y) => (y.id === cur) - (x.id === cur));
+  return `<div class="pick-strip fmt-strip" id="fmt-strip-${catId}">${fs.map((f) => `
+    <button type="button" class="pick-tile fmt-tile${f.id === cur ? ' on' : ''}" onclick="_openFormat('${catId}','${f.id}')">
+      <span class="fmt-skel">${(f.outline || []).map(([h]) => `<i>${esc(h)}</i>`).join('')}</span>
+      <span class="pick-name">${esc(f.label)}</span></button>`).join('')}</div>`;
+}
+function _openFormat(catId, fid) {
+  const f = (CAT_META?.formats || []).find((x) => x.id === fid); if (!f) return;
+  const c = CATEGORIES.find((x) => x.id === catId);
+  const cur = c?.style?.format === fid;
+  let sheet = document.getElementById('fmt-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div'); sheet.id = 'fmt-sheet'; sheet.className = 'act-sheet';
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.remove('open'); });
+    document.body.appendChild(sheet);
+  }
+  sheet.innerHTML = `<div class="act-sheet-panel">
+    <div class="act-sheet-title">${esc(f.label)}</div>
+    <div class="cat-hint" style="text-align:center;margin-bottom:6px">${esc(f.hint || '')}</div>
+    <ol class="fmt-outline">${(f.outline || []).map(([h, d], i) => `<li><b>${i + 1}</b><div><strong>${esc(h)}</strong><span>${esc(d)}</span></div></li>`).join('')}</ol>
+    ${cur ? '<div class="cat-hint" style="text-align:center">この形式を使っています</div>'
+      : `<button class="consult-btn" onclick="_pickFormat('${catId}','${fid}')">この形式にする</button>`}
+    <button class="act-sheet-btn is-cancel" onclick="document.getElementById('fmt-sheet').classList.remove('open')">閉じる</button>
+  </div>`;
+  requestAnimationFrame(() => sheet.classList.add('open'));
+}
+async function _pickFormat(catId, fid) {
+  document.getElementById('fmt-sheet')?.classList.remove('open');
+  await quickSetCategory(catId, 'style.format', fid);
+  const c = CATEGORIES.find((x) => x.id === catId);
+  if (c) { c.style = { ...(c.style || {}), format: fid }; }
+  const strip = document.getElementById(`fmt-strip-${catId}`);
+  if (strip) strip.outerHTML = _formatStrip(catId, fid);
 }
 
 function _ageSlide(id, which) {
@@ -3037,8 +3111,8 @@ function _visualSection(c) {
       <div class="seg is-multi" id="cat-eyetags-chips-${c.id}">${_eyeTagChips(c.id, v.eyebrow || '', v.eyebrowEmphasis || [])}</div>
     </div>
     <div class="cat-row"><span>マガジン名の位置</span>${_seg(`cat-eyeplace-${c.id}`, [{ id: '', label: '見出しのすぐ上' }, { id: 'corner', label: '画像の隅に小さく' }], v.eyebrowPlacement || '', { on, hint: false })}</div>
-    <div class="cat-row"><span>文字の横位置</span>${_seg(`cat-align-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], v.align || '', { on, hint: false })}</div>
-    <div class="cat-row"><span>文字の縦位置</span>${_seg(`cat-anchor-${c.id}`, [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], v.anchor || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>左右の揃え</span>${_seg(`cat-align-${c.id}`, _ALIGN_H, v.align || '', { on, hint: false })}</div>
+    <div class="cat-row"><span>上下の揃え</span>${_seg(`cat-anchor-${c.id}`, _ALIGN_V, v.anchor || '', { on, hint: false })}</div>
     <div class="cat-row"><span>見出し画像の画風</span>
       <select id="cat-imgprompt-${c.id}" class="cat-in" hidden data-selected="${esc(v.imagePrompt || '')}">
         <option value="">自動（記事ごとに選ぶ）</option>
@@ -3070,6 +3144,7 @@ function _eyeTagChips(id, name, chosen) {
 }
 function _toggleEyeTag(id, btn) {
   btn.classList.toggle('on');
+  setTimeout(() => _catAutosave(id), 0);
   const box = document.getElementById(`cat-eyetags-chips-${id}`);
   document.getElementById(`cat-eyetags-${id}`).value =
     [...box.querySelectorAll('.seg-btn.on')].map((b) => b.dataset.v).join('、');
@@ -3264,6 +3339,7 @@ function _pickCatPreset(catId, presetId) {
   sel.value = presetId;
   _markCatGallery(catId);
   queueCatPreview(catId);
+  _catAutosave(catId);
 }
 
 function _markCatGallery(catId) {
@@ -3323,7 +3399,8 @@ function _fillCatImagePromptOptionsFor(selId, kind) {
   const sel = document.getElementById(selId);
   if (!sel) return;
   const want = sel.dataset.selected || '';
-  const usable = _imagePrompts.filter((r) => r.enabled !== false && (r.kind ?? 'hero') === kind);
+  // Every 画風 can draw both the cover and the in-body figures (the server adapts the composition).
+  const usable = _imagePrompts.filter((r) => r.enabled !== false && r.approval?.status !== 'rejected');
   /* A recipe's name says almost nothing about what it produces — 「夜の路地」 could be anything —
      and every recipe already keeps three generated samples in Firestore for exactly this. A
      <select> cannot carry an image, so the option text stays text and the picture is shown by the
@@ -3423,8 +3500,9 @@ async function refreshCatPreview(id) {
 /* `silent` is for callers that save as a step rather than as the point — regenCategorySample
    commits the pickers before rendering against them. Those must not close the panel the operator
    is still working in, nor claim "保存しました" for an action that has not finished yet. */
-async function saveCategory(id, { silent = false } = {}) {
+async function saveCategory(id, { silent = false, reletterOnly = false } = {}) {
   const body = {
+    ...(reletterOnly ? { reletterOnly: true } : {}),
     // `prompt` deliberately absent: it is changed by approving a rewrite in Discord, not by 保存.
     // Sending it from here would write back whatever the panel happened to be showing and quietly
     // undo a change approved while this panel was open.
@@ -4090,26 +4168,33 @@ function _styleSheetHtml(p) {
     <div class="cat-sample-pair" id="ss-shots">
       ${['中央', 'サイド'].map((l, i) => `<figure><div class="ss-shot" data-i="${i}"><span class="cat-hint">描いています…</span></div><figcaption>${l}</figcaption></figure>`).join('')}
     </div>
-    <div class="cat-row" style="margin-top:10px">${_seg('ss-lines', [{ id: 'short', label: '短い見出し' }, { id: 'long', label: '長い見出し' }], 'short', { on: "_ssLines(%v)", hint: false })}</div>
+    <div class="cat-row" style="margin-top:10px"><span>見出しの長さ <b id="ss-len-v">短い</b></span>
+      <input type="range" class="cat-range" min="0" max="2" step="1" value="0" oninput="_ssLen(this.value)">
+      <div class="range-ends"><span>短い</span><span>標準</span><span>長い</span></div></div>
 
     <div class="cat-block">
       <div class="cat-row"><span>名前</span>
-        <input type="text" class="cat-in" id="ss-name" maxlength="40" value="${esc(_ss.name)}" oninput="_ss.name=this.value"></div>
+        <input type="text" class="cat-in" id="ss-name" maxlength="40" value="${esc(_ss.name)}" oninput="_ss.name=this.value;_ssAutosave()"></div>
       <div class="cat-row"><span>強調の色</span><div class="pick-strip" id="ss-emph"></div></div>
       <div class="cat-row"><span>配色</span><div class="pick-strip" id="ss-pal"></div></div>
       ${slider('ss-size', '大きさ', 80, 200, 5, s.maxSize ?? 130, (v) => `${v}px`)}
       ${slider('ss-track', '字間', -0.08, 0.08, 0.005, s.tracking ?? 0, (v) => (Number(v) < -0.01 ? '詰める' : Number(v) > 0.01 ? '広げる' : '標準'))}
-      <div class="cat-row"><span>横の位置</span>${_seg('ss-align', [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左' }, { id: 'center', label: '中央' }, { id: 'right', label: '右' }], s.align ?? '', { on: "_ssSet('align',%v)", hint: false })}</div>
-      <div class="cat-row"><span>縦の位置</span>${_seg('ss-anchor', [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上' }, { id: 'center', label: '中央' }, { id: 'bottom', label: '下' }], s.anchor ?? '', { on: "_ssSet('anchor',%v)", hint: false })}</div>
+      <div class="cat-row"><span>左右の揃え</span>${_seg('ss-align', _ALIGN_H, s.align ?? '', { on: "_ssSet('align',%v)", hint: false })}</div>
+      <div class="cat-row"><span>上下の揃え</span>${_seg('ss-anchor', _ALIGN_V, s.anchor ?? '', { on: "_ssSet('anchor',%v)", hint: false })}</div>
       ${s.panel ? slider('ss-glass', 'ガラスの濃さ', 0.1, 0.9, 0.05, _ssAlpha(s.panel.tint), (v) => `${Math.round(v * 100)}%`) : ''}
       ${outer ? slider('ss-stroke', '縁の太さ', 0.02, 0.16, 0.005, outer.em ?? 0.06, (v) => (v < 0.05 ? '細い' : v > 0.1 ? '太い' : '標準')) : ''}
     </div>
-    <div class="p-actions">
-      <button class="save-btn" onclick="_ssSave()">保存</button>
-    </div>`;
+    <div class="cat-hint" id="ss-saved" style="text-align:center;margin-top:12px">変更はその場で保存されます</div>`;
 }
+// Word-style alignment names, the ones a Japanese user already knows from documents.
+const _ALIGN_H = [{ id: '', label: 'おまかせ' }, { id: 'left', label: '左揃え' }, { id: 'center', label: '中央揃え' }, { id: 'right', label: '右揃え' }];
+const _ALIGN_V = [{ id: '', label: 'おまかせ' }, { id: 'top', label: '上揃え' }, { id: 'center', label: '上下中央' }, { id: 'bottom', label: '下揃え' }];
 function _ssSet(k, v) { if (v === '' || v == null) delete _ss.spec[k]; else _ss.spec[k] = v; _ssDraw(); }
-function _ssLines(v) { _ss.lines = v; _ssDraw(); }
+function _ssLen(v) {
+  _ss.lines = ['short', 'standard', 'long'][Number(v)] || 'short';
+  document.getElementById('ss-len-v').textContent = ['短い', '標準', '長い'][Number(v)];
+  _ssDraw(false);
+}
 function _ssSlide(id, v) {
   const n = Number(v), s = _ss.spec;
   if (id === 'ss-size') s.maxSize = n;
@@ -4135,7 +4220,16 @@ function _ssRenderEmph() {
   const box = document.getElementById('ss-emph'); if (!box) return;
   const cur = (_ss.spec.highlight?.color || '').toUpperCase();
   const set = new Set([cur, ...(_palettes || []).map((p) => String(p.emphasis || '').toUpperCase()), '#FFD400', '#29E1CB', '#E53935', '#2F6BFF', '#FFFFFF'].filter(Boolean));
-  box.innerHTML = [...set].map((c) => `<button type="button" class="ss-dot${c === cur ? ' on' : ''}" style="--c:${esc(c)}" aria-label="${esc(c)}" onclick="_ssPick('emph','${esc(c)}',this)"></button>`).join('');
+  const hsl = (hex) => {
+    const m = hex.match(/^#?([0-9a-f]{6})$/i); if (!m) return [999, 0, 0];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+    if (d < 0.08) return [999, 0, l]; // greys and white after the colours
+    const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [(h * 60 + 360) % 360, d, l];
+  };
+  const sorted = [...set].sort((x, y) => { const [h1, , l1] = hsl(x), [h2, , l2] = hsl(y); return h1 - h2 || l1 - l2; });
+  box.innerHTML = sorted.map((c) => `<button type="button" class="ss-dot${c === cur ? ' on' : ''}" style="--c:${esc(c)}" aria-label="${esc(c)}" onclick="_ssPick('emph','${esc(c)}',this)"></button>`).join('');
 }
 function _ssPick(kind, v, btn) {
   btn.parentElement.querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
@@ -4145,7 +4239,8 @@ function _ssPick(kind, v, btn) {
   _ssDraw();
 }
 let _ssTimer = 0, _ssRun = 0;
-function _ssDraw() {
+function _ssDraw(save = true) {
+  if (save) _ssAutosave();
   clearTimeout(_ssTimer);
   _ssTimer = setTimeout(async () => {
     const run = ++_ssRun;
@@ -4158,12 +4253,17 @@ function _ssDraw() {
       const host = document.querySelector(`#ss-shots .ss-shot[data-i="${i}"]`);
       if (!host) continue;
       const zone = pattern === 'side' ? ((cat?.id || '').length % 2 === 0 ? 'left' : 'right') : 'full';
-      const res = await _withPreviewSlot(() => fetch(apiUrl('/api/hero-presets/preview'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-        body: JSON.stringify({ presetId: p.id, templateId: 'photo_scrim', styleSpec: { ..._ss.spec, textZone: zone },
-          photoUrl: cat?.visual?.samples?.[pattern]?.photoUrl || undefined, lines, emphasis: [], width: 640, article: _ss.name,
-          meta: { series: cat?.visual?.eyebrow || cat?.name || '' } }),
-      }).catch(() => null));
+      // Straight to the server, not behind the list's preview queue (the list may hold twenty).
+      const body = JSON.stringify({ presetId: p.id, templateId: 'photo_scrim', styleSpec: { ..._ss.spec, textZone: zone },
+        photoUrl: cat?.visual?.samples?.[pattern]?.photoUrl || undefined, lines, emphasis: [], width: 640, article: _ss.name,
+        meta: { series: cat?.visual?.eyebrow || cat?.name || '' } });
+      let res = null;
+      for (let t = 0; t < 3 && !res?.ok; t++) {
+        if (t) await new Promise((r) => setTimeout(r, 1200 * t));
+        if (run !== _ssRun) return;
+        res = await fetch(apiUrl('/api/hero-presets/preview'), { method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._authHeaders() }, body }).catch(() => null);
+      }
       if (run !== _ssRun) return;
       if (!res?.ok) { host.innerHTML = '<span class="cat-hint">描けませんでした</span>'; continue; }
       const url = URL.createObjectURL(await res.blob());
@@ -4171,14 +4271,22 @@ function _ssDraw() {
     }
   }, 500);
 }
-async function _ssSave() {
-  const res = await fetch(apiUrl(`/api/hero-presets/${_ss.id}`), {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
-    body: JSON.stringify({ name: _ss.name.trim() || _ss.id, styleSpec: _ss.spec }),
-  }).catch(() => null);
-  if (!res?.ok) { const e = await res?.json().catch(() => ({})); showToast(e?.error || '保存できませんでした', 'error'); return; }
-  showToast('保存しました', 'success');
-  closeDetail(); _loadHeroPresets();
+// Every change saves itself (debounced); there is no 保存 button.
+let _ssSaveT = 0;
+function _ssAutosave() {
+  clearTimeout(_ssSaveT);
+  const el = document.getElementById('ss-saved'); if (el) el.textContent = '保存中…';
+  _ssSaveT = setTimeout(async () => {
+    const res = await fetch(apiUrl(`/api/hero-presets/${_ss.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+      body: JSON.stringify({ name: _ss.name.trim() || _ss.id, styleSpec: _ss.spec }),
+    }).catch(() => null);
+    const e2 = document.getElementById('ss-saved');
+    if (!res?.ok) { const e = await res?.json().catch(() => ({})); showToast(e?.error || '保存できませんでした', 'error'); if (e2) e2.textContent = '保存できませんでした'; return; }
+    const i = _heroPresets.findIndex((x) => x.id === _ss.id);
+    if (i >= 0) _heroPresets[i] = { ..._heroPresets[i], name: _ss.name, styleSpec: _ssClone(_ss.spec) };
+    if (e2) e2.textContent = '保存しました';
+  }, 900);
 }
 
 /* Start a new style from an existing one — the usual way a catalogue grows, since most new styles
@@ -4447,7 +4555,8 @@ const _SCROLL_INDEX = [
 const _CARD_ACTS = new Map();
 function _actCard(key, { title, primary, items = [] }) {
   _CARD_ACTS.set(key, { title, primary, items });
-  const strip = items.filter((it) => !it.noStrip).slice(0, 3);
+  // Sideways swipe is for taking something away (却下・無効化・削除), as in Mail; the rest stay in ⋯.
+  const strip = items.filter((it) => it.removes).slice(0, 2);
   return {
     attrs: `data-acts="${esc(key)}"`,
     more: `<button class="act-more" aria-label="その他の操作" onclick="event.stopPropagation();_openCardSheet('${esc(key)}')">⋯</button>`,
@@ -4566,8 +4675,8 @@ function _heroPresetCard(p) {
     items: [
       { label: '複製', hint: 'このスタイルを元に新しく作る', run: () => _duplicateHeroPreset(p.id) },
       { label: '詳細設定（JSON）', hint: 'すべての項目を直接編集する（上級者向け）', run: () => _editHeroPreset(p.id) },
-      { label: off ? '有効化' : '無効化', hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
-      ...(off ? [{ label: '削除', danger: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '', run: () => _deleteHeroPreset(p.id) }] : []),
+      { label: off ? '有効化' : '無効化', removes: !off, hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
+      ...(off ? [{ label: '削除', danger: true, removes: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '使っていたマガジンは自動に戻ります', run: () => _deleteHeroPreset(p.id) }] : []),
     ],
   });
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
@@ -6062,7 +6171,10 @@ function _renderImagePrompts() {
 }
 
 const _IP_KIND = { hero: '見出し画像', figure: '図解' };
-const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画像→加工' };
+// Where the picture comes from: drawn from nothing, a real photo found for the article, or one restyled.
+const _IP_SOURCE = { ai: 'AIで描く', web: '実写を探す', web_then_stylise: '実写を加工' };
+// A tag keeps its colour everywhere it appears: hue from the word itself.
+const _tagHue = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.codePointAt(0)) % 360; return h; };
 
 // The standard sample subjects — same order as knowledge/recipe-samples.js STANDARD_SUBJECTS.
 const _IP_SUBJECTS = ['人物', '風景', 'もの', '文字'];
@@ -6086,8 +6198,9 @@ function _imagePromptCard(r) {
     items: [
       { label: samples.length ? '見本を作り直す' : '見本を作る', short: '見本', hint: '人物・風景・もの・文字の4枚を作り直す（承認前は1枚・画像生成が走ります）', run: () => _genImagePromptSamples(r.id) },
       ...(samples.length ? [{ label: isApproved ? '相談する' : '承認へ', noStrip: true, hint: 'Discord に承認カードを送る', run: () => _proposeImagePrompt(r.id) }] : []),
-      { label: off ? '有効化' : '無効化', hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
-      ...(off && !r.isSystem ? [{ label: '削除', danger: true, run: () => _deleteImagePrompt(r.id) }] : []),
+      ...(r.approval?.status === 'approved' || r.isSystem ? [] : [{ label: '却下', removes: true, hint: '提案を却下する', run: () => _decideImagePrompt(r.id, 'rejected') }]),
+      { label: off ? '有効化' : '無効化', removes: !off, hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
+      ...(!r.isSystem ? [{ label: '削除', danger: true, removes: true, hint: '使っていたマガジンは自動に戻ります', run: () => _deleteImagePrompt(r.id) }] : []),
     ],
   });
   /* The pictures are the card. An approved 画風 shows its four standard subjects (人物・風景・もの・
@@ -6115,7 +6228,6 @@ function _imagePromptCard(r) {
       <div class="hp-card-name" title="${esc(r.id)}">${_jaWrap(_nickname(r.name, r.id))}</div>
       ${r.description ? `<div class="hp-card-desc">${esc(r.description)}</div>` : ''}
       <div class="hp-card-chips">
-        <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
         <select class="cat-in is-chip" title="絵の出所。Web画像を選ぶと記事の生成時に実写真を探します"
           onchange="_setImagePromptSourceMode('${esc(r.id)}',this.value)" onclick="event.stopPropagation()">
           ${Object.entries(_IP_SOURCE).map(([v, label]) =>
@@ -6123,7 +6235,7 @@ function _imagePromptCard(r) {
         </select>
         ${!approved ? `<span class="chip" style="background:${ap.bg};color:${ap.color}">${r.approval?.status === 'rejected' ? '却下' : '提案'}</span>` : ''}
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
-        ${words.map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('')}
+        ${words.map((k) => `<span class="cat-chip tag-tint" style="--h:${_tagHue(k)}">${esc(k)}</span>`).join('')}
       </div>
     </div>
     ${!approved ? `<div class="ip-decide">
@@ -6312,7 +6424,8 @@ async function _setImagePromptSourceMode(id, sourceMode) {
 }
 
 async function _deleteImagePrompt(id) {
-  if (!confirm(`レシピ「${id}」を削除しますか？`)) return;
+  const nm = _imagePrompts.find((r) => r.id === id)?.name || id;
+  if (!confirm(`画風「${nm}」を削除しますか？使っていたマガジンは自動に戻ります。`)) return;
   try {
     const res = await fetch(apiUrl(`/api/image-prompts/${id}`), { method: 'DELETE', headers: _authHeaders() });
     const data = await res.json().catch(() => ({}));
