@@ -3095,6 +3095,8 @@ input::placeholder,textarea::placeholder{color:var(--m2);opacity:1}
    4. カードなど大きな面は押しても動かない・沈まない。反応するのはボタンだけで、影が変わるだけ
       （拡大・縮小・持ち上がりはしない）。
    5. 名前は「…」で切らず2行まで折り返す。色は名前より色そのものを見せる。
+   6. 画像と色は必ず押し込んだ枠（--sh-press の溝 + 内側の余白）に収める。カードの縁まで
+      はみ出させない。色の丸は溝の中に浮いた粒として置く。
    ══════════════════════════════════════════════════════════════════════════════ */
 :root{--fs-xs:11px;--fs-s:12px;--fs-m:13px;--fs-l:15px;
   --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a93a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
@@ -3152,3 +3154,31 @@ select.is-chip{width:auto;min-height:28px!important;padding:3px 24px 3px 11px!im
 /* 5 — names wrap at their separators (see _jaWrap), not between any two characters. */
 .pick-name,.cat-gal-name,.acard-fact dd,.hp-card-name{word-break:keep-all;overflow-wrap:anywhere}
 .pick-strip[id^="cat-palette"] .pick-name{font-size:var(--fs-xs)}
+
+/* 6 — every picture and every colour sits in a recessed frame */
+:root{--frame-pad:6px;--frame-r:14px;--frame-in-r:9px}
+/* magazine tile: two samples, each framed, inside the card's padding */
+.acard-shots{margin:0 0 10px!important;gap:10px;border-radius:0!important;overflow:visible!important}
+.acard-shot{border:0!important;padding:var(--frame-pad);border-radius:var(--frame-r);box-shadow:var(--sh-press);background:var(--bg)}
+.acard-shot-img{border-radius:var(--frame-in-r);overflow:hidden}
+.acard-thumb{margin:0 0 10px!important;padding:var(--frame-pad);border-radius:var(--frame-r)!important;box-shadow:var(--sh-press);background:var(--bg)!important}
+.acard-thumb img{border-radius:var(--frame-in-r)}
+/* style cards and 画風 cards */
+.hp-shot-grid,.ip-shots{gap:10px!important;padding:12px 12px 0;background:transparent!important}
+.hp-shot,.ip-shot{border:0!important;padding:var(--frame-pad)!important;border-radius:var(--frame-r)!important;box-shadow:var(--sh-press);background:var(--bg)}
+.hp-shot-img,.ip-shot img{border-radius:var(--frame-in-r);overflow:hidden}
+.ip-shot{aspect-ratio:auto!important}
+.ip-shot img{aspect-ratio:16/10;height:auto!important}
+.ip-shot figcaption{position:static!important;background:none!important;color:var(--m)!important;font-size:var(--fs-xs);padding:4px 2px 0!important;text-align:center}
+.ip-shot-add{aspect-ratio:auto;min-height:72px}
+/* detail panel: samples, preview, galleries */
+#detail-content .cat-sample-pair figure,.cat-preview-wrap{padding:var(--frame-pad);border-radius:var(--frame-r);box-shadow:var(--sh-press);background:var(--bg)}
+#detail-content .cat-sample-pair img,.cat-preview-img{border-radius:var(--frame-in-r)!important;box-shadow:none!important}
+.cat-gal-img,.pick-img{padding:5px;border-radius:12px!important;box-shadow:var(--sh-press);background:var(--bg)!important}
+.cat-gal-img img,.pick-img img{border-radius:8px}
+/* colours: a recessed tray, each colour a raised bead in it */
+.acard-pal,.pick-dots,.cat-pal{display:inline-flex;gap:6px;padding:5px 8px;border-radius:999px;box-shadow:var(--sh-press);background:var(--bg)}
+.acard-pal i,.pick-dots i,.cat-pal i{border:2px solid var(--bg);box-shadow:var(--sh-sm)!important}
+.pick-dots i.is-style{border:2px solid var(--bg)}
+.hp-ground-lbl{flex:none;white-space:nowrap}
+select.is-chip{width:auto!important;flex:none;max-width:60%}
