@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '100';
+const DASH_BUILD = '101';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -5958,12 +5958,14 @@ function _imagePromptCard(r) {
   /* The pictures are the card. An approved 画風 shows its four standard subjects (人物・風景・もの・
      文字), filled in automatically by the server when one is missing; one still in review shows the
      single picture it was proposed with. Labels sit on the picture's corner, not under it. */
-  const approved = !['pending', 'rejected'].includes(r.approval?.status);
+  // Same rule as knowledge/recipe-samples.js isRecipeApproved: no record = a suggestion → one picture.
+  const approved = r.approval?.status === 'approved' || (!r.approval?.status && !!r.isSystem);
   const words = (r.keywords || []).filter((k) => /[^\x00-\x7F]/.test(k)).slice(0, 4);
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
     <div class="ip-shots${approved ? '' : ' is-single'}">
       ${(approved ? _IP_SUBJECTS : [null]).map((label) => {
-    // Only the four standard subjects are shown; samples under older labels (週次市場…) are not.
+    // Approved: the four standard subjects (older labels like 週次市場 are not shown).
+    // A suggestion: its one picture, whatever it was drawn for, with no caption.
     const s = label ? samples.find((x) => x.label === label) : samples[0];
     return s
       ? `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(label || '')}')">${label ? `<figcaption>${label}</figcaption>` : ''}</figure>`
@@ -5980,7 +5982,7 @@ function _imagePromptCard(r) {
           ${Object.entries(_IP_SOURCE).map(([v, label]) =>
             `<option value="${v}"${r.sourceMode === v ? ' selected' : ''}>${esc(label)}</option>`).join('')}
         </select>
-        ${!approved ? `<span class="chip" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>` : ''}
+        ${!approved ? `<span class="chip" style="background:${ap.bg};color:${ap.color}">${r.approval?.status === 'rejected' ? '却下' : '提案'}</span>` : ''}
         ${off ? '<span class="chip" style="background:#F8717122;color:#F87171">無効</span>' : ''}
         ${words.map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('')}
       </div>
