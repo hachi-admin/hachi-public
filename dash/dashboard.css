@@ -3090,8 +3090,10 @@ input::placeholder,textarea::placeholder{color:var(--m2);opacity:1}
    1. 文字は4段だけ: --fs-xs 11 補足・ラベル / --fs-s 12 入力・リスト・チップ / --fs-m 13 本文・行の名前 / --fs-l 15 見出し
    2. 入力欄とリストは最小段 (--fs-s)。リストはネイティブの <select> を使い、見た目だけ整える
       （押し込んだ溝 + 右端の ⌄）。独自のリスト部品は作らない。チップ大のリストは .is-chip。
-   3. 押せるもの = 浮き出し (--sh-sm)。入れるもの・選ぶもの = 押し込み (--sh-press)。
-      選択中 = 押し込み + アクセント色の文字。塗りつぶしの色ボタンは使わない。
+   3. 凹凸は「役割」と「状態」で決める（下の「深さの規則」）:
+      役割 — 面と押せるもの = 出っ張り / 入れ物（入力欄・画像の枠・色のトレイ・溝）= 浅いへこみ
+      状態 — 押せるものが選択中・押している最中 = 深いへこみ + アクセント色の文字
+      中身（写真・色の粒・ラベル）は凹凸を持たない。塗りつぶしの色ボタンは使わない。
    4. カードなど大きな面は押しても動かない・沈まない。反応するのはボタンだけで、影が変わるだけ
       （拡大・縮小・持ち上がりはしない）。
    5. 名前は「…」で切らず2行まで折り返す。色は名前より色そのものを見せる。
@@ -3182,3 +3184,39 @@ select.is-chip{width:auto;min-height:28px!important;padding:3px 24px 3px 11px!im
 .pick-dots i.is-style{border:2px solid var(--bg)}
 .hp-ground-lbl{flex:none;white-space:nowrap}
 select.is-chip{width:auto!important;flex:none;max-width:60%}
+
+/* ── 深さの規則 (rule 3) ───────────────────────────────────────────────────────
+   --d-raise 出っ張り（押せるもの） / --d-well 浅いへこみ（入れ物） / --d-on 深いへこみ（選択中・押下中） */
+:root{--d-raise:var(--sh-sm);--d-well:var(--sh-press);--d-on:var(--sh-in)}
+/* state: pressing any pressable sinks it deep, and only while pressed */
+.act-btn:active,.save-btn:active,.seg-btn:active,.pick-tile:active,.cat-gal-tile:active,.cat-quick:active,
+.consult-btn:active,.act-more:active,.act-sheet-btn:active,.act-strip-btn:active,select.is-chip:active{box-shadow:var(--d-on)!important}
+/* state: chosen = deep + accent text, the same everywhere */
+.seg-btn.on,.pick-tile.on,.cat-block .cat-gal-tile.is-picked,.cat-gal-tile.is-picked,
+.nav-pill.active,.dest-sub-btn.active,.tab-btn.active,.cal-m-cell.sel,.mob-tab.active .ni{box-shadow:var(--d-on)!important;color:var(--acc)}
+.cal-m-cell.sel .cal-m-num{color:var(--acc)}
+/* role: a group of tabs is one control on the surface; its options are flat until chosen */
+.nav-pills,.dest-sub.show,.tab-bar{box-shadow:var(--d-raise)!important}
+.nav-pill,.dest-sub-btn,.tab-btn{box-shadow:none}
+/* role: containers are shallow wells; their content is flat */
+input.cat-in,input.form-input,textarea,select:not(.is-chip),.cat-switch-track,.cat-range2::before,
+.acard-shot,.acard-thumb,.hp-shot,.ip-shot,#detail-content .cat-sample-pair figure,.cat-preview-wrap,
+.cat-gal-img,.pick-img,.acard-pal,.pick-dots,.cat-pal,.ip-fill-banner{box-shadow:var(--d-well)!important}
+.acard-pal i,.pick-dots i,.cat-pal i{box-shadow:inset 0 0 0 1px rgba(0,0,0,.10)!important;border:0!important}
+/* an empty sample slot is a well holding one pressable: the ＋ */
+.ip-shot-add{font-size:0!important}
+.ip-shot-add::before{content:'＋';display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;
+  background:var(--bg);box-shadow:var(--d-raise);color:var(--acc);font-size:16px}
+.ip-shot-add:active::before{box-shadow:var(--d-on)}
+/* role: labels are content — flat */
+.chip,.cat-chip,.hp-card-chips .chip{box-shadow:none!important}
+/* the remaining segmented controls follow the same rule */
+.cat-toolbar-views,.cal-seg,.hp-ground-switch{box-shadow:var(--d-raise)!important}
+.cat-view-btn,.cal-seg-btn{box-shadow:none}
+.cat-view-btn.active,.cal-seg-btn.active{box-shadow:var(--d-on)!important;color:var(--acc);background:var(--bg)}
+.hp-ground-switch .cat-quick{box-shadow:none}
+.hp-ground-switch .cat-quick.is-on{box-shadow:var(--d-on)!important}
+.s-chip{box-shadow:none!important}
+.mob-tab-bar .mob-tab.active .ni,.mob-tab-bar .mob-tab.active{box-shadow:none}
+.mob-tab-bar .mob-tab.active .ni{box-shadow:var(--d-on)!important}
+.hp-ground-switch{border-radius:16px;padding:6px 10px}
