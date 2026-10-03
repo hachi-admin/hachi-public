@@ -2920,22 +2920,26 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cat-sample-pair figcaption { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
 @media (max-width: 560px) { .cat-sample-pair { grid-template-columns: 1fr; } }
 
-/* ── Card actions: tap = primary, ⋯ / long-press = sheet, swipe-left = strip ──
-   Neumorphic like the rest: raised = --sh, chosen/pressed = inset with accent text. No flat fills. */
-.sw-card{position:relative;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:pointer}
+/* ── Card actions: tap = primary, ⋯ / long-press = sheet, full swipe = one command per side ──
+   Neumorphic like the rest: raised = --sh, chosen/pressed = inset with accent text. No flat fills.
+   The gap the card leaves while pulled shows the command's name; past the threshold it turns
+   accent (red for 削除) so the operator sees it will fire before letting go. */
+.sw-card{position:relative;overflow:hidden;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:pointer}
 .sw-card .sw-card-in{position:relative;z-index:1;align-self:stretch;background:var(--bg);display:flex;flex-direction:column;flex:1;
   border-radius:inherit;transition:transform .22s ease}
 .act-more{position:absolute;top:8px;right:8px;z-index:2;width:36px;height:36px;border-radius:50%;border:0;
   background:var(--bg);color:var(--txt);font-size:18px;line-height:1;cursor:pointer;box-shadow:var(--sh-sm)}
 .act-more:active{box-shadow:var(--sh-press)}
-.act-strip{position:absolute;top:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:0 10px;z-index:0;visibility:hidden;background:var(--bg)}
-.sw-card.is-swiping .act-strip,.sw-card.is-swiped .act-strip{visibility:visible}
-.sw-card.is-off.is-swiping,.sw-card.is-off.is-swiped{opacity:1}
-.act-strip-btn{width:62px;height:62px;border:0;border-radius:16px;font-size:11.5px;font-weight:700;color:var(--acc);
-  background:var(--bg);box-shadow:var(--sh-sm);cursor:pointer}
-.act-strip-btn:nth-child(2){color:var(--m)}
-.act-strip-btn.is-danger{color:var(--red)}
-.act-strip-btn:active{box-shadow:var(--sh-press)}
+.sw-under{position:absolute;inset:0;z-index:0;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;background:var(--bg);box-shadow:var(--sh-in);border-radius:inherit;visibility:hidden}
+.sw-card.is-swiping .sw-under{visibility:visible}
+.sw-card.is-off.is-swiping{opacity:1}
+.sw-lbl{font-size:14px;font-weight:700;color:var(--m);opacity:0;transition:color .12s,transform .12s}
+.sw-lbl.is-left{order:2}
+.sw-lbl.is-right{order:1}
+.sw-card.sw-go-left .sw-lbl.is-left,.sw-card.sw-go-right .sw-lbl.is-right{opacity:1}
+.sw-card.is-armed .sw-lbl{color:var(--acc);transform:scale(1.12)}
+.sw-card.is-armed .sw-lbl.is-danger{color:var(--red)}
 .sw-card.is-busy .sw-card-in::after{content:'生成中…';position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;background:color-mix(in srgb,var(--bg) 70%,transparent);color:var(--acc);font-weight:700;font-size:13px;border-radius:inherit}
 .act-sheet{position:fixed;inset:0;z-index:10050;background:rgba(10,12,20,0);display:flex;align-items:flex-end;
@@ -3189,7 +3193,7 @@ select.is-chip{width:auto!important;flex:none;max-width:60%}
 :root{--d-raise:var(--sh-sm);--d-well:var(--sh-press);--d-on:var(--sh-in)}
 /* state: pressing any pressable sinks it deep, and only while pressed */
 .act-btn:active,.save-btn:active,.seg-btn:active,.pick-tile:active,.cat-gal-tile:active,.cat-quick:active,
-.consult-btn:active,.act-more:active,.act-sheet-btn:active,.act-strip-btn:active,select.is-chip:active{box-shadow:var(--d-on)!important}
+.consult-btn:active,.act-more:active,.act-sheet-btn:active,select.is-chip:active{box-shadow:var(--d-on)!important}
 /* state: chosen = deep + accent text, the same everywhere */
 .seg-btn.on,.pick-tile.on,.cat-block .cat-gal-tile.is-picked,.cat-gal-tile.is-picked,
 .nav-pill.active,.dest-sub-btn.active,.tab-btn.active,.cal-m-cell.sel,.mob-tab.active .ni{box-shadow:var(--d-on)!important;color:var(--acc)}

@@ -4092,8 +4092,12 @@ async function _withPreviewSlot(fn) {
 async function _loadSatoriPreviewInto(p, grid) {
   const cats = await _ensureCategoriesForPreview();
   /* A style a magazine is pinned to already has its real 中央/サイド samples stored on that
-     magazine — show those instead of rendering a stand-in. */
+     magazine — show those instead of rendering a stand-in. They appear at once; anything else is
+     drawn live, two at a time page-wide (_withPreviewSlot), so it lands later. A magazine can hold
+     only one of the two (サイド is drawn after 中央 and can fail); the missing one is drawn live
+     below rather than left blank, which is what it used to do. */
   const pinnedTo = cats.find((c) => c.visual?.heroPreset === p.id && c.visual?.samples?.center?.url);
+  const stored = new Set();
   if (pinnedTo) {
     for (const [i, pattern] of ['center', 'side'].entries()) {
       const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
@@ -4101,8 +4105,9 @@ async function _loadSatoriPreviewInto(p, grid) {
       if (!host || !url) continue;
       const alt = `${p.name}（${pinnedTo.name}・${pattern === 'center' ? '中央' : 'サイド'}）`;
       host.innerHTML = `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" onclick="_openLightbox('${esc(url)}','${esc(alt)}')">`;
+      stored.add(pattern);
     }
-    return;
+    if (stored.size === 2) return;
   }
   const withPhotos = (c) => c?.visual?.samples?.center?.photoUrl || c?.visual?.samples?.side?.photoUrl;
   const cat = cats.find((c) => c.visual?.heroPreset === p.id && withPhotos(c))
@@ -4110,7 +4115,7 @@ async function _loadSatoriPreviewInto(p, grid) {
   const lines = _hpNormalizeVariants(p.exampleLines).standard;
   for (const [i, pattern] of ['center', 'side'].entries()) {
     const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
-    if (!host) continue;
+    if (!host || stored.has(pattern)) continue;
     const photoUrl = cat?.visual?.samples?.[pattern]?.photoUrl || undefined;
     // The side photo was drawn with its empty half on one side; the lab picked it the same way.
     const zone = pattern === 'side' ? ((cat?.id || '').length % 2 === 0 ? 'left' : 'right') : 'full';
@@ -4549,29 +4554,33 @@ const _SCROLL_INDEX = [
  * A row of 編集／複製／無効化／削除 under every card read as a form, not a list, and on a phone the
  * four buttons were each a third of a thumb wide. Now a card has one primary action — tapping it —
  * and the rest live in a sheet reached three ways, because each is what some hand expects:
- * ⋯ (visible, desktop), long-press (phone habit), swipe-left (reveals up to three as a strip).
+ * ⋯ (visible, desktop), long-press (phone habit), and a full swipe.
+ * A swipe carries one command per direction (an item's `swipe: 'left' | 'right'`), never a strip of
+ * buttons: the card follows the finger, the command's name shows in the gap, and only a pull past
+ * the threshold fires it — then the card springs back and the command asks before it acts
+ * (`ask`, or the command's own confirm). A short pull does nothing.
  * Actions are closures kept per card key, so the markup carries no inline handler strings.
  */
 const _CARD_ACTS = new Map();
 function _actCard(key, { title, primary, items = [] }) {
   _CARD_ACTS.set(key, { title, primary, items });
-  // Sideways swipe is for taking something away (却下・無効化・削除), as in Mail; the rest stay in ⋯.
-  const strip = items.filter((it) => it.removes).slice(0, 2);
+  const side = (dir) => {
+    const it = items.find((x) => x.swipe === dir);
+    return it ? `<span class="sw-lbl is-${dir}${it.danger ? ' is-danger' : ''}">${esc(it.short || it.label)}</span>` : '';
+  };
   return {
     attrs: `data-acts="${esc(key)}"`,
     more: `<button class="act-more" aria-label="その他の操作" onclick="event.stopPropagation();_openCardSheet('${esc(key)}')">⋯</button>`,
-    strip: `<div class="act-strip">${strip.map((it, i) =>
-      `<button class="act-strip-btn${it.danger ? ' is-danger' : ''}" onclick="event.stopPropagation();_runCardAct('${esc(key)}',${items.indexOf(it)})">${esc(it.short || it.label)}</button>`).join('')}</div>`,
+    strip: `<div class="sw-under" aria-hidden="true">${side('left')}${side('right')}</div>`,
   };
 }
 function _runCardAct(key, i) {
-  _closeCardSheet(); _closeSwipes();
+  _closeCardSheet();
   const it = _CARD_ACTS.get(key)?.items?.[i];
   if (it) it.run();
 }
 function _openCardSheet(key) {
   const acts = _CARD_ACTS.get(key); if (!acts) return;
-  _closeSwipes();
   let sheet = document.getElementById('act-sheet');
   if (!sheet) {
     sheet = document.createElement('div');
@@ -4594,26 +4603,23 @@ function _openCardSheet(key) {
   requestAnimationFrame(() => sheet.classList.add('open'));
 }
 function _closeCardSheet() { document.getElementById('act-sheet')?.classList.remove('open'); }
-function _closeSwipes(except) {
-  document.querySelectorAll('[data-acts].is-swiped').forEach((c) => {
-    if (c === except) return;
-    c.classList.remove('is-swiped');
-    const inner = c.querySelector('.sw-card-in'); if (inner) inner.style.transform = '';
-  });
-}
 (() => {
   // Taps on these do their own thing; the card's primary action must not also fire.
-  const OWN = 'button,select,input,textarea,a,label,[onclick],.act-strip';
+  const OWN = 'button,select,input,textarea,a,label,[onclick]';
+  const FIRE = 0.42; // share of the card's width a pull must pass to fire
   let g = null;
   const end = () => { if (g?.timer) clearTimeout(g.timer); g = null; };
+  const settle = (card, inner) => {
+    inner.style.transition = ''; inner.style.transform = '';
+    card.classList.remove('is-swiping', 'sw-go-left', 'sw-go-right', 'is-armed');
+  };
   document.addEventListener('pointerdown', (e) => {
     const card = e.target.closest('[data-acts]');
-    if (!card || e.button > 0) { if (!e.target.closest('.act-strip')) _closeSwipes(); return; }
-    _closeSwipes(card);
-    const inner = card.querySelector('.sw-card-in');
-    const stripW = card.querySelector('.act-strip')?.offsetWidth || 0;
-    g = { card, inner, stripW, x: e.clientX, y: e.clientY, mode: null, own: !!e.target.closest(OWN),
-      base: card.classList.contains('is-swiped') ? -stripW : 0 };
+    if (!card || e.button > 0) return;
+    const items = _CARD_ACTS.get(card.dataset.acts)?.items || [];
+    g = { card, inner: card.querySelector('.sw-card-in'), w: card.offsetWidth || 1, x: e.clientX, y: e.clientY,
+      mode: null, own: !!e.target.closest(OWN),
+      left: items.find((x) => x.swipe === 'left'), right: items.find((x) => x.swipe === 'right') };
     g.timer = setTimeout(() => {
       if (!g || g.mode) return;
       g.mode = 'press';
@@ -4626,29 +4632,35 @@ function _closeSwipes(except) {
     const dx = e.clientX - g.x, dy = e.clientY - g.y;
     if (!g.mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       clearTimeout(g.timer);
-      g.mode = Math.abs(dx) > Math.abs(dy) && g.stripW ? 'swipe' : 'scroll';
+      g.mode = Math.abs(dx) > Math.abs(dy) && (g.left || g.right) ? 'swipe' : 'scroll';
       if (g.mode === 'swipe') { g.inner.style.transition = 'none'; g.card.classList.add('is-swiping'); }
     }
-    if (g.mode === 'swipe') g.inner.style.transform = `translateX(${Math.max(-g.stripW, Math.min(0, g.base + dx))}px)`;
+    if (g.mode !== 'swipe') return;
+    // A direction with no command does not move at all, so the card never hints at one it lacks.
+    const x = Math.max(g.left ? -g.w : 0, Math.min(g.right ? g.w : 0, dx));
+    g.inner.style.transform = `translateX(${x}px)`;
+    g.card.classList.toggle('sw-go-left', x < 0);
+    g.card.classList.toggle('sw-go-right', x > 0);
+    const armed = Math.abs(x) > g.w * FIRE;
+    if (armed && !g.card.classList.contains('is-armed')) navigator.vibrate?.(8);
+    g.card.classList.toggle('is-armed', armed);
+    g.x0 = x;
   }, { passive: true });
-  document.addEventListener('pointerup', (e) => {
+  document.addEventListener('pointerup', () => {
     if (!g) return;
-    const { card, inner, stripW, mode, own, base } = g;
+    const { card, inner, mode, own, w, x0 = 0, left, right } = g;
     end();
     if (mode === 'swipe') {
-      inner.style.transition = '';
-      card.classList.remove('is-swiping');
-      const cur = new DOMMatrixReadOnly(getComputedStyle(inner).transform).m41;
-      const keep = cur < -stripW / 2;
-      card.classList.toggle('is-swiped', keep);
-      inner.style.transform = keep ? `translateX(${-stripW}px)` : '';
+      settle(card, inner);
+      const it = Math.abs(x0) > w * FIRE ? (x0 < 0 ? left : right) : null;
+      // Let the card spring back before a native confirm() freezes the frame.
+      if (it) setTimeout(() => { if (!it.ask || confirm(it.ask)) it.run(); }, 230);
       return;
     }
     if (mode || own) return;
-    if (card.classList.contains('is-swiped')) { _closeSwipes(); return; }
     _CARD_ACTS.get(card.dataset.acts)?.primary?.run();
   });
-  document.addEventListener('pointercancel', end);
+  document.addEventListener('pointercancel', () => { if (g?.mode === 'swipe') settle(g.card, g.inner); end(); });
   // Long-press on a phone otherwise opens the image callout / text selection on top of the sheet.
   document.addEventListener('contextmenu', (e) => {
     const card = e.target.closest('[data-acts]');
@@ -4675,8 +4687,8 @@ function _heroPresetCard(p) {
     items: [
       { label: '複製', hint: 'このスタイルを元に新しく作る', run: () => _duplicateHeroPreset(p.id) },
       { label: '詳細設定（JSON）', hint: 'すべての項目を直接編集する（上級者向け）', run: () => _editHeroPreset(p.id) },
-      { label: off ? '有効化' : '無効化', removes: !off, hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
-      ...(off ? [{ label: '削除', danger: true, removes: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '使っていたマガジンは自動に戻ります', run: () => _deleteHeroPreset(p.id) }] : []),
+      { label: off ? '有効化' : '無効化', swipe: off ? 'right' : 'left', ask: off ? '' : `「${p.name}」を無効にしますか？`, hint: off ? 'エージェントの選択肢に戻す' : '選択肢から外す（削除はしない）', run: () => _toggleHeroPreset(p.id, off) },
+      ...(off ? [{ label: '削除', danger: true, swipe: 'left', hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '使っていたマガジンは自動に戻ります', run: () => _deleteHeroPreset(p.id) }] : []),
     ],
   });
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
@@ -6192,23 +6204,29 @@ function _imagePromptCard(r) {
      showing them here was the generator's input leaking into the card meant for judging its
      output — the same leak image-curator's own doc comment warns against for the Discord card. The
      Japanese description is the recipe's content as far as this display is concerned. */
+  // Same rule as knowledge/recipe-samples.js isRecipeApproved: no record = a suggestion → one picture.
+  const approved = r.approval?.status === 'approved' || (!r.approval?.status && (!!r.isSystem || _ipInUse.has(r.id)));
+  const rejected = r.approval?.status === 'rejected';
+  const nm = r.name || r.id;
+  /* One command per swipe direction. Left takes away (却下 for a suggestion, else 削除, or 無効化 for
+     a system entry that cannot be deleted); right is the other decision (承認, or 無効化／有効化). */
+  const leftIs = !approved && !rejected ? '却下' : !r.isSystem ? '削除' : 'toggle';
   const acts = _actCard(`ip:${r.id}`, {
     title: r.name || r.id,
     primary: { label: '編集', run: () => _openRecipeEditor(r.id) },
     items: [
       { label: samples.length ? '見本を作り直す' : '見本を作る', short: '見本', hint: '人物・風景・もの・文字の4枚を作り直す（承認前は1枚・画像生成が走ります）', run: () => _genImagePromptSamples(r.id) },
-      ...(samples.length ? [{ label: isApproved ? '相談する' : '承認へ', noStrip: true, hint: 'Discord に承認カードを送る', run: () => _proposeImagePrompt(r.id) }] : []),
-      ...(r.approval?.status === 'approved' || r.isSystem ? [] : [{ label: '却下', removes: true, hint: '提案を却下する', run: () => _decideImagePrompt(r.id, 'rejected') }]),
-      { label: off ? '有効化' : '無効化', removes: !off, hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
-      ...(!r.isSystem ? [{ label: '削除', danger: true, removes: true, hint: '使っていたマガジンは自動に戻ります', run: () => _deleteImagePrompt(r.id) }] : []),
+      ...(samples.length ? [{ label: isApproved ? '相談する' : '承認へ', hint: 'Discord に承認カードを送る', run: () => _proposeImagePrompt(r.id) }] : []),
+      ...(approved ? [] : [{ label: '承認', swipe: 'right', hint: '画風として使えるようにし、4枚の見本を作る', run: () => _decideImagePrompt(r.id, 'approved') }]),
+      ...(approved || rejected ? [] : [{ label: '却下', swipe: 'left', ask: `「${nm}」の提案を却下しますか？`, hint: '提案を却下する', run: () => _decideImagePrompt(r.id, 'rejected') }]),
+      { label: off ? '有効化' : '無効化', swipe: leftIs === 'toggle' ? (off ? 'right' : 'left') : (approved ? 'right' : undefined),
+        ask: off ? '' : `「${nm}」を無効にしますか？`, hint: off ? '記事の生成で選ばれるようにする' : '記事の生成で選ばれなくする', run: () => _toggleImagePrompt(r.id, off) },
+      ...(!r.isSystem ? [{ label: '削除', danger: true, swipe: leftIs === '削除' ? 'left' : undefined, hint: '使っていたマガジンは自動に戻ります', run: () => _deleteImagePrompt(r.id) }] : []),
     ],
   });
   /* The pictures are the card. An approved 画風 shows its four standard subjects (人物・風景・もの・
      文字), filled in automatically by the server when one is missing; one still in review shows the
      single picture it was proposed with. Labels sit on the picture's corner, not under it. */
-  // Same rule as knowledge/recipe-samples.js isRecipeApproved: no record = a suggestion → one picture.
-  const approved = r.approval?.status === 'approved' || (!r.approval?.status && (!!r.isSystem || _ipInUse.has(r.id)));
-  const rejected = r.approval?.status === 'rejected';
   const words = (r.keywords || []).filter((k) => /[^\x00-\x7F]/.test(k)).slice(0, 4);
   return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
     <div class="ip-shots${approved ? '' : ' is-single'}">
@@ -6346,8 +6364,6 @@ function _openRecipeEditor(id = null) {
   $('title').textContent = r ? `「${r.name || r.id}」を編集` : '画風を空から書く';
   $('id').value = r?.id || '';
   $('id').disabled = !!r;
-  $('kind').value = r?.kind || 'hero';
-  $('kind').disabled = !!r;   // a recipe drawn for one shape would be wrong in the other
   $('name').value = r?.name || '';
   $('description').value = r?.description || '';
   $('spec').innerHTML = _IP_SPEC.map(([k, label, ph]) => `<label class="cat-field cat-wide">
@@ -6384,7 +6400,7 @@ async function _saveRecipe() {
     negative: $('negative').value.split('\n').map((x) => x.trim()).filter(Boolean),
     keywords: $('keywords').value.split(/[、,，]/).map((x) => x.trim()).filter(Boolean),
     centeredSubject: $('centered').checked,
-    ...(_ipEditingId ? {} : { kind: $('kind').value, sourceMode: 'ai', enabled: true }),
+    ...(_ipEditingId ? {} : { kind: 'hero', sourceMode: 'ai', enabled: true }),
   };
   const btn = $('save');
   btn.disabled = true;
