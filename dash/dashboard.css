@@ -3071,3 +3071,58 @@ input::placeholder,textarea::placeholder{color:var(--m2);opacity:1}
   .hp-ground-switch::-webkit-scrollbar{display:none}
   .hp-ground-switch .cat-quick{flex:none;white-space:nowrap}
 }
+
+/* ── 画風 cards: always three slots; a missing one is a button that makes it ── */
+.ip-shots{grid-template-columns:repeat(3,1fr)!important}
+.ip-shot-add{display:flex;align-items:center;justify-content:center;border:0;background:var(--bg);box-shadow:var(--sh-in);
+  color:var(--m);font-size:22px;cursor:pointer}
+.ip-shot-add:active{box-shadow:var(--sh-press)}
+.ip-fill-banner{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:12px 16px;border-radius:16px;background:var(--bg);box-shadow:var(--sh-in);font-size:12.5px;color:var(--txt)}
+.hp-card-attrs:empty{display:none}
+
+/* ── List picker, refined ──
+   Quieter well (--sh-press, not the deep --sh-in), a drawn chevron, one height. */
+.nsel{box-shadow:var(--sh-press);border-radius:12px;min-height:40px!important;padding:8px 12px}
+.nsel-chev{width:7px;height:7px;border-right:1.6px solid var(--m);border-bottom:1.6px solid var(--m);transform:rotate(45deg) translateY(-2px);margin-left:2px}
+/* A settings row: label left, value right, one line — for pickers inside cards. */
+.nsel.is-row{background:transparent;box-shadow:none;border-radius:0;padding:10px 2px;min-height:44px!important;
+  border-top:1px solid var(--div);font-size:13px}
+.nsel.is-row .nsel-lbl{flex:none;font-size:11.5px;color:var(--m);font-weight:600;min-width:76px}
+.nsel.is-row .nsel-val{text-align:right;font-weight:600}
+.nsel.is-row .nsel-chev{transform:rotate(-45deg)}
+.nsel.is-row:active{background:color-mix(in srgb,var(--m) 6%,transparent)}
+.acard-map{display:flex!important;flex-direction:column;gap:0!important;margin:2px 0 6px}
+.acard-mapf{display:block}
+/* A compact chip-sized picker, for a choice that sits among chips. */
+.nsel.is-chip{width:auto;min-height:26px!important;padding:3px 10px;border-radius:13px;font-size:11px;box-shadow:var(--sh-sm);gap:6px}
+.nsel.is-chip .nsel-chev{width:5px;height:5px}
+
+/* ── Calendar: planned items, outlined pills ── */
+.cal-m-pill.art{background:var(--success)}
+.cal-m-pill.plan{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.cal-m-pill.art.plan{color:var(--success);box-shadow:inset 0 0 0 1.5px var(--success)}
+.cal-m-dot.job.fail{background:var(--red)}
+.cal-plan .cal-item-title{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cal-plan .cal-item-title small{font-size:11px;color:var(--m);font-weight:400}
+
+/* ── Text inside lists fits instead of being cut ──
+   Long names (styles, recipes, magazines) wrap to two lines at a set size rather than ending in
+   "…" — a name cut at 明朝マストヘッ… cannot be told apart from its siblings. */
+.nsel-val{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;word-break:break-word}
+.nsel.is-row .nsel-val{font-size:12.5px}
+.nsel-opt span{font-size:13.5px;line-height:1.4;word-break:break-word}
+.nsel-opt{min-height:44px;padding:9px 14px}
+.cal-item-title,.cal-row-title{min-width:0;word-break:break-word;line-height:1.4}
+.cal-appr-move{font-size:12.5px!important}
+.cat-gal-name{font-size:12px;line-height:1.35;word-break:break-word}
+.hp-card-name{word-break:break-word}
+.seg-btn{font-size:12.5px}
+/* ⋯ sits on the card's text, not on its pictures (it covered the third sample). */
+.hp-card-body{position:relative}
+.hp-card-body>.act-more{top:8px;right:10px;width:32px;height:32px;font-size:16px}
+.hp-card-body>.hp-card-name{padding-right:40px}
+/* Card setting rows: full width, label column fixed, value right. */
+.acard-mapf,.acard-mapf .nsel{width:100%;margin:0}
+.ip-fill-banner{flex-wrap:nowrap}
+.ip-fill-banner .act-btn{flex:none}

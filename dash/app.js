@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '81';
+const DASH_BUILD = '84';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1434,18 +1434,33 @@ function _calCell(d, today, { month = false } = {}) {
       onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)}" aria-pressed="${sel}">
     ${month ? '' : `<span class="cal-m-wd-in">${_CAL_WD[_calWd(d.date)]}</span>`}
     <span class="cal-m-num">${Number(d.date.slice(8))}</span>
-    <span class="cal-m-marks">
-      ${d.pendingCount ? `<i class="cal-m-pill appr">${d.pendingCount}</i>` : ''}
-      ${d.articles.length ? '<i class="cal-m-dot art" title="記事"></i>' : ''}
-      ${d.jobs?.length ? '<i class="cal-m-dot job" title="定期ジョブ"></i>' : ''}
-      ${d.bundles.length ? '<i class="cal-m-dot bun" title="まとめ"></i>' : ''}
-    </span>
+    <span class="cal-m-marks">${_calMarks(d)}</span>
   </button>`;
 }
 
+/* What a day carries, counted in the unit a person decides in: magazines to answer for, articles
+   to read. Solid = already there; outlined = what the magazines' cadence will bring (予定).
+   Jobs that run every day are left out of the grid — a dot on every square says nothing — and
+   only weekly/monthly ones (or a failed run) mark a day. */
+function _calMarks(d) {
+  const planned = d.planned || [];
+  const apprNow = new Set(d.approvals.filter((x) => x.status === 'pending').map((x) => x.categoryName || x.slotGroup || x.id)).size;
+  const apprPlan = planned.filter((p) => p.mode === 'propose').length;
+  const artNow = d.articles.length;
+  const artPlan = planned.filter((p) => p.mode === 'auto').length;
+  const pill = (cls, now, plan, title) => (now + plan
+    ? `<i class="cal-m-pill ${cls}${now ? '' : ' plan'}" title="${title}">${now + plan}</i>` : '');
+  const notable = (d.jobs || []).some((j) => (j.freq && j.freq !== 'daily') || j.status === 'failed');
+  return pill('appr', apprNow, apprPlan, '承認するマガジン')
+    + pill('art', artNow, artPlan, '記事')
+    + (notable ? `<i class="cal-m-dot job${(d.jobs || []).some((j) => j.status === 'failed') ? ' fail' : ''}" title="定期ジョブ"></i>` : '')
+    + (d.bundles.length ? '<i class="cal-m-dot bun" title="まとめ"></i>' : '');
+}
+
 const _calLegend = () => `<div class="cal-legend cal-m-legend">
-  <span><i class="cal-m-pill appr">n</i> 承認待ち</span><span><i class="cal-m-dot art"></i> 記事</span>
-  <span><i class="cal-m-dot job"></i> 定期ジョブ</span><span><i class="cal-m-dot bun"></i> まとめ</span></div>`;
+  <span><i class="cal-m-pill appr">n</i> 承認（マガジン数）</span><span><i class="cal-m-pill art">n</i> 記事</span>
+  <span><i class="cal-m-pill appr plan">n</i> 予定</span>
+  <span><i class="cal-m-dot job"></i> 週次・月次ジョブ</span><span><i class="cal-m-dot bun"></i> まとめ</span></div>`;
 
 function _renderCalendar() {
   const box = document.getElementById('cal-body');
@@ -1489,14 +1504,16 @@ async function calRebalance(btn) {
 
 function _calDay(d, today) {
   const past = d.date < today;
-  const empty = !d.approvals.length && !d.articles.length && !d.bundles.length && !d.jobs?.length;
+  const planned = d.planned || [];
+  const empty = !d.approvals.length && !d.articles.length && !d.bundles.length && !d.jobs?.length && !planned.length;
   return `<section class="cal-day${d.date === today ? ' today' : ''}${past ? ' past' : ''}" id="cal-${d.date}">
     <div class="cal-day-hd">
       <span class="cal-day-date">${_calLabel(d.date)}${d.date === today ? ' <b>今日</b>' : ''}</span>
-      <span class="cal-day-count">${[d.pendingCount ? `承認 ${d.pendingCount}件` : '', d.articles.length ? `記事 ${d.articles.length}本` : ''].filter(Boolean).join(' · ')}</span>
+      <span class="cal-day-count">${[d.pendingCount ? `承認 ${d.pendingCount}件` : '', d.articles.length ? `記事 ${d.articles.length}本` : '', planned.length ? `予定 ${planned.length}` : ''].filter(Boolean).join(' · ')}</span>
     </div>
     ${empty ? '<div class="cal-empty">予定はありません</div>' : ''}
     ${d.approvals.length ? `<div class="cal-group-label">承認</div>${_calApprovalGroups(d.approvals, d.date)}` : ''}
+    ${planned.length ? `<div class="cal-group-label">予定（マガジンの頻度から）</div>${planned.map(_calPlanned).join('')}` : ''}
     ${d.jobs?.length ? `<div class="cal-group-label">定期ジョブ</div>${d.jobs.map(_calJob).join('')}` : ''}
     ${d.bundles.length ? `<div class="cal-group-label">まとめインポート</div>${d.bundles.map(_calBundle).join('')}` : ''}
     ${d.articles.length ? `<div class="cal-group-label">生成された記事</div>${d.articles.map(_calArticle).join('')}` : ''}
@@ -1543,6 +1560,15 @@ const _CAL_JOB_STATUS = {
   scheduled: '予定', external: '外部で実行', pending: '待機中', running: '実行中',
   completed: '完了', failed: '失敗', cancelled: '中止',
 };
+function _calPlanned(p) {
+  const past = p.at < new Date().toISOString();
+  return `<div class="cal-item cal-job cal-plan">
+    <span class="cal-job-time">${past ? '今' : _calTime(p.at)}</span>
+    <span class="cal-item-title">${esc(p.name)}<small>${p.mode === 'auto' ? '記事を書く' : '記事案が届く'}</small></span>
+    ${srcChip(p.mode === 'auto' ? '自動' : '承認', p.mode === 'auto' ? 'green' : '')}
+  </div>`;
+}
+
 function _calJob(j) {
   const tone = j.status === 'failed' ? 'red' : (j.status === 'completed' ? 'green' : '');
   return `<button class="cal-item cal-job" onclick="calEditJob('${esc(j.type)}')">
@@ -1869,8 +1895,7 @@ function _catTileMapBar(c, v) {
    * choice at all any more — it follows the 文字スタイル above it. */
   const row = (key, label, kind, cur, handler) => `
     <label class="acard-mapf">
-      <span>${label}</span>
-      <select class="cat-in acard-map-sel" data-selected="${esc(cur || '')}" data-kind="${kind}"
+      <select class="cat-in acard-map-sel is-row" data-label="${label}" data-selected="${esc(cur || '')}" data-kind="${kind}"
         id="cat-tile${key}-${esc(c.id)}" onchange="${handler}"
         aria-label="${esc(c.name)} の${label}">
         <option value="">自動</option>
@@ -4127,7 +4152,8 @@ function _recipeAttrs(r = {}) {
   const text = [r.spec?.style, r.spec?.mood, r.spec?.lighting, ...(r.keywords || [])].filter(Boolean).join(' ');
   const words = [];
   for (const [re, w] of _RECIPE_WORDS) if (re.test(text) && !words.includes(w)) words.push(w);
-  return [_IP_SOURCE_SHORT[r.sourceMode] || 'AI生成', ...words.slice(0, 3)];
+  // The source is the chip beside it; the name line is what the pictures look like.
+  return words.slice(0, 4);
 }
 const _IP_SOURCE_SHORT = { ai: 'AI生成', web: 'Web写真', web_then_stylise: 'Web写真加工' };
 
@@ -4222,7 +4248,8 @@ function _nselSync(sel) {
   const btn = sel._nsel; if (!btn) return;
   const o = sel.options[sel.selectedIndex];
   const decor = _NSEL_DECOR[sel.dataset.decor]?.(sel.value) || '';
-  btn.innerHTML = `${decor}<span class="nsel-val">${esc(_nselLabel(o) || '—')}</span><span class="nsel-chev" aria-hidden="true">▾</span>`;
+  const lbl = sel.dataset.label ? `<span class="nsel-lbl">${esc(sel.dataset.label)}</span>` : '';
+  btn.innerHTML = `${lbl}${decor}<span class="nsel-val">${esc(_nselLabel(o) || '—')}</span><span class="nsel-chev" aria-hidden="true"></span>`;
   btn.disabled = sel.disabled;
   btn.hidden = sel.hidden;
 }
@@ -4254,7 +4281,7 @@ function _nselOpen(sel) {
     sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.remove('open'); });
     document.body.appendChild(sheet);
   }
-  const title = sel.closest('label,.cat-row,.cat-field')?.querySelector('span,.cat-label')?.textContent?.trim()
+  const title = sel.dataset.label || sel.closest('label,.cat-row,.cat-field')?.querySelector('span,.cat-label')?.textContent?.trim()
     || sel.getAttribute('aria-label') || '選択';
   const decor = _NSEL_DECOR[sel.dataset.decor];
   const rows = [];
@@ -4429,7 +4456,7 @@ function _heroPresetCard(p) {
       ...(off ? [{ label: '削除', danger: true, hint: p.isSystem ? '一覧と選択肢から外れ、次のデプロイでも戻りません' : '', run: () => _deleteHeroPreset(p.id) }] : []),
     ],
   });
-  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">${acts.more}
+  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
     ${/* Four panels, not one: 長さ×揃え. A style is judged on whether it survives a long headline
           and whether it still reads pushed to one side, and a single representative sample shows
           neither. Drawing costs no image generation — this is type over a flat field — so the only
@@ -4438,7 +4465,7 @@ function _heroPresetCard(p) {
       ${(p.styleSpec?.engine === 'satori' ? ['中央（実写）', 'サイド（実写）'] : ['短文・中央', '短文・左', '長文・中央', '長文・左']).map((l, i) =>
     `<figure class="hp-shot" data-variant="${i}"><div class="hp-shot-img"></div><figcaption>${l}</figcaption></figure>`).join('')}
     </div>
-    <div class="hp-card-body">
+    <div class="hp-card-body">${acts.more}
       ${(() => { const n = _autoNames(_heroPresets.length ? _heroPresets : [p], (x) => _styleAttrs(x.styleSpec))[p.id]
         ?? { nick: _nickname(p.name, p.id), attrs: _styleAttrs(p.styleSpec) };
         return `<div class="hp-card-name" title="${esc(p.name)}">${esc(n.nick)}</div>
@@ -5899,16 +5926,26 @@ function _renderImagePrompts() {
   listEl.className = 'hp-card-grid';
   // Switched-off recipes go last: they are kept for reference, not offered.
   const ordered = [..._imagePrompts].sort((a, b) => (a.enabled === false) - (b.enabled === false));
-  listEl.innerHTML = ordered.map(_imagePromptCard).join('');
+  /* A look is judged on three pictures side by side; recipes made from one reference picture had
+     one. Say how many are short and let the operator buy the rest in one press — it is their spend. */
+  const short = ordered.filter((r) => r.enabled !== false && _ipShots(r).length < 3);
+  const missing = short.reduce((n, r) => n + 3 - _ipShots(r).length, 0);
+  const banner = short.length ? `<div class="ip-fill-banner">
+      <span>見本が3枚に足りない画風が <b>${short.length}件</b>（あと${missing}枚）</span>
+      <button class="act-btn" id="ip-fill-all" onclick="_fillAllImagePromptSamples()">まとめて作る</button>
+    </div>` : '';
+  listEl.innerHTML = banner + ordered.map(_imagePromptCard).join('');
 }
 
 const _IP_KIND = { hero: '見出し画像', figure: '図解' };
 const _IP_SOURCE = { ai: 'AI生成', web: 'Web画像', web_then_stylise: 'Web画像→加工' };
 
+const _ipShots = (r) => (Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : []);
+
 function _imagePromptCard(r) {
   const ap = _presetApproval(r);
   const off = r.enabled === false;
-  const samples = Array.isArray(r.samples) ? r.samples.filter((s) => s?.url) : [];
+  const samples = _ipShots(r);
   const keywords = (r.keywords || []).slice(0, 6).map((k) => `<span class="cat-chip">${esc(k)}</span>`).join('');
   const isApproved = ap.label === '承認済';
   /* Only what a Japanese operator actually reads: `spec`'s values are the English prompt fragments
@@ -5926,13 +5963,14 @@ function _imagePromptCard(r) {
       ...(off && !r.isSystem ? [{ label: '削除', danger: true, run: () => _deleteImagePrompt(r.id) }] : []),
     ],
   });
-  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">${acts.more}
-    <div class="ip-shots" style="grid-template-columns:repeat(${Math.max(1, Math.min(3, samples.length))},1fr)">
-      ${samples.length
-    ? samples.slice(0, 3).map((s) => `<figure class="ip-shot"><img src="${esc(s.url)}" alt="${esc(s.label || '')}" loading="lazy" onclick="_openLightbox('${esc(s.url)}','${esc(s.label || '')}')"><figcaption>${esc(s.label || '')}</figcaption></figure>`).join('')
-    : '<div class="ip-shots-empty">見本がまだありません</div>'}
+  return `<div class="hp-card sw-card${off ? ' is-off' : ''}" data-ip-gen="${esc(r.id)}" ${acts.attrs}>${acts.strip}<div class="sw-card-in">
+    <div class="ip-shots">
+      ${[0, 1, 2].map((i) => samples[i]
+    ? `<figure class="ip-shot"><img src="${esc(samples[i].url)}" alt="${esc(samples[i].label || '')}" loading="lazy" onclick="_openLightbox('${esc(samples[i].url)}','${esc(samples[i].label || '')}')"><figcaption>${esc(samples[i].label || '')}</figcaption></figure>`
+    : `<button type="button" class="ip-shot ip-shot-add" onclick="event.stopPropagation();_fillImagePromptSamples('${esc(r.id)}')"
+        aria-label="足りない見本を作る">＋</button>`).join('')}
     </div>
-    <div class="hp-card-body">
+    <div class="hp-card-body">${acts.more}
       ${(() => { const n = _autoNames(_imagePrompts.length ? _imagePrompts : [r], _recipeAttrs)[r.id]
         ?? { nick: _nickname(r.name, r.id), attrs: _recipeAttrs(r) };
         return `<div class="hp-card-name" title="${esc(r.name || r.id)}">${esc(n.nick)}</div>
@@ -5940,7 +5978,7 @@ function _imagePromptCard(r) {
       <div class="hp-card-chips">
         <span class="chip" title="承認台帳の状態" style="background:${ap.bg};color:${ap.color}">${ap.label}</span>
         <span class="cat-chip">${esc(_IP_KIND[r.kind] || r.kind || '')}</span>
-        <select class="cat-in" style="font-size:10px;padding:2px 6px;width:auto" title="絵の出所。web/web_then_styliseは記事の生成時に実写真を探します"
+        <select class="cat-in is-chip" title="絵の出所。web/web_then_styliseは記事の生成時に実写真を探します"
           onchange="_setImagePromptSourceMode('${esc(r.id)}',this.value)" onclick="event.stopPropagation()">
           ${Object.entries(_IP_SOURCE).map(([v, label]) =>
             `<option value="${v}"${r.sourceMode === v ? ' selected' : ''}>${esc(label)}</option>`).join('')}
@@ -5961,13 +5999,44 @@ function _imagePromptCard(r) {
    pictures. */
 // Bare request, shared by the single-card button and the bulk runner below — the two differ only
 // in how they report progress, not in what they ask the server to do.
-async function _requestImagePromptSamples(id) {
+async function _requestImagePromptSamples(id, { fill = false } = {}) {
   const res = await fetch(apiUrl(`/api/image-prompts/${id}/samples`), {
-    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: '{}',
+    method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fill }),
   }).catch(() => null);
   if (res?.ok) return { ok: true };
   const err = await res?.json().catch(() => ({}));
   return { ok: false, error: err?.error || `Error ${res?.status ?? '—'}` };
+}
+
+/* Fill up to three, keeping the samples a recipe already has (the server's `fill` mode). */
+function _fillImagePromptSamples(id) {
+  const r = _imagePrompts.find((x) => x.id === id);
+  const n = 3 - _ipShots(r || {}).length;
+  if (n <= 0) return;
+  showConfirm(`「${r?.name || id}」の見本をあと${n}枚作ります（画像生成の課金・1分ほど）。今ある見本は残します。`, async () => {
+    const card = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
+    card?.classList.add('is-busy');
+    const res = await _requestImagePromptSamples(id, { fill: true });
+    card?.classList.remove('is-busy');
+    showToast(res.ok ? '見本を足しました' : (res.error || '見本を作れませんでした'), res.ok ? 'success' : 'error');
+    if (res.ok) _loadImagePrompts();
+  });
+}
+
+function _fillAllImagePromptSamples() {
+  const short = _imagePrompts.filter((r) => r.enabled !== false && _ipShots(r).length < 3);
+  const missing = short.reduce((n, r) => n + 3 - _ipShots(r).length, 0);
+  showConfirm(`${short.length}件の画風に、見本をあと計${missing}枚作ります（画像生成の課金・1件1分ほど）。今ある見本は残します。`, async () => {
+    const btn = document.getElementById('ip-fill-all');
+    let done = 0, failed = 0;
+    for (const r of short) {
+      if (btn) { btn.disabled = true; btn.textContent = `作成中 ${done + failed + 1}/${short.length}…`; }
+      const res = await _requestImagePromptSamples(r.id, { fill: true });
+      res.ok ? done++ : failed++;
+    }
+    showToast(`見本を足しました：${done}件${failed ? `（失敗 ${failed}件）` : ''}`, failed ? 'error' : 'success');
+    _loadImagePrompts();
+  });
 }
 
 function _genImagePromptSamples(id) {
