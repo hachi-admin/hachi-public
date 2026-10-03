@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '99';
+const DASH_BUILD = '100';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4281,8 +4281,9 @@ const _SCROLL_INDEX = [
       const mid = innerHeight * 0.35;
       let ci = 0;
       els.forEach((el, i) => { if (el.getBoundingClientRect().top <= mid) ci = i; });
-      // The item you are on and the next few, each a step smaller — where you are and what is coming.
-      return els.slice(ci, ci + 4).map((el) => (name(el) || '').trim());
+      // One before, the item you are on, and the next few — each further from the current one smaller.
+      return els.slice(Math.max(0, ci - 1), ci + 4).map((el, i, arr) => ({
+        n: (name(el) || '').trim(), d: (el === els[ci]) ? 0 : (els.indexOf(el) < ci ? -1 : els.indexOf(el) - ci) }));
     }
     return [];
   };
@@ -4290,7 +4291,7 @@ const _SCROLL_INDEX = [
     const names = current();
     if (!names.length) { tag?.classList.remove('show'); return; }
     if (!tag) { tag = document.createElement('div'); tag.id = 'scroll-label'; tag.setAttribute('aria-hidden', 'true'); document.body.appendChild(tag); }
-    tag.innerHTML = names.map((n) => `<span>${esc(n)}</span>`).join('');
+    tag.innerHTML = names.map(({ n, d }) => `<span class="d${d < 0 ? 'p' : d}">${esc(n)}</span>`).join('');
     // Follow the thumb: same fraction of the scroller's visible height as the scroll position.
     const box = sc === document || !sc.getBoundingClientRect ? { top: 0, height: innerHeight } : sc.getBoundingClientRect();
     const el = sc === document ? document.scrollingElement : sc;
