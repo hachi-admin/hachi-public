@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '106';
+const DASH_BUILD = '107';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6330,7 +6330,7 @@ function _genImagePromptSamples(id) {
 async function _genImagePromptSamplesNow(id) {
   const card = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
   card?.classList.add('is-busy');
-  showToast('3枚生成しています…（1分ほどかかります）', 'info');
+  showToast('見本を生成しています…（1分ほどかかります）', 'info');
   const r = await _requestImagePromptSamples(id);
   if (!r.ok) {
     showToast(r.error || '見本を生成できませんでした', 'error');
