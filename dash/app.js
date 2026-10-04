@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '108';
+const DASH_BUILD = '109';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -3652,24 +3652,12 @@ async function restyleCategorySample(id, presetId) {
    Only when it is open. This is also called from the category list, where none of those fields
    exist — and `_catVal` returns '' for a missing element, so saving from there would PATCH every
    setting to empty and quietly wipe the category. The form's own presence is the test. */
-/* Redrawing with the recipe it already has is the one redraw worth asking about.
- *
- * Changing the recipe redraws by itself — the server watches `visual.imagePrompt` and queues the
- * task, because picking a different recipe *is* the request for a different picture and there is no
- * reading under which someone chooses one and wants the old image kept. Pressing this button is the
- * other case: same recipe, same settings, spend a pro-tier call to roll the dice again. That is a
- * choice rather than a consequence, so it is the one that stops to ask, and the question names the
- * recipe so "the same one" is a fact on screen rather than something to remember. */
+/* Redraw with the recipe the magazine already has. Changing the recipe redraws by itself (the
+ * server watches `visual.imagePrompt`); this is the roll-the-dice-again button, and it starts on
+ * the press — the confirm it used to stop at was dropped at the operator's request. */
 async function regenCategorySample(id) {
-  const c = (CATEGORIES || []).find((x) => x.id === id);
-  const rid = c?.visual?.imagePrompt;
-  const recipe = rid ? (_imagePrompts.find((r) => r.id === rid)?.name || rid) : null;
-  showConfirm(
-    `${recipe ? `レシピ「${recipe}」` : '自動のレシピ'}のまま、絵を作り直します。`
-    + '内容は変わります（pro 課金・30秒ほど）。',
-    () => _regenCategorySampleNow(id),
-    document.getElementById(`cat-sample-btn-${id}`) ?? undefined,
-  );
+  // No confirm: the operator asked for samples to start on the press (2026-10-04).
+  _regenCategorySampleNow(id);
 }
 
 async function _regenCategorySampleNow(id) {
@@ -3708,16 +3696,8 @@ async function _regenCategorySampleNow(id) {
  * straight through with force, since pressing this from a tile is always "make (or remake) this
  * one" rather than a check for something already there. */
 async function regenCategorySamplePattern(id, pattern) {
-  const c = (CATEGORIES || []).find((x) => x.id === id);
-  const rid = c?.visual?.imagePrompt;
-  const recipe = rid ? (_imagePrompts.find((r) => r.id === rid)?.name || rid) : null;
-  const label = pattern === 'center' ? '中央' : 'サイド';
-  showConfirm(
-    `${label}パターンを、${recipe ? `レシピ「${recipe}」` : '自動のレシピ'}のまま作ります。`
-    + '（pro 課金・30秒ほど）。',
-    () => _regenCategorySamplePatternNow(id, pattern),
-    document.getElementById(`cat-pattern-btn-${pattern}-${id}`) ?? _catConfirmAnchor(id) ?? undefined,
-  );
+  // No confirm, same as regenCategorySample — and the banner squeezed into the narrow tile anyway.
+  _regenCategorySamplePatternNow(id, pattern);
 }
 
 async function _regenCategorySamplePatternNow(id, pattern) {
@@ -3727,7 +3707,7 @@ async function _regenCategorySamplePatternNow(id, pattern) {
   // From the open panel the unsaved look on screen is what should be drawn, and the panel is
   // refreshed afterwards so the new sample appears at its top.
   const inEditor = !!document.getElementById(`cat-agemin-${id}`);
-  if (inEditor) showToast(`${pattern === 'center' ? '中央' : 'サイド'}の見本を作っています…（30秒ほど）`, 'info');
+  showToast(`${pattern === 'center' ? '中央' : 'サイド'}の見本を作っています…（30秒ほど）`, 'info');
   try {
     if (inEditor) await saveCategory(id, { silent: true });
     const res = await fetch(apiUrl(`/api/article-categories/${id}/sample`), {
