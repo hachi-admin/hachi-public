@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '107';
+const DASH_BUILD = '108';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6141,8 +6141,12 @@ let _imagePrompts = [];
 async function _loadImagePrompts() {
   const listEl = document.getElementById('image-prompts-list');
   if (!listEl) return;
-  listEl.className = '';
-  listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
+  /* Only an empty list shows 読み込み中. Swapping a full list for one line collapsed the page, so
+     every refresh after an action (却下・承認・見本) threw the operator back to the top card. */
+  if (!listEl.querySelector('.hp-card')) {
+    listEl.className = '';
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">読み込み中…</div>';
+  }
   try {
     const res = await fetch(apiUrl('/api/image-prompts'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
@@ -6171,14 +6175,16 @@ async function _ensureImagePrompts() {
 function _renderImagePrompts() {
   const listEl = document.getElementById('image-prompts-list');
   if (!listEl) return;
-  if (!_imagePrompts.length) {
+  // A rejected suggestion is gone from the list: it was a question, and the answer was no.
+  const shown = _imagePrompts.filter((r) => r.approval?.status !== 'rejected');
+  if (!shown.length) {
     listEl.className = '';
     listEl.innerHTML = '<div style="font-size:11px;color:var(--m);padding:12px">レシピがありません</div>';
     return;
   }
   listEl.className = 'hp-card-grid';
   // Switched-off recipes go last: they are kept for reference, not offered.
-  const ordered = [..._imagePrompts].sort((a, b) => (a.enabled === false) - (b.enabled === false));
+  const ordered = [...shown].sort((a, b) => (a.enabled === false) - (b.enabled === false));
   listEl.innerHTML = ordered.map(_imagePromptCard).join('');
 }
 
@@ -6288,6 +6294,12 @@ async function _decideImagePrompt(id, status) {
   }).catch(() => null);
   if (!res?.ok) { showToast('反映できませんでした', 'error'); return; }
   showToast(status === 'approved' ? '承認しました。人物・風景・もの・文字の見本を1時間以内に作ります' : '却下しました', 'success');
+  if (status === 'rejected') {
+    // Drop the one card where it is; the rest of the list stays put.
+    _imagePrompts = _imagePrompts.map((x) => (x.id === id ? { ...x, approval: { ...(x.approval || {}), status } } : x));
+    document.querySelector(`.hp-card[data-ip-gen="${CSS.escape(id)}"]`)?.remove();
+    return;
+  }
   _loadImagePrompts();
 }
 
@@ -6321,11 +6333,7 @@ function _fillAllImagePromptSamples() {
   });
 }
 
-function _genImagePromptSamples(id) {
-  showConfirm('このレシピで画像を3枚生成して見本にします（画像生成の課金・1分ほど）。',
-    () => _genImagePromptSamplesNow(id),
-    undefined);
-}
+function _genImagePromptSamples(id) { _genImagePromptSamplesNow(id); }
 
 async function _genImagePromptSamplesNow(id) {
   const card = document.querySelector(`#image-prompts-list [data-ip-gen="${CSS.escape(id)}"]`);
