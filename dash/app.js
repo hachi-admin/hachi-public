@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '109';
+const DASH_BUILD = '110';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -3478,14 +3478,29 @@ async function refreshCatPreview(id) {
   };
   if (!body.lines) body.lines = [{ text: c?.name || 'サンプルタイトル', scale: 1.2, indent: 0 }];
   if (status) status.textContent = '生成中…';
-  const res = await fetch(apiUrl('/api/hero-presets/preview'), {
+  /* Opening a magazine fires this together with the style gallery's renders, and a cold or busy
+     instance drops the odd one in that burst (503) — the gallery already retried, this did not, so
+     the main preview was the one left at 「生成できませんでした」. Same retry, and a tap redraws. */
+  const draw = () => fetch(apiUrl('/api/hero-presets/preview'), {
     method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).catch(() => null);
+  let res = await draw();
+  for (const wait of [1500, 4000]) {
+    if (res?.ok) break;
+    await new Promise((r) => setTimeout(r, wait));
+    if (!document.getElementById(`cat-preview-${id}`)) return; // panel closed meanwhile
+    res = await draw();
+  }
   if (!res?.ok) {
-    if (status) status.textContent = 'プレビューを生成できませんでした';
+    if (status) {
+      status.textContent = 'プレビューを生成できませんでした（タップで再試行）';
+      status.style.cursor = 'pointer';
+      status.onclick = () => { status.onclick = null; status.style.cursor = ''; refreshCatPreview(id); };
+    }
     return;
   }
+  if (status) { status.onclick = null; status.style.cursor = ''; }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   // The previous object URL is only revoked once the new one is already assigned, so the <img>
