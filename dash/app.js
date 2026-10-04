@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '110';
+const DASH_BUILD = '111';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4104,6 +4104,17 @@ async function _loadSatoriPreviewInto(p, grid) {
     }
     if (stored.size === 2) return;
   }
+  /* Otherwise the style's own kept sample (server: previewSamples), drawn once and reused until the
+     style is edited or deleted — a template does not need a fresh picture on every visit. */
+  for (const [i, pattern] of ['center', 'side'].entries()) {
+    const url = !stored.has(pattern) && p.previewSamples?.[pattern]?.url;
+    const host = grid.querySelector(`.hp-shot[data-variant="${i}"] .hp-shot-img`);
+    if (!host || !url) continue;
+    const alt = `${p.name} の見本（${pattern === 'center' ? '中央' : 'サイド'}）`;
+    host.innerHTML = `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" onclick="_openLightbox('${esc(url)}','${esc(alt)}')">`;
+    stored.add(pattern);
+  }
+  if (stored.size === 2) return;
   const withPhotos = (c) => c?.visual?.samples?.center?.photoUrl || c?.visual?.samples?.side?.photoUrl;
   const cat = cats.find((c) => c.visual?.heroPreset === p.id && withPhotos(c))
     || cats.find((c) => c.id === p.sampleCategory);
@@ -4118,7 +4129,7 @@ async function _loadSatoriPreviewInto(p, grid) {
       method: 'POST', headers: { 'Content-Type': 'application/json', ..._authHeaders() },
       body: JSON.stringify({
         presetId: p.id, templateId: 'photo_scrim', styleSpec: { ...(p.styleSpec || {}), textZone: zone },
-        photoUrl, lines, emphasis: [], width: 640, article: p.name,
+        photoUrl, lines, emphasis: [], width: 640, article: p.name, keep: pattern,
       }),
     }).catch(() => null);
     let res = await _withPreviewSlot(draw);
