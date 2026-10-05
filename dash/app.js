@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '114';
+const DASH_BUILD = '115';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -418,6 +418,8 @@ const _destOf = (pageId) =>
 function navTo(target, asPage = false) {
   const returningFromX = window.HachiXAffiliate?.isActive();
   { const sub = document.getElementById('dest-sub'); if (sub) sub.style.display = ''; }
+  // A detail sheet belongs to the page it was opened from; it stayed on top of the next page.
+  if (document.getElementById('detail-overlay')?.classList.contains('open')) closeDetail();
   let dest, pageId;
   if (!asPage && DESTINATIONS[target]) {
     dest = target;
@@ -752,20 +754,21 @@ function drawGrid(ctx, grid, cm, blink, scale) {
 function nextRun(freq) {
   if (!freq) return '';
   const now = new Date(), tj = new Date(now.toLocaleString('en-US', { timeZone:'Asia/Tokyo' }));
-  if (freq.includes('On-demand') || freq.includes('Inline')) return 'When triggered';
-  if (freq.includes('10 min')) { const m = 10 - tj.getMinutes() % 10; return `In ~${m}m`; }
+  if (freq.includes('On-demand') || freq.includes('Inline')) return '呼ばれたとき';
+  if (freq.includes('10 min')) { const m = 10 - tj.getMinutes() % 10; return `約${m}分後`; }
   if (freq.includes('07:0')) {
     const min = freq.includes('07:01') ? 1 : 0, next = new Date(tj);
     next.setHours(7, min, 0, 0); if (next <= tj) next.setDate(next.getDate() + 1);
     const dh = Math.round((next - tj) / 3600000);
-    return dh < 1 ? '< 1h' : dh < 24 ? `In ~${dh}h` : 'Tomorrow 07:00 JST';
+    return dh < 1 ? '1時間以内' : dh < 24 ? `約${dh}時間後` : '明日 7:00';
   }
   if (freq.includes('Wed & Sun')) {
     const day = tj.getDay(), du = [3,0].map(t => (t-day+7)%7).sort((a,b)=>a-b)[0] || 7;
-    const names = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    return du === 0 ? 'Today 07:00 JST' : `In ${du}d (${names[(day+du)%7]})`;
+    const names = ['日','月','火','水','木','金','土'];
+    return du === 0 ? '今日 7:00' : `${du}日後（${names[(day+du)%7]}）`;
   }
-  return freq;
+  const FREQ_JA = { weekly: '毎週', daily: '毎日', hourly: '毎時', monthly: '毎月', 'bi-weekly': '隔週', biweekly: '隔週' };
+  return FREQ_JA[String(freq).toLowerCase()] || freq;
 }
 
 /* Which agent owns a task. It was only shown for the handful of types that had an explicit
@@ -7919,7 +7922,7 @@ const _I18N = {
     'lbl-created':       '作成',
     'lbl-updated':       '更新',
     // task detail labels
-    'lbl-goal':          '目標',
+    'lbl-goal':          'エージェントへの指示（原文）',
     'lbl-priority':      '優先度',
     'lbl-review':        'レビュー',
     'lbl-result':        '結果',
@@ -8120,6 +8123,8 @@ async function setProjectLanguage(value) {
 /* ═══════════════════════════════════════════════════════════
    AGENT DETAIL OVERLAY
 ══════════════════════════════════════════════════════════════ */
+const STATUS_JA = { completed: '完了', running: '実行中', failed: '失敗', pending: '順番待ち', cancelled: '中止' };
+
 function openDetail(id) {
   const reg = REGISTRY.find(r => r.id === id), d = DETAIL_DATA[id]; if (!reg || !d) return;
   const pct = Math.min(100, Math.round(((d.tokensUsed||0)/(d.tokenLimit||1))*100));
@@ -8132,19 +8137,20 @@ function openDetail(id) {
     <div class="p-header">
       <canvas id="detailCanvas" width="${DS*8}" height="${DS*8}" style="image-rendering:pixelated;flex-shrink:0"></canvas>
       <div>
-        <div class="p-title">${esc(PROJECT_LANG==='JP'&&reg.nameJp?reg.nameJp:id.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
-        <div class="p-sub">${esc(d.category||'')} · ${esc(d.agentType||'')} · Lv.${d.level||1} ${LV_NAMES[d.level]||''}</div>
+        ${/* Same English name as the card (operator's choice, 2026-10-05); the rest in Japanese. */ ''}
+        <div class="p-title">${esc(reg.name || id)}</div>
+        <div class="p-sub">${esc(t['cat-' + String(reg.category || d.category || '').toLowerCase()] || d.category || '')} · ${esc(_LEVEL_HINT[d.level || 1] || 'Lv.' + (d.level || 1))}</div>
       </div>
     </div>
     <div class="p-section"><div class="p-label">${t['lbl-description']}</div><div class="p-value">${esc((PROJECT_LANG==='JP'&&reg.fullDescJp)||d.fullDesc||d.desc||'')}</div></div>
     <div class="p-row">
-      <div class="p-stat"><div class="s-label">${t['lbl-model']}</div><div class="s-value" style="font-size:9px">${esc(d.model||reg.model||'')}</div></div>
+      <div class="p-stat"><div class="s-label">${t['lbl-model']}</div><div class="s-value" style="font-size:11px">${esc(d.model||reg.model||'')}</div></div>
       <div class="p-stat"><div class="s-label">${t['lbl-level']}</div><div class="s-value" style="color:${lc}">Lv.${d.level||1}</div></div>
       <div class="p-stat"><div class="s-label">${t['lbl-status']}</div><div class="s-value" style="color:${d.enabled!==false?'#34D399':'#EF4444'};font-size:9px">
         ${d.enabled!==false?t['lbl-enabled']:t['lbl-disabled']}
         <button class="act-btn ${d.enabled!==false?'cancel':'resume'}" onclick="toggleAgent('${id}',event)" style="font-size:9px;padding:2px 8px;margin-left:4px">${d.enabled!==false?t['lbl-disable']:t['lbl-enable']}</button>
       </div></div>
-      <div class="p-stat"><div class="s-label">${t['lbl-next-run']}</div><div class="s-value" style="font-size:9px">${esc(nextRun(d.frequency||reg.frequency||''))}</div></div>
+      <div class="p-stat"><div class="s-label">${t['lbl-next-run']}</div><div class="s-value" style="font-size:11px">${esc(nextRun(d.frequency||reg.frequency||''))}</div></div>
     </div>
     <div class="p-section">
       <div class="p-label">${t['lbl-token-budget']}</div>
@@ -8156,7 +8162,7 @@ function openDetail(id) {
     </div>
     ${myFlows.length ? `<div class="p-section"><div class="p-label">${t['lbl-in-flows']}</div>${myFlows.map(f=>`<div style="font-size:9px;margin-top:4px;color:${f.color}">${esc(f.name)}: ${f.agents.map(a=>{const r=REGISTRY.find(x=>x.id===a);return a===id?`<b>[${esc(r?.name||a)}]</b>`:`<span style="color:var(--m)">${esc(r?.name||a)}</span>`;}).join(' → ')}</div>`).join('')}</div>` : ''}
     ${(d.tools||reg.tools||[]).length ? `<div class="p-section"><div class="p-label">${t['lbl-tools']}</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${(d.tools||reg.tools||[]).map(tl=>`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--acc)">${esc(tl)}</span>`).join('')}</div></div>` : ''}
-    ${d.task ? `<div class="p-task" style="margin-top:12px"><div class="t-label">${t['lbl-last-task']}</div><div class="t-value">[${(d.task.status||'').toUpperCase()}] ${esc(d.task.goal||'—')}</div><div class="t-value" style="margin-top:3px;color:var(--m)">${t['lbl-created']}: ${fmtDate(d.task.createdAt)} · ${t['lbl-updated']}: ${fmtDate(d.task.updatedAt)}</div>${d.task.error?`<div style="color:var(--error);font-size:10px;margin-top:4px">${esc(d.task.error.substring(0,150))}</div>`:''}</div>` : ''}
+    ${d.task ? `<div class="p-task" style="margin-top:12px"><div class="t-label">${t['lbl-last-task']}</div><div class="t-value">${esc(STATUS_JA[d.task.status] || d.task.status || '')} · ${esc(taskTitle(d.task))}</div><div class="t-value" style="margin-top:3px;color:var(--m)">${t['lbl-created']}: ${fmtDate(d.task.createdAt)} · ${t['lbl-updated']}: ${fmtDate(d.task.updatedAt)}</div>${d.task.error?`<div style="color:var(--error);font-size:10px;margin-top:4px">${esc(d.task.error.substring(0,150))}</div>`:''}</div>` : ''}
   `;
 
   // Draw avatar
@@ -8184,15 +8190,15 @@ let _taskModal = null;
 function openTaskModal(status) {
   const tasks = ALL_BY_STATUS[status] || [];
   // Reuse detail overlay
-  const title = `${status.charAt(0).toUpperCase()+status.slice(1)} Tasks (${tasks.length})`;
+  const title = `${STATUS_JA[status] || status}のタスク（${tasks.length}）`;
   document.getElementById('detail-content').innerHTML = `
     <div class="p-title">${esc(title)}</div>
     <div style="margin-top:14px">
       ${tasks.length ? tasks.map(t => `<div class="tl-item" ${t.id ? `role="button" tabindex="0" aria-label="タスクの詳細を開く" onclick="openTaskDetail('${t.id}')" style="cursor:pointer"`:''}>
         <div class="feed-dot ${t.status}" style="margin-top:4px;flex-shrink:0"></div>
         <div class="tl-body">
-          <div class="tl-goal">${esc(t.goal)}</div>
-          <div class="tl-meta"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span> · ${fmtDate(t.createdAt)}</div>
+          <div class="tl-goal">${esc(taskTitle(t))}</div>
+          <div class="tl-meta">${fmtDate(t.createdAt)}</div>
           ${t.error ? `<div style="color:var(--error);font-size:10px">${esc(t.error.substring(0,80))}</div>` : ''}
         </div>
         ${status==='pending'&&t.id?`<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)"><i class="ni ni-close" aria-hidden="true"></i></button>`:''}
@@ -8212,15 +8218,16 @@ function openTaskDetail(taskId) {
     <div class="p-header">
       <div style="width:12px;height:12px;border-radius:50%;background:${colors[t.status]||'#64748B'};flex-shrink:0;margin-top:4px"></div>
       <div>
-        <div class="p-title">${esc(t.status.toUpperCase())} — ${esc((t.type||'').replace(/_/g,' '))}</div>
+        <div class="p-title">${esc(taskTitle(t))}</div>
+        <div class="p-sub" style="color:${colors[t.status]||'#64748B'};font-weight:700">${esc(STATUS_JA[t.status] || t.status)}</div>
         <div class="p-sub">${agentChip(t.type)} ${t.id ? t.id.substring(0,12) : ''}</div>
       </div>
     </div>
     <div class="p-section"><div class="p-label">${i18n['lbl-goal']}</div><div class="p-value">${esc(t.goal||'—')}</div></div>
     <div class="p-row">
-      ${t.priority!=null?`<div class="p-stat"><div class="s-label">${i18n['lbl-priority']}</div><div class="s-value">P${t.priority}</div></div>`:''}
-      ${t.createdAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-created']}</div><div class="s-value" style="font-size:9px">${fmtDate(t.createdAt)}</div></div>`:''}
-      ${t.updatedAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-updated']}</div><div class="s-value" style="font-size:9px">${fmtDate(t.updatedAt)}</div></div>`:''}
+      ${t.priority!=null?`<div class="p-stat"><div class="s-label">${i18n['lbl-priority']}</div><div class="s-value">${t.priority}</div></div>`:''}
+      ${t.createdAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-created']}</div><div class="s-value" style="font-size:11px">${fmtDate(t.createdAt)}</div></div>`:''}
+      ${t.updatedAt?`<div class="p-stat"><div class="s-label">${i18n['lbl-updated']}</div><div class="s-value" style="font-size:11px">${fmtDate(t.updatedAt)}</div></div>`:''}
       ${t.reviewScore!=null?`<div class="p-stat"><div class="s-label">${i18n['lbl-review']}</div><div class="s-value" style="color:var(--grn)">${t.reviewScore}/10</div></div>`:''}
     </div>
     ${t.result?`<div class="p-section"><div class="p-label">${i18n['lbl-result']}</div><div class="p-value" style="white-space:pre-wrap;font-size:11px">${esc(t.result.substring(0,500))}</div></div>`:''}
