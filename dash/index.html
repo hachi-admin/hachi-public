@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=111">
-<link rel="stylesheet" href="dashboard.css?v=111">
+<link rel="stylesheet" href="../shared/neu.css?v=112">
+<link rel="stylesheet" href="dashboard.css?v=112">
 </head>
 <body>
 
@@ -134,7 +134,6 @@
     <div class="page-hd">
       <div>
         <div class="page-title">タスク</div>
-        <div class="page-sub" data-i18n="queue">キュー</div>
       </div>
     </div>
 
@@ -154,7 +153,7 @@
   <section class="page" id="page-inbox" data-dest="today">
     <div class="page-hd">
       <div class="page-title">受信箱</div>
-      <div class="page-sub" data-i18n="inbox-sub">ローカルアクション待ちのアイテム</div>
+      <div class="page-sub" data-i18n="inbox-sub">自動では実行できず、手元での対応に回されたもの</div>
     </div>
 
     <div class="tab-bar">
@@ -457,11 +456,11 @@
     </div>
 
     <div class="tab-bar" role="tablist">
-      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')" data-i18n="src-sources">ソース</button>
+      <button class="tab-btn active" data-ktab="sources" onclick="setKTab(this,'sources')" data-i18n="src-sources">情報源</button>
       <button class="tab-btn" data-ktab="blocked" onclick="setKTab(this,'blocked')" data-i18n="src-blocked">ブロック済み</button>
-      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')" data-i18n="src-followups">フォローアップ</button>
-      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">マージ</button>
-      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">ヴォールト</button>
+      <button class="tab-btn" data-ktab="followups" onclick="setKTab(this,'followups')" data-i18n="src-followups">追いかける候補</button>
+      <button class="tab-btn" data-ktab="merges" onclick="setKTab(this,'merges')" data-i18n="src-merges">重複ページ</button>
+      <button class="tab-btn" data-ktab="vaults" onclick="setKTab(this,'vaults')" data-i18n="src-vaults">保存先</button>
       <button class="tab-btn" data-ktab="bases" onclick="setKTab(this,'bases')" data-i18n="src-bases">ベース</button>
     </div>
 
@@ -865,7 +864,7 @@
     <div class="page-hd">
       <div>
         <div class="page-title">Discord チャンネル</div>
-        <div class="page-sub">チャンネルレジストリ・エージェントルーティング</div>
+        <div class="page-sub">どのチャンネルに、どのエージェントが何を投稿するか</div>
       </div>
       <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Discordから取得</button>
     </div>
@@ -1019,7 +1018,7 @@
      MOBILE BOTTOM TAB BAR
 ════════════════════════════════════════════════ -->
 <nav class="mob-tab-bar" role="tablist">
-  <button class="mob-tab" id="x-affiliate-mobile-entry" type="button" role="tab" aria-label="X投稿BOT管理" aria-selected="false"><i class="ni ni-channels" aria-hidden="true"></i><span>X BOT</span></button>
+  <button class="mob-tab" id="x-affiliate-mobile-entry" type="button" role="tab" aria-label="X投稿BOT管理" aria-selected="false"><i class="ni ni-x" aria-hidden="true"></i><span>X BOT</span></button>
   <button class="mob-tab active" data-dest="today" onclick="navTo('today')">
     <i class="ni ni-today" aria-hidden="true"></i>
     <span>今日</span>
@@ -1031,15 +1030,15 @@
     <span>記事</span>
   </button>
   <button class="mob-tab" data-dest="knowledge" onclick="navTo('knowledge')">
-    <i class="ni ni-sources" aria-hidden="true"></i>
+    <i class="ni ni-book" aria-hidden="true"></i>
     <span>知識</span>
   </button>
   <button class="mob-tab" data-dest="ops" onclick="navTo('ops')">
-    <i class="ni ni-agents" aria-hidden="true"></i>
+    <i class="ni ni-pulse" aria-hidden="true"></i>
     <span>運用</span>
   </button>
   <button class="mob-tab" data-dest="system" onclick="navTo('system')">
-    <i class="ni ni-settings" aria-hidden="true"></i>
+    <i class="ni ni-tune" aria-hidden="true"></i>
     <span>設定</span>
   </button>
 </nav>
@@ -1078,8 +1077,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=111"></script>
-<script src="x-affiliate.js?v=111"></script>
-<script src="app.js?v=111"></script>
+<script src="../shared/ui.js?v=112"></script>
+<script src="x-affiliate.js?v=112"></script>
+<script src="app.js?v=112"></script>
 </body>
 </html>

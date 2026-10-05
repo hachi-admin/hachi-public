@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '111';
+const DASH_BUILD = '112';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -392,8 +392,8 @@ document.addEventListener('keydown', (e) => {
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['calendar','カレンダー'], ['inbox','受信箱'] ] },
   articles:  { label: '記事', pages: [ ['articles','マガジン'], ['hero-presets','文字スタイル'], ['image-prompts','画風'] ] },
-  knowledge: { label: '知識', pages: [ ['knowledge','ソース'], ['wiki','Wiki'] ] },
-  ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['repos','リポジトリ'], ['analytics','分析'] ] },
+  knowledge: { label: '知識', pages: [ ['knowledge','情報源'], ['wiki','Wiki'] ] },
+  ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['analytics','分析'] ] },
   system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
 };
 
@@ -594,9 +594,11 @@ function showConfirm(msg, onConfirm, targetEl) {
 function relTime(iso) {
   if (!iso) return '';
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 1) return 'just now'; if (m < 60) return m + 'm ago';
-  const h = Math.round(m / 60); if (h < 24) return h + 'h ago';
-  return Math.round(h / 24) + 'd ago';
+  const en = typeof PROJECT_LANG !== 'undefined' && PROJECT_LANG === 'EN';
+  if (m < 1) return en ? 'just now' : 'たった今';
+  if (m < 60) return en ? m + 'm ago' : m + '分前';
+  const h = Math.round(m / 60); if (h < 24) return en ? h + 'h ago' : h + '時間前';
+  return en ? Math.round(h / 24) + 'd ago' : Math.round(h / 24) + '日前';
 }
 function fmtDate(iso) {
   if (!iso) return '';
@@ -787,15 +789,39 @@ const ROUTINE_TYPES = new Set([
 /* Japanese labels for task types. The raw type is a code identifier — "materialize dashboard
    prefs" tells you nothing about what ran or whether it mattered. */
 const TASK_TYPE_LABELS = {
-  log_monitor: 'ログ監視', feed_health_check: 'フィード健全性', cost_report: 'コスト集計',
-  mail_check: 'メール確認', db_audit: 'DB監査', system_audit: 'システム監査',
-  wiki_lint: 'Wiki校正', note_stats: 'note統計', infer_location: '位置推定',
-  repo_audit: 'リポジトリ監査', materialize_dashboard_prefs: 'ダッシュボード設定反映',
-  note_study: 'note研究', scout: '調査', ingest: '取り込み', develop: '開発',
-  review: 'レビュー', content: '記事作成', plan: '計画',
+  log_monitor: 'エラーログの監視', feed_health_check: 'ニュース元の点検', cost_report: 'コストの集計',
+  mail_check: 'メールの確認', db_audit: 'データベース点検', system_audit: 'システム点検',
+  wiki_lint: 'Wikiの点検', note_stats: 'note反応の集計', infer_location: '現在地の推定',
+  repo_audit: 'リポジトリ点検', materialize_dashboard_prefs: 'ダッシュボード利用の集計',
+  note_study: 'noteの傾向調査', scout: 'トレンド調査', ingest: '取り込み', develop: '開発',
+  review: 'レビュー', content: '記事作成', plan: '毎日の見直し',
+  note_import_bundle: 'note取り込みファイルのまとめ', recipe_sample_fill: '画風の見本づくり',
+  fact_check_news: 'ニュースのファクトチェック', deep_context: '知識ページの作成',
+  category_backfill: 'マガジンの見た目の補完', integrity_audit: '記録の整合性チェック',
+  advisor_review: '週次のアドバイス', article_generate: '記事を書く', article_ideas: '記事案を出す',
+  article_url_ideas: 'URLから記事案', design_audit: 'デザイン点検', experiment_check: 'A/Bテストの確認',
+  efficiency_audit: '費用対効果の点検', topic_scout: 'マガジン候補の調査', import_scout: '海外ネタの調査',
+  proposal_expiry: '承認カードの期限処理', news_digest: 'ニュースダイジェスト', visionary: '新しい構想',
 };
 
-const isRoutine = (t) => ROUTINE_TYPES.has(t.type) || /^(log_monitor|cost_report|mail_check|note_stats|feed_health)_/.test(String(t.id || ''));
+/* The row's title. Most goals are English prompts written for the agent ("Fact-check today's news
+   digest (2026-10-05)") — the Japanese name of the job says the same thing to a person. A goal that
+   is already Japanese is kept, and an English one ending in a Japanese subject keeps that subject:
+   "Write Note article: 今日のマーケット観察" → 記事を書く：今日のマーケット観察. */
+const _JA = /[\u3040-\u30ff\u4e00-\u9fff]/;
+function taskTitle(t) {
+  const goal = String(t.goal || '').trim();
+  const label = TASK_TYPE_LABELS[t.type];
+  if (_JA.test(goal.slice(0, 6)) || !label) return goal || label || String(t.type || '').replace(/_/g, ' ');
+  const tail = goal.split(/:\s*/).slice(1).join(': ').trim();
+  return _JA.test(tail) ? `${label}：${tail}` : label;
+}
+
+/* Routine = anything the system queued for itself. Only `source: 'user'` is a request a person
+   made — everything else (scheduled jobs, the pipeline's own steps) runs whether or not anyone
+   looks, so it belongs in the tile grid, not in a list that asks for attention. */
+const isRoutine = (t) => ('source' in t) ? t.source !== 'user'
+  : ROUTINE_TYPES.has(t.type) || /^(log_monitor|cost_report|mail_check|note_stats|feed_health)_/.test(String(t.id || ''));
 
 /* ═══════════════════════════════════════════════════════════
    OVERVIEW — AGENT STATS BOX
@@ -1054,13 +1080,13 @@ function _renderTaskFeed() {
       ? (t.id && t.status === 'pending' ? `<button class="act-btn cancel" aria-label="中止" title="中止" onclick="doTaskAction('${t.id}','cancel',this)"><i class="ni ni-close" aria-hidden="true"></i></button>`
         : t.id && t.status === 'running' ? `<button class="act-btn stop" onclick="doTaskAction('${t.id}','stop',this)">⏹</button>` : '')
       : (t.id && (t.status === 'failed' || t.status === 'cancelled') ? `<button class="act-btn resume" onclick="doTaskAction('${t.id}','resume',this)">↻</button>` : '');
-    const timeStr = isUpcoming ? `Queued ${relTime(t.createdAt)} · P${t.priority ?? 3}` : `${fmtDate(t.updatedAt)} · ${relTime(t.updatedAt)}`;
+    const timeStr = isUpcoming ? `${relTime(t.createdAt)}に追加` : `${fmtDate(t.updatedAt)} · ${relTime(t.updatedAt)}`;
     const clickable = t.id ? `style="cursor:pointer" onclick="openTaskDetail('${t.id}')"` : '';
     return `<div class="feed-item" ${clickable ? `role="button" tabindex="0" aria-label="タスクの詳細を開く" ${clickable}` : ''}>
       <div class="feed-dot ${t.status}"></div>
       <div class="feed-body">
-        <div class="feed-text" title="${esc(t.goal)}">${esc(t.goal)}</div>
-        <div class="feed-type"><span class="tl-type">${esc((t.type||'').replace(/_/g,' '))}</span>${agentChip(t.type)} ${timeStr}</div>
+        <div class="feed-text" title="${esc(t.goal)}">${esc(taskTitle(t))}</div>
+        <div class="feed-type">${agentChip(t.type)} ${timeStr}</div>
       </div>${btn}
     </div>`;
   };
@@ -1080,10 +1106,21 @@ function _renderTaskFeed() {
          ${rows.map(row).join('')}
        </div>` : '';
 
-  const needsAction = [...oneOff, ...brokenRoutine];
+  /* Only a failure asks for anything. Work in progress is shown, finished requests are folded away,
+     and the routine grid says "all fine" once per job — the old 「対応が必要かもしれない」 listed
+     every finished one-off under a headline saying nothing needed doing. */
+  const failedRows = [...oneOff.filter((t) => t.status === 'failed'), ...brokenRoutine];
+  const activeRows = oneOff.filter((t) => t.status === 'running' || t.status === 'pending');
+  const doneRows = oneOff.filter((t) => !['failed', 'running', 'pending'].includes(t.status));
+  const needsAction = [...failedRows, ...activeRows, ...doneRows];
   el.innerHTML =
     _taskSummary(needsAction, quietRoutine)
-    + group('対応が必要かもしれない', needsAction, '依頼されたタスクと、失敗した定常タスク')
+    + group('失敗したもの', failedRows, '開くと理由と再実行ボタンがあります')
+    + group('実行中・順番待ち', activeRows, '')
+    + (doneRows.length ? `<details class="feed-group feed-fold">
+        <summary class="feed-group-hd"><span>最近終わった依頼</span><span class="feed-group-n">${doneRows.length}</span></summary>
+        ${doneRows.map(row).join('')}
+      </details>` : '')
     + _routineGrid(quietRoutine);
 }
 
@@ -1112,8 +1149,7 @@ function _taskSummary(needsAction, quietRoutine) {
   ].filter(Boolean).join('');
 
   const note = failed
-    ? '下の一覧から該当タスクを開くと、失敗した理由と再実行ボタンがあります。'
-    : tone === 'ok' ? '定常タスクは正常に動いています。読む必要はありません。' : '';
+    ? '' : tone === 'ok' ? '定常タスクは正常に動いています。' : '';
 
   return `<div class="task-summary ${tone}">
     <div class="ts-head"><span class="ts-pip"></span>${esc(headline)}</div>
@@ -6588,8 +6624,30 @@ function _renderKnowledge() {
   document.getElementById('k-merges').innerHTML    = _buildMergeSuggestionRows(kd.mergeSuggestions || []);
   document.getElementById('k-vaults').innerHTML    = _buildVaultRows(kd.vaults || [], kd.pendingVaultTasks || []);
   document.getElementById('k-bases').innerHTML     = _buildBasesRows(kd.bases || []);
+  /* Six tabs, four of them empty on any normal day, read as six things to look after. A tab only
+     appears when it holds something, and says how much; 情報源 is always there. */
+  const counts = {
+    blocked: SOURCES.filter((x) => x.blocked).length,
+    followups: (kd.suggestedFollowups || []).length,
+    merges: (kd.mergeSuggestions || []).length,
+    // The single default vault is the normal state, not something to visit.
+    vaults: (kd.vaults || []).length > 1 || (kd.pendingVaultTasks || []).length ? (kd.vaults || []).length : 0,
+    bases: (kd.bases || []).length,
+  };
+  for (const [tab, n] of Object.entries(counts)) {
+    const b = document.querySelector(`.tab-btn[data-ktab="${tab}"]`);
+    if (!b) continue;
+    b.style.display = n ? '' : 'none';
+    b.dataset.n = n || '';
+    if (!n && _kTab === tab) setKTab(document.querySelector('.tab-btn[data-ktab="sources"]'), 'sources');
+  }
+  // Only 情報源 left: the tab bar would be a bar with one tab in it.
+  const bar = document.querySelector('#page-knowledge .tab-bar');
+  if (bar) bar.style.display = Object.values(counts).some(Boolean) ? '' : 'none';
 }
 
+// What a source feeds: the daily news digest, or trend scouting.
+const _SRC_USE = { news: 'ニュース', scout: 'トレンド調査' };
 function _buildSourceRows(sources) {
   if (!sources || !sources.length) { const t=_I18N[PROJECT_LANG]||_I18N.JP; return `<div style="color:var(--m);font-size:11px;padding:8px 0">${t['empty-sources']}</div>`; }
   return sources.map(s => {
@@ -6598,21 +6656,20 @@ function _buildSourceRows(sources) {
         <div class="src-name">
           <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.name)}</a>
         </div>
-        <div class="src-meta">
-          ${srcChip((s.type || '').toUpperCase(), SRC_CHIP[s.type] || '')}
-          ${srcChip(s.domain, SRC_CHIP[s.domain] || '')}
-          ${s.genre ? srcChip(s.genre) : ''}
-          ${srcChip(hostOf(s.url))}
-          ${s.enabled ? '' : srcChip('停止中', 'bad')}
-        </div>
+        ${/* One quiet line: the coloured words (RSS / news / …) looked like tags to press. */ ''}
+        <div class="src-meta src-meta-line">${esc([
+          (s.type || '').toUpperCase(), _SRC_USE[s.domain] || s.domain, s.genre, hostOf(s.url),
+        ].filter(Boolean).join('・'))}${s.enabled ? '' : '<span class="src-off">停止中</span>'}</div>
       </div>
       <div class="src-actions">
-        <button type="button" class="src-toggle ${s.enabled ? 'on' : 'off'}" role="switch"
-          aria-checked="${s.enabled ? 'true' : 'false'}"
-          aria-label="${esc(s.name)} を${s.enabled ? '無効' : '有効'}にする"
-          onclick="toggleSource('${s.id}',${!s.enabled})"></button>
-        <button class="act-btn cancel" onclick="blockSource('${s.id}')"
-          aria-label="ブロック" title="ブロック"><i class="ni ni-block" aria-hidden="true"></i></button>
+        ${/* The green dot was this switch — it read as a status light, not something to press. */ ''}
+        <label class="cat-switch" title="${s.enabled ? '取り込み中（タップで停止）' : '停止中（タップで再開）'}">
+          <input type="checkbox"${s.enabled ? ' checked' : ''} aria-label="${esc(s.name)} から取り込む"
+            onchange="toggleSource('${s.id}',this.checked)">
+          <span class="cat-switch-track" aria-hidden="true"></span>
+        </label>
+        <button class="act-btn cancel src-block-btn" onclick="blockSource('${s.id}')"
+          title="今後この情報源を使わない">ブロック</button>
       </div>
     </div>`;
   }).join('');
@@ -7780,13 +7837,13 @@ const _I18N = {
     // docs page
     'docs-welcome':      'ドキュメントをツリーから選択',
     // inbox
-    'inbox-sub':         'ローカルアクション待ちのアイテム',
+    'inbox-sub':         '自動では実行できず、手元での対応に回されたもの',
     // sources/knowledge
-    'src-sources':       'ソース',
+    'src-sources':       '情報源',
     'src-blocked':       'ブロック済み',
-    'src-followups':     'フォローアップ',
-    'src-merges':        'マージ',
-    'src-vaults':        'ヴォールト',
+    'src-followups':     '追いかける候補',
+    'src-merges':        '重複ページ',
+    'src-vaults':        '保存先',
     'src-bases':         'ベース',
     'src-from':          '出典:',
     // channels page
@@ -7800,7 +7857,7 @@ const _I18N = {
     'set-cancel':        'キャンセル',
     // empty states (dynamic JS strings)
     'empty-tasks':       'タスクなし',
-    'empty-inbox':       'アイテムなし — オーケストレーターは稼働中です',
+    'empty-inbox':       '手元で対応するものはありません',
     'empty-items':       'アイテムなし',
     'empty-factchecks':  'ファクトチェックの実行記録がありません',
     'empty-sources':     'ソースなし',
@@ -7898,7 +7955,7 @@ const _I18N = {
     'wiki-selected':     ' selected',
     'wiki-search':       'Search…',
     'docs-welcome':      'Select a document from the tree',
-    'inbox-sub':         'Items queued for local action',
+    'inbox-sub':         'What the system could not do on its own and handed to you',
     'src-sources':       'Sources',
     'src-blocked':       'Blocked',
     'src-followups':     'Follow-ups',
