@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '115';
+const DASH_BUILD = '116';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -947,6 +947,7 @@ function _renderAgentGrid() {
 
   _startAvatarAnimations();
   _applyAgentFilters();
+  window.HachiOffice?.render();   // the pixel office above the roster (office.js)
 }
 
 function _startAvatarAnimations() {
