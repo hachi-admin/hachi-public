@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '112';
+const DASH_BUILD = '113';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -928,8 +928,8 @@ function _renderAgentGrid() {
         <div class="acard-desc">${esc(displayDesc)}</div>
         <div class="tok-bar-wrap" title="${(d.tokensUsed || 0).toLocaleString()} / ${(d.tokenLimit || 0).toLocaleString()} tokens"><div class="tok-bar" style="width:${pct}%;background:${barColor}"></div></div>
         <div class="acard-nums">
-          <span class="acard-pct"${pct > 80 ? ' data-hot="1"' : ''}>${pct}%</span>
-          <span class="acard-cost">${costEst > 0 ? '$' + costEst.toFixed(2) : '—'}</span>
+          <span class="acard-pct" title="使ったトークン / 上限"${pct > 80 ? ' data-hot="1"' : ''}>上限の${pct}%</span>
+          <span class="acard-cost" title="直近7日の費用">${costEst > 0 ? '7日 $' + costEst.toFixed(2) : '7日 —'}</span>
         </div>
       </div>
       <button class="agent-toggle ${enabled ? 'on' : ''}" onclick="toggleAgent('${reg.id}',event)" title="${enabled ? t['lbl-disable']:t['lbl-enable']}">
@@ -6901,6 +6901,23 @@ function _fmtBytes(n) {
   return `${b} B`;
 }
 
+const _STORAGE_FAMILY_JA = {
+  images: '記事・ニュースの画像', 'cat-sample-photo': 'マガジン見本（写真）', 'cat-sample': 'マガジン見本',
+  'recipe-sample': '画風の見本', 'hero-preview': '文字スタイルの見本', hero: '見出し画像',
+};
+// "cat-sample-photo-cat_ai_naze-1727…​.png" → "cat-sample-photo"; "images/…" → "images".
+function _storageFamily(name) {
+  const n = String(name || '');
+  const known = Object.keys(_STORAGE_FAMILY_JA).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k + '-') || n.startsWith(k + '/'));
+  if (known) return known;
+  if (n.includes('/')) return n.split('/')[0];
+  const base = n.replace(/\.[a-z0-9]+$/i, '');
+  const parts = base.split('-');
+  const out = [];
+  for (const p of parts) { if (/^(cat_|\d)|^[0-9a-f]{8,}$/i.test(p) || /_/.test(p)) break; out.push(p); }
+  return out.join('-') || base;
+}
+
 /* API calls and image storage — the two things the cost picture was missing.
    Calls give the spend a shape: the same token total from forty requests instead of one points
    at a retry loop rather than a long prompt. Storage only ever grows, because generated images
@@ -6926,7 +6943,18 @@ function _renderUsageKpis() {
   _setText('kpi-storage', _fmtBytes(su.bytes));
   _setText('kpi-storage-sub', `${(su.count || 0).toLocaleString()} 件 · ${su.measuredAt ? relTime(su.measuredAt) : ''}`);
 
-  const rows = su.byPrefix || [];
+  /* The server groups by folder, and most objects sit at the top level — so each file came back
+     as its own "prefix" (cat-sample-photo-ca… ×N, every name cut off). Regroup by the family the
+     filename starts with, and name the family in Japanese. */
+  const fam = new Map();
+  for (const r of su.byPrefix || []) {
+    const key = _storageFamily(r.name);
+    const f = fam.get(key) || { name: key, bytes: 0, count: 0 };
+    f.bytes += r.bytes || 0; f.count += r.count || 0;
+    fam.set(key, f);
+  }
+  const rows = [...fam.values()].sort((a, b) => b.bytes - a.bytes)
+    .map((f) => ({ ...f, name: _STORAGE_FAMILY_JA[f.name] || f.name }));
   if (hd) hd.style.display = rows.length ? '' : 'none';
   if (!box) return;
   const max = Math.max(1, ...rows.map((r) => r.bytes || 0));
@@ -7249,7 +7277,7 @@ async function setMailAccountActive(id) {
     showToast('アクティブアカウントを変更しました。', 'success');
     await _loadMailAccounts();
   } catch (e) {
-    showToast('Failed: ' + e.message, 'error');
+    showToast('うまくいきませんでした: ' + e.message, 'error');
   }
 }
 
@@ -7264,7 +7292,7 @@ async function removeMailAccount(id, email) {
     const rulesSec = document.getElementById('mail-rules-section');
     if (rulesSec) rulesSec.style.display = 'none';
   } catch (e) {
-    showToast('Failed: ' + e.message, 'error');
+    showToast('うまくいきませんでした: ' + e.message, 'error');
   }
 }
 
@@ -7346,7 +7374,7 @@ async function deleteMailRule(accountId, ruleId) {
     showToast('削除しました', 'success');
     await _loadMailRules(accountId);
   } catch (e) {
-    showToast('Failed: ' + e.message, 'error');
+    showToast('うまくいきませんでした: ' + e.message, 'error');
   }
 }
 
@@ -7384,7 +7412,7 @@ async function saveChannelCtx(channelId, key) {
     if (!res.ok) throw new Error(res.status);
     showToast(`${key}: コンテキスト ${val} 件に設定しました`, 'success');
   } catch (e) {
-    showToast('Failed: ' + e.message, 'error');
+    showToast('うまくいきませんでした: ' + e.message, 'error');
   }
 }
 
@@ -7410,7 +7438,7 @@ async function saveLocationOverrideSettings() {
     method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
     body: JSON.stringify({ city, countryCode: cc || null, userOverride: true })
   });
-  if (!res.ok) { showToast('Save failed: ' + res.status, 'error'); return; }
+  if (!res.ok) { showToast('保存できませんでした（' + res.status + '）', 'error'); return; }
   showToast('位置情報のオーバーライドを保存しました。', 'success');
   loadDashboard();
 }
@@ -7607,7 +7635,7 @@ async function registerDiscordChannel() {
     const cb = document.getElementById('reg-ch-thread'); if (cb) cb.checked = false;
     showToast(`チャンネル「${key}」を登録しました。`, 'success');
     _loadDiscordChannels();
-  } else showToast('Failed to save: ' + res.status, 'error');
+  } else showToast('保存できませんでした（' + res.status + '）', 'error');
 }
 
 // Keep old name for any legacy callers
@@ -7621,7 +7649,7 @@ function removeDiscordChannel(key) {
       method:'DELETE', headers:_authHeaders()
     });
     if (res.ok) { showToast(`チャンネル「${key}」を削除しました。`, 'success'); _loadDiscordChannels(); }
-    else { if (row) row.style.opacity = ''; showToast('Failed: ' + res.status, 'error'); }
+    else { if (row) row.style.opacity = ''; showToast('うまくいきませんでした（' + res.status + '）', 'error'); }
   }, row);
 }
 
@@ -7706,12 +7734,12 @@ function _renderLocationPill() {
 async function saveLocationOverride() {
   const city = document.getElementById('loc-city-input')?.value.trim();
   const cc = document.getElementById('loc-country-input')?.value.trim().toUpperCase();
-  if (!city) { showToast('City is required.', 'warn'); return; }
+  if (!city) { showToast('都市名を入れてください', 'warn'); return; }
   const res = await fetch(apiUrl('/api/project/location'), {
     method:'POST', headers:{..._authHeaders(),'Content-Type':'application/json'},
     body: JSON.stringify({ city, countryCode:cc || null, userOverride:true })
   });
-  if (!res.ok) { showToast('Save failed: ' + res.status, 'error'); return; }
+  if (!res.ok) { showToast('保存できませんでした（' + res.status + '）', 'error'); return; }
   loadDashboard();
 }
 
@@ -7790,6 +7818,9 @@ const _I18N = {
     // filter / status tabs
     'all':               'すべて',
     'pending':           '保留中',
+    'task-pending':      '順番待ち',
+    'inbox-pending':     '未対応',
+    'inbox-done':        '対応済み',
     'running':           '実行中',
     'done':              '完了',
     'failed':            '失敗',
@@ -7802,7 +7833,7 @@ const _I18N = {
     // placeholders
     'search-agents':     'エージェントを検索…',
     // KPI bar
-    'kpi-pending':       '保留中',
+    'kpi-pending':       '順番待ち',
     'kpi-running':       '実行中',
     'kpi-completed':     '完了',
     'kpi-failed':        '失敗',
@@ -7848,7 +7879,7 @@ const _I18N = {
     'src-from':          '出典:',
     // channels page
     'ch-routing':        'ルーティング',
-    'ch-server':         'サーバーチャンネル',
+    'ch-server':         'チャンネル一覧',
     'ch-new-folder':     '+ フォルダ',
     'ch-new-channel':    '+ チャンネル',
     'ch-add-tag':        '+ タグ',
@@ -7913,9 +7944,9 @@ const _I18N = {
     'cat-content':       '制作',
     // how an agent is set going, shown on its card
     'trig-scheduled':    '定期実行',
-    'trig-queued':       'キュー待ち',
-    'trig-interactive':  '手動',
-    'trig-inline':       '他エージェント経由',
+    'trig-queued':       'タスクで起動',
+    'trig-interactive':  '会話で起動',
+    'trig-inline':       '他のエージェントから',
     // wiki file type group labels
     'ext-txt':           'テキスト',
     'ext-scripts':       'スクリプト',
@@ -7924,6 +7955,9 @@ const _I18N = {
   EN: {
     'all':               'All',
     'pending':           'Pending',
+    'task-pending':      'Queued',
+    'inbox-pending':     'Open',
+    'inbox-done':        'Handled',
     'running':           'Running',
     'done':              'Done',
     'failed':            'Failed',
@@ -8309,7 +8343,7 @@ function deleteVault(id) {
   showConfirm(`ヴォールト「${id}」を削除しますか？GitHubリポジトリは削除されません。`, async () => {
     const res = await fetch(apiUrl(`/api/vaults/${encodeURIComponent(id)}`), { method:'DELETE', headers:_authHeaders() });
     if (res.ok) row?.remove();
-    else showToast('Delete failed: ' + res.status, 'error');
+    else showToast('削除できませんでした（' + res.status + '）', 'error');
   }, row);
 }
 
@@ -8327,7 +8361,7 @@ function deleteBase(id) {
   showConfirm(`ベース「${id}」を削除しますか？`, async () => {
     const res = await fetch(apiUrl(`/api/bases/${encodeURIComponent(id)}`), { method:'DELETE', headers:_authHeaders() });
     if (res.ok) row?.remove();
-    else showToast('Delete failed: ' + res.status, 'error');
+    else showToast('削除できませんでした（' + res.status + '）', 'error');
   }, row);
 }
 
@@ -8384,7 +8418,7 @@ async function _loadAnalytics() {
     _setText('kpi-tasks-today', todayTasks);
     _setText('kpi-tasks-fail', todayFail > 0 ? `${todayFail} 件失敗` : '');
     _setText('kpi-queue', TASK_STATS?.byStatus ? ((TASK_STATS.byStatus.pending||0) + (TASK_STATS.byStatus.running||0)) : '—');
-    _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(4)}`);
+    _setText('kpi-cost-today', `$${(COST_BY_DAY[d.today] || 0).toFixed(2)}`);
     _setText('kpi-news', newsTotal);
     _renderUsageKpis();
 
@@ -8706,7 +8740,7 @@ function _wikiCard(p) {
     ${selBox}
     <div class="wc-head">
       <span class="wc-title">${esc(p.title)}</span>
-      ${p.category ? `<span class="wc-cat">${esc(p.category)}</span>` : ''}
+      ${p.category ? `<span class="wc-cat">${esc(_WIKI_CAT_JA[String(p.category).toLowerCase()] || p.category)}</span>` : ''}
     </div>
     ${body}
     <div class="wc-foot">
@@ -9366,7 +9400,7 @@ async function _saveRouting(taskType, channelKey) {
     method:'PATCH', headers:{..._authHeaders(),'Content-Type':'application/json'},
     body: JSON.stringify({ taskType, channelKey }),
   });
-  if (!res.ok) showToast('Routing save failed', 'error');
+  if (!res.ok) showToast('担当の保存ができませんでした', 'error');
   else showToast(`${taskType} → ${channelKey}`, 'success');
 }
 
@@ -9526,10 +9560,10 @@ async function _fetchDiscordGuilds() {
   try {
     const res = await fetch(apiUrl('/api/discord/guilds'), { headers: _authHeaders() });
     if (res.status === 401) { _handleUnauthorized(); return; }
-    if (!res.ok) { showToast('Discord fetch failed: ' + res.status, 'error'); return; }
+    if (!res.ok) { showToast('Discord から読み込めませんでした（' + res.status + '）', 'error'); return; }
     const data = await res.json();
     _guildsData = data.guilds || [];
-    if (!_guildsData.length) { showToast('Bot is not in any Discord server, or DISCORD_BOT_TOKEN is not set.', 'warn'); return; }
+    if (!_guildsData.length) { showToast('ボットがどのサーバーにも入っていないか、ボットのトークンが設定されていません', 'warn'); return; }
     _renderGuildPicker(_guildsData);
     if (_guildsData.length === 1) {
       _selectedGuildId = _guildsData[0].id;
@@ -9538,9 +9572,9 @@ async function _fetchDiscordGuilds() {
     const createCard = document.getElementById('create-discord-ch-card');
     if (createCard) createCard.style.display = '';
   } catch (e) {
-    showToast('Error fetching guilds: ' + e.message, 'error');
+    showToast('チャンネル一覧を読み込めませんでした: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '↻ Discordから取得'; }
+    if (btn) { btn.disabled = false; btn.textContent = '↻ 読み直す'; }
   }
 }
 
@@ -9851,7 +9885,7 @@ async function _toggleAgentOnChannel(agentId, channelId, channelName, checkbox) 
         method: 'POST', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, id: channelId })
       });
-      if (!res.ok) { checkbox.checked = !isChecked; showToast('Failed to register channel', 'error'); return; }
+      if (!res.ok) { checkbox.checked = !isChecked; showToast('チャンネルを登録できませんでした', 'error'); return; }
     }
     await saveAgentChannel(agentId, isChecked ? key : '');
     await _loadDiscordChannels();
@@ -9860,7 +9894,7 @@ async function _toggleAgentOnChannel(agentId, channelId, channelName, checkbox) 
     if (guild) _renderLiveChannels(guild);
   } catch (e) {
     checkbox.checked = !isChecked;
-    showToast('Error: ' + e.message, 'error');
+    showToast('エラー: ' + e.message, 'error');
   } finally {
     checkbox.disabled = false;
   }
@@ -9893,7 +9927,7 @@ async function createDiscordCategory() {
   const statusEl = document.getElementById('create-cat-status');
   const btn = document.getElementById('create-cat-btn');
   if (!name) { showToast('カテゴリー名を入力してください。', 'warn'); return; }
-  if (!_selectedGuildId) { showToast('先にDiscordから取得してください。', 'warn'); return; }
+  if (!_selectedGuildId) { showToast('先に「読み直す」でチャンネル一覧を読み込んでください。', 'warn'); return; }
   if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
   if (statusEl) statusEl.textContent = '';
   try {

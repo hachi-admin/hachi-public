@@ -1346,11 +1346,14 @@ body:has(.mob-more-sheet.open) .page-area{
     padding:8px;border-radius:12px;gap:6px;scrollbar-width:none;
   }
   .settings-nav::-webkit-scrollbar{display:none}
+  /* width:auto — the desktop sidebar's width:100% made 概要 fill the strip and hid the other five.
+     Flat options in a raised group, the chosen one inset (UI 基本方針 3). */
   .settings-nav-btn{
-    white-space:nowrap;padding:8px 16px;border-radius:20px;
-    background:var(--bg);box-shadow:var(--sh-sm);flex-shrink:0;
-    margin-bottom:0;display:inline-block;min-height:44px;
+    white-space:nowrap;padding:8px 14px;border-radius:20px;width:auto;
+    background:none;box-shadow:none;flex-shrink:0;
+    margin-bottom:0;display:inline-block;min-height:40px;font-size:12px;
   }
+  .settings-nav-btn.active{box-shadow:var(--d-on)}
   .settings-panel{padding:14px 14px}
   .agent-stats-box{gap:2px;padding:10px 12px}
   .asb-sep{display:none}
@@ -3319,3 +3322,22 @@ body.sheet-open{overflow:hidden}
 .src-off{color:var(--red);font-weight:700}
 .src-actions{display:flex;align-items:center;gap:10px}
 .src-block-btn{font-size:11px;min-height:32px;padding:0 10px}
+/* Wiki categories: name on the left, count and ⌄ on the right. With ▸ as a third flex item,
+   space-between pushed the name into the middle of the row. */
+.wiki-cat-group>summary{justify-content:flex-start;gap:8px;font-size:13px;padding:10px 14px}
+.wiki-cat-group>summary::before{content:none}
+.wiki-cat-group>summary .wiki-cat-count{margin-left:auto;font-size:11px;color:var(--m)}
+.wiki-cat-group>summary::after{content:'⌄';color:var(--m);font-size:13px}
+.wiki-cat-group[open]>summary::after{content:'⌃'}
+.ch-actions{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.ch-actions .save-btn{font-size:12px;min-height:36px;padding:0 14px}
+.ch-hint{font-size:11px;color:var(--m);margin-bottom:10px;line-height:1.6}
+/* 設定 › 概要: a read-out, so rows in one panel rather than a grid of floating cards with wide
+   gaps between them. Sizes from UI 基本方針 1. */
+.set-summary,.conn-grid{gap:0}
+.set-line,.conn-row{box-shadow:none;border-radius:0;padding:12px 4px;border-bottom:1px solid var(--div);min-height:0}
+.set-line:last-child,.conn-row:last-child{border-bottom:0}
+.set-label{font-size:11px}
+.set-value{font-size:13px}
+.set-note,.conn-detail,.conn-hint{font-size:11px}
+.conn-name{font-size:13px;white-space:normal}

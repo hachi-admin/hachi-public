@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=112">
-<link rel="stylesheet" href="dashboard.css?v=112">
+<link rel="stylesheet" href="../shared/neu.css?v=113">
+<link rel="stylesheet" href="dashboard.css?v=113">
 </head>
 <body>
 
@@ -140,7 +140,7 @@
     <!-- Filters -->
     <div class="filter-bar" style="margin-bottom:10px">
       <button class="qcat active" data-status="all" onclick="setTaskFilter(this,'all')" data-i18n="all">すべて</button>
-      <button class="qcat" data-status="pending" onclick="setTaskFilter(this,'pending')" data-i18n="pending">保留中</button>
+      <button class="qcat" data-status="pending" onclick="setTaskFilter(this,'pending')" data-i18n="task-pending">順番待ち</button>
       <button class="qcat" data-status="running" onclick="setTaskFilter(this,'running')" data-i18n="running">実行中</button>
       <button class="qcat" data-status="completed" onclick="setTaskFilter(this,'completed')" data-i18n="done">完了</button>
       <button class="qcat" data-status="failed" onclick="setTaskFilter(this,'failed')" data-i18n="failed">失敗</button>
@@ -157,8 +157,8 @@
     </div>
 
     <div class="tab-bar">
-      <button class="tab-btn active" data-itab="pending" onclick="setITab(this,'pending')" data-i18n="pending">保留中</button>
-      <button class="tab-btn" data-itab="done" onclick="setITab(this,'done')" data-i18n="done">完了</button>
+      <button class="tab-btn active" data-itab="pending" onclick="setITab(this,'pending')" data-i18n="inbox-pending">未対応</button>
+      <button class="tab-btn" data-itab="done" onclick="setITab(this,'done')" data-i18n="inbox-done">対応済み</button>
       <button class="tab-btn" data-itab="ignored" onclick="setITab(this,'ignored')" data-i18n="ignored">無視</button>
     </div>
     <div class="tab-content">
@@ -484,32 +484,32 @@
     <!-- KPI row -->
     <div class="analytics-kpi-row" id="analytics-kpi-row">
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">本日のタスク</div>
+        <div style="font-size:11px;color:var(--m)">本日のタスク</div>
         <div id="kpi-tasks-today" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
         <div id="kpi-tasks-fail" style="font-size:10px;color:var(--red)"></div>
       </div>
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">キュー深度</div>
+        <div style="font-size:11px;color:var(--m)">未処理のタスク</div>
         <div id="kpi-queue" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
-        <div style="font-size:10px;color:var(--m)">pending + running</div>
+        <div style="font-size:11px;color:var(--m)">順番待ち＋実行中</div>
       </div>
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">本日のコスト</div>
+        <div style="font-size:11px;color:var(--m)">本日のコスト</div>
         <div id="kpi-cost-today" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
-        <div style="font-size:10px;color:var(--m)">USD 概算</div>
+        <div style="font-size:11px;color:var(--m)">ドル・概算</div>
       </div>
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">ニュース配信</div>
+        <div style="font-size:11px;color:var(--m)">ニュース配信</div>
         <div id="kpi-news" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
-        <div style="font-size:10px;color:var(--m)">今週の記事数</div>
+        <div style="font-size:11px;color:var(--m)">今週の記事数</div>
       </div>
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">API 呼び出し</div>
+        <div style="font-size:11px;color:var(--m)">API 呼び出し</div>
         <div id="kpi-calls" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
-        <div style="font-size:10px;color:var(--m)">本日・全エージェント</div>
+        <div style="font-size:11px;color:var(--m)">本日・全エージェント</div>
       </div>
       <div class="qs-card" style="flex-direction:column;gap:2px;align-items:flex-start">
-        <div style="font-size:10px;color:var(--m)">画像ストレージ</div>
+        <div style="font-size:11px;color:var(--m)">画像ストレージ</div>
         <div id="kpi-storage" style="font-size:22px;font-weight:800;color:var(--txt)">—</div>
         <div id="kpi-storage-sub" style="font-size:10px;color:var(--m)">—</div>
       </div>
@@ -526,8 +526,8 @@
         <div class="chart-header">
           <span class="chart-title">コスト — 直近7日</span>
           <div class="chart-tabs">
-            <button class="chart-tab active" data-ctab="bar" onclick="setCostTab(this,'bar')">Bar</button>
-            <button class="chart-tab" data-ctab="line" onclick="setCostTab(this,'line')">Line</button>
+            <button class="chart-tab active" data-ctab="bar" onclick="setCostTab(this,'bar')">棒</button>
+            <button class="chart-tab" data-ctab="line" onclick="setCostTab(this,'line')">折れ線</button>
           </div>
         </div>
         <div id="line-toggles" class="line-toggles hidden"></div>
@@ -554,12 +554,12 @@
     <!-- Cost table -->
     <div class="section-hd">本日のコスト — エージェント別</div>
     <table class="ct-table">
-      <thead><tr><th>Agent</th><th>Model</th><th>Tokens</th><th>呼び出し</th><th>Cost (est.)</th></tr></thead>
+      <thead><tr><th>エージェント</th><th>モデル</th><th>トークン</th><th>呼び出し</th><th>費用（概算）</th></tr></thead>
       <tbody id="cost-table-body"></tbody>
     </table>
 
     <!-- Privilege matrix -->
-    <div class="section-hd" style="margin-top:20px">Privilege matrix</div>
+    <div class="section-hd" style="margin-top:20px">エージェントの権限</div>
     <div id="priv-matrix"></div>
   </section>
 
@@ -866,7 +866,7 @@
         <div class="page-title">Discord チャンネル</div>
         <div class="page-sub">どのチャンネルに、どのエージェントが何を投稿するか</div>
       </div>
-      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn">&#8635; Discordから取得</button>
+      <button class="save-btn" onclick="_fetchDiscordGuilds()" id="fetch-guilds-btn" title="Discord から最新のチャンネル一覧を読み直す">&#8635; 読み直す</button>
     </div>
 
     <!-- Bot permissions info -->
@@ -880,13 +880,13 @@
 
     <!-- Live channel tree -->
     <div id="discord-live-channels" style="display:none;margin-bottom:16px">
-      <div class="section-hd" style="display:flex;align-items:center;gap:8px">
-        <span data-i18n="ch-server">Server channels</span>
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateCategoryForm()" data-i18n="ch-new-folder">+ フォルダ</button>
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showCreateChannelForm()" data-i18n="ch-new-channel">+ チャンネル</button>
-        <button class="save-btn" style="font-size:10px;padding:3px 10px;min-height:28px" onclick="_showAssignAgentForm()">エージェント割り当て</button>
+      <div class="section-hd" data-i18n="ch-server">Server channels</div>
+      <div class="ch-actions">
+        <button class="save-btn" onclick="_showAssignAgentForm()">担当を変える</button>
+        <button class="save-btn" onclick="_showCreateChannelForm()" data-i18n="ch-new-channel">+ チャンネル</button>
+        <button class="save-btn" onclick="_showCreateCategoryForm()" data-i18n="ch-new-folder">+ フォルダ</button>
       </div>
-      <div style="font-size:10px;color:var(--m);margin-bottom:8px">緑色のチャンネルは登録済みです。各チャンネルの下に、そこへ何が投稿されるかが書かれています。担当を変えるには「エージェント割り当て」を使ってください。各エージェントは1チャンネルにのみ投稿します。</div>
+      <div class="ch-hint">「登録済み」のチャンネルの下に、そこへ投稿されるものが出ます。エージェントは1つのチャンネルにだけ投稿します。</div>
 
       <!-- Assign agents. Lives above the tree rather than on every row: assignment is something
            you do occasionally, and a control on all 40 rows made the tree unreadable. -->
@@ -1077,8 +1077,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=112"></script>
-<script src="x-affiliate.js?v=112"></script>
-<script src="app.js?v=112"></script>
+<script src="../shared/ui.js?v=113"></script>
+<script src="x-affiliate.js?v=113"></script>
+<script src="app.js?v=113"></script>
 </body>
 </html>
