@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '113';
+const DASH_BUILD = '114';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -417,6 +417,7 @@ const _destOf = (pageId) =>
  */
 function navTo(target, asPage = false) {
   const returningFromX = window.HachiXAffiliate?.isActive();
+  { const sub = document.getElementById('dest-sub'); if (sub) sub.style.display = ''; }
   let dest, pageId;
   if (!asPage && DESTINATIONS[target]) {
     dest = target;
@@ -1029,7 +1030,7 @@ function _renderCostStrip() {
 
   const fb = document.getElementById('flash-global-btn');
   const fbS = document.getElementById('flash-global-btn-s');
-  [fb, fbS].forEach(b => { if (b) { b.textContent = `⚡ Flash: ${FORCE_FLASH ? 'on' : 'off'}`; b.className = 'flash-toggle ' + (FORCE_FLASH ? 'active' : 'inactive'); } });
+  [fb, fbS].forEach(b => { if (b) { b.textContent = FORCE_FLASH ? '節約モード：オン' : '節約モード：オフ'; b.className = 'flash-toggle ' + (FORCE_FLASH ? 'active' : 'inactive'); } });
 
   const cb = document.getElementById('cost-badge');
   if (cb) { cb.textContent = dayCost > 0 ? `$${dayCost.toFixed(3)}` : ''; cb.className = 'cost-badge' + (dayCost > 0.1 ? ' high' : ''); }
@@ -7037,15 +7038,15 @@ async function _loadModelSettings() {
 
     const rows = agents.map(a => {
       const pinned = !!a.overrideModel;
-      const opts = ['<option value="">既定 (auto) — ' + (catalogById[a.defaultModel]?.label || a.defaultModel || '?') + '</option>']
+      const opts = ['<option value="">自動（' + (catalogById[a.defaultModel]?.label || a.defaultModel || '?') + '）</option>']
         .concat(availableModels.map(m =>
           `<option value="${m.id}"${a.overrideModel === m.id ? ' selected' : ''}>${priceLabel(m)}</option>`));
       return `
         <div class="qs-card" style="align-items:center;gap:12px;padding:8px 12px">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12px;font-weight:600">${a.id}</div>
-            <div style="font-size:10px;color:var(--m)">
-              実行モデル: ${catalogById[a.effectiveModel]?.label || a.effectiveModel || '?'}${pinned ? ' · 📌 個別設定' : ''}
+            <div style="font-size:12px;font-weight:600">${esc(REGISTRY.find((r) => r.id === a.id)?.name || a.id)}</div>
+            <div style="font-size:11px;color:var(--m)">
+              使用中: ${catalogById[a.effectiveModel]?.label || a.effectiveModel || '?'}${pinned ? ' · 個別に指定' : ''}
             </div>
           </div>
           <select class="form-select" style="width:auto;font-size:11px"
@@ -7087,7 +7088,8 @@ async function _setAgentModel(agentId, model, selectEl) {
 function _renderSettingsOverview() {
   const el = document.getElementById('settings-summary');
   if (el) {
-    const INTENSITY_LABEL = { thorough: '慎重', balanced: '標準', fast: '高速' };
+    // Same keys and words as the 一般 select (conservative / balanced / aggressive).
+    const INTENSITY_LABEL = { conservative: '控えめ', balanced: '標準', aggressive: '積極的' };
     const lines = [
       ['記事の言語', PROJECT_LANG === 'JP' ? '日本語' : '英語',
         'ニュース・Wiki・要約の出力言語です。'],
@@ -7203,7 +7205,7 @@ function _renderMailAccountCard(a) {
     ? '<span style="color:#4caf50;font-size:10px;font-weight:700">● OAuth2</span>'
     : '<span style="color:var(--m);font-size:10px">● パスワード</span>';
   const activeBadge = a.active
-    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">使用中</span>'
     : '';
   return `<div style="padding:12px 14px;background:var(--bg2);border-radius:10px;border:1px solid ${a.active ? 'var(--acc)' : 'var(--div)'}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -7472,11 +7474,11 @@ function _renderProviderCard(p, activeProvider) {
     ? '<span style="color:#ff9800;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(255,152,0,.15);font-weight:600">Firestoreキー</span>'
     : '';
   const activeBadge = isActive
-    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">アクティブ</span>'
+    ? '<span style="background:var(--acc);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700">使用中</span>'
     : '';
   const modelsText = p.models.join(', ');
   const rotateLink = p.rotationUrl
-    ? `<a href="${p.rotationUrl}" target="_blank" rel="noopener" style="font-size:10px;color:var(--acc)">キーをローテーション →</a>`
+    ? `<a href="${p.rotationUrl}" target="_blank" rel="noopener" style="font-size:11px;color:var(--acc)">キーを入れ替える →</a>`
     : '';
   const secretText = p.secretName ? `<div style="font-size:10px;color:var(--m);margin-top:2px">Secret: ${esc(p.secretName)}</div>` : '';
   return `<div style="padding:14px;background:var(--bg2);border-radius:10px;border:1px solid ${isActive ? 'var(--acc)' : 'var(--div)'}">
@@ -7667,7 +7669,7 @@ async function _loadAccessUsers() {
   if (!listEl) return;
   try {
     const res  = await fetch(apiUrl('/api/dashboard/access'), { headers: _authHeaders() });
-    if (!res.ok) { listEl.innerHTML = `<div style="color:var(--error);font-size:11px">Failed to load</div>`; return; }
+    if (!res.ok) { listEl.innerHTML = `<div style="color:var(--error);font-size:11px">読み込めませんでした</div>`; return; }
     const { allowedUsers } = await res.json();
     const me = (_currentUser?.sub || '').toLowerCase();
     listEl.innerHTML = allowedUsers.map(u => `
@@ -8627,7 +8629,7 @@ async function _initDocsIfNeeded() {
     const data = await res.json();
     _renderDocsTree(data.sections || []);
   } catch (e) {
-    if (el) el.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Failed to load docs</div>`;
+    if (el) el.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">ドキュメントを読み込めませんでした</div>`;
   }
 }
 
@@ -8640,13 +8642,17 @@ async function loadDoc(btn, path, label) {
     const res = await fetch(apiUrl(`/api/docs/file?slug=${encodeURIComponent(path)}`), { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
-    reader.innerHTML = `<div class="docs-content"><h1>${esc(label)}</h1>${_markdownToHtml(data.content || '')}</div>`;
+    // Phone: list → document, one pane at a time, as in the wiki (the reader was an empty box under the list).
+    reader.innerHTML = `<button class="wiki-back" onclick="closeDocReading()">一覧にもどる</button>`
+      + `<div class="docs-content"><h1>${esc(label)}</h1>${_markdownToHtml(data.content || '')}</div>`;
+    document.querySelector('#page-docs .docs-layout')?.classList.add('reading');
+    window.scrollTo({ top: 0, behavior: 'instant' });
     if (window.mermaid) {
       const nodes = reader.querySelectorAll('.mermaid');
       if (nodes.length) mermaid.run({ nodes }).catch(() => {});
     }
   } catch (e) {
-    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">Failed to load: ${esc(e.message)}</div>`;
+    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">読み込めませんでした: ${esc(e.message)}</div>`;
   }
 }
 
@@ -8669,7 +8675,7 @@ async function _initWikiIfNeeded() {
     _wikiPages = data.pages || [];
     _renderWikiTree(_wikiPages);
   } catch (e) {
-    if (treeEl) treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Failed to load wiki</div>`;
+    if (treeEl) treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Wikiを読み込めませんでした</div>`;
   }
 }
 
@@ -8684,7 +8690,7 @@ async function _loadWikiFiles() {
     _wikiFiles = data.files || [];
     _renderWikiFiles(_wikiFiles);
   } catch (e) {
-    treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">Failed to load files: ${esc(e.message)}</div>`;
+    treeEl.innerHTML = `<div class="docs-welcome" style="font-size:11px;color:var(--error)">ファイルを読み込めませんでした: ${esc(e.message)}</div>`;
   }
 }
 
@@ -8862,6 +8868,11 @@ function openWikiReading() {
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
+function closeDocReading() {
+  document.querySelector('#page-docs .docs-layout')?.classList.remove('reading');
+  document.querySelectorAll('.docs-tree-item').forEach(b => b.classList.remove('active'));
+}
+
 function closeWikiPage() {
   document.querySelector('#page-wiki .docs-layout')?.classList.remove('reading');
   document.querySelectorAll('#wiki-tree .docs-tree-item').forEach(b => b.classList.remove('active'));
@@ -8888,7 +8899,7 @@ async function loadWikiFile(btn, path) {
       if (nodes.length) mermaid.run({ nodes }).catch(()=>{});
     }
   } catch (e) {
-    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">Failed to load: ${esc(e.message)}</div>`;
+    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">読み込めませんでした: ${esc(e.message)}</div>`;
   }
 }
 
@@ -8926,7 +8937,7 @@ async function loadWikiPage(btn, slug, title) {
       if (nodes.length) mermaid.run({ nodes }).catch(() => {});
     }
   } catch (e) {
-    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">Failed to load: ${esc(e.message)}</div>`;
+    reader.innerHTML = `<div class="docs-welcome" style="color:var(--error)">読み込めませんでした: ${esc(e.message)}</div>`;
   }
 }
 
@@ -10028,7 +10039,7 @@ function _syncContextSettingsUI() {
   if (label)  { label.textContent = _ctxSettings.maxContextMessages ?? 20; }
   if (btn)    {
     const on = !!_ctxSettings.contextCompression;
-    btn.textContent = on ? 'On' : 'Off';
+    btn.textContent = on ? 'オン' : 'オフ';
     btn.classList.toggle('active', on);
     btn.classList.toggle('inactive', !on);
   }

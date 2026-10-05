@@ -1490,6 +1490,10 @@ body:has(.mob-more-sheet.open) .page-area{
   #page-wiki .docs-layout > .docs-reader{display:none}
   #page-wiki .docs-layout.reading > .docs-tree-panel{display:none}
   #page-wiki .docs-layout.reading > .docs-reader{display:block}
+  #page-docs .docs-tree-panel{position:static;top:auto}
+  #page-docs .docs-layout > .docs-reader{display:none}
+  #page-docs .docs-layout.reading > .docs-tree-panel{display:none}
+  #page-docs .docs-layout.reading > .docs-reader{display:block}
 
   /* The index gets the screen rather than a 160px window into itself, and a title is allowed to
      wrap: truncating every Japanese headline to the same 「なぜAIは「文字」を数え…」 makes the

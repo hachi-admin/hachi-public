@@ -164,6 +164,8 @@
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', String(active));
     });
+    // The section tabs belong to the dashboard page that was open before; X BOT has none of its own.
+    const sub = document.getElementById('dest-sub'); if (sub) sub.style.display = active ? 'none' : '';
     if (active) document.querySelectorAll('.nav-pill[data-dest], .mob-tab[data-dest]').forEach(button => {
       button.classList.remove('active');
       button.setAttribute('aria-selected', 'false');

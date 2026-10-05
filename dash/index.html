@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=113">
-<link rel="stylesheet" href="dashboard.css?v=113">
+<link rel="stylesheet" href="../shared/neu.css?v=114">
+<link rel="stylesheet" href="dashboard.css?v=114">
 </head>
 <body>
 
@@ -50,7 +50,7 @@
         <div style="padding:6px 12px">
           <div style="font-size:10px;color:var(--m);margin-bottom:4px">記事の言語</div>
           <select class="form-select" id="lang-select-h" style="font-size:11px;width:100%" onchange="setProjectLanguage(this.value)">
-            <option value="JP">Japanese（日本語）</option>
+            <option value="JP">日本語</option>
             <option value="EN">English</option>
           </select>
         </div>
@@ -102,7 +102,7 @@
       <span class="cs-label" data-i18n="intensity">強度</span>
       <select class="intensity-select" id="intensity-select" onchange="setIntensity(this.value)">
         <option value="conservative">控えめ</option>
-        <option value="balanced" selected>バランス</option>
+        <option value="balanced" selected>標準</option>
         <option value="aggressive">積極的</option>
       </select>
       <span id="day-cost-label" class="cs-note"></span>
@@ -603,26 +603,26 @@
           <div class="section-hd" style="margin-top:0">一般設定</div>
           <div class="qs-card" style="flex-direction:column">
             <div class="qs-field">
-              <label class="form-label" for="intensity-select-s">強度</label>
+              <label class="form-label" for="intensity-select-s">動作の強度</label>
               <select class="form-select" id="intensity-select-s" onchange="setIntensity(this.value)">
                 <option value="conservative">控えめ</option>
-                <option value="balanced" selected>バランス</option>
+                <option value="balanced" selected>標準</option>
                 <option value="aggressive">積極的</option>
               </select>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">エージェントのレビュー閾値とタスク承認フローを制御します。</div>
+              <div style="font-size:11px;color:var(--m);margin-top:4px">レビューの厳しさと、承認をどれだけ求めるかが変わります。</div>
             </div>
             <div class="qs-field">
               <label class="form-label">記事の言語</label>
               <select class="form-select" id="lang-select-s" onchange="setProjectLanguage(this.value)">
-                <option value="JP">Japanese（日本語）</option>
+                <option value="JP">日本語</option>
                 <option value="EN">English</option>
               </select>
               <div style="font-size:10px;color:var(--m);margin-top:4px">AI生成記事（ニュース・Wiki・要約）のデフォルト出力言語。ユーザーごとに <code>/lang</code> で上書き可能。</div>
             </div>
             <div class="qs-field">
-              <label class="form-label">Flash 上書き</label>
-              <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">&#9889; Flash: off</button>
-              <div style="font-size:10px;color:var(--m);margin-top:4px">全エージェントを Flash モデルで動作させます。</div>
+              <label class="form-label">節約モード</label>
+              <button class="flash-toggle inactive" id="flash-global-btn-s" onclick="toggleFlashGlobal()">節約モード：オフ</button>
+              <div style="font-size:11px;color:var(--m);margin-top:4px">オンにすると全エージェントが安く速い Flash モデルで動きます。生成物の質は下がります。</div>
             </div>
           </div>
 
@@ -631,7 +631,7 @@
             <div class="qs-field">
               <label class="form-label">コンテキスト圧縮</label>
               <div style="display:flex;align-items:center;gap:10px">
-                <button class="flash-toggle inactive" id="ctx-compress-btn" onclick="toggleContextCompression()">Off</button>
+                <button class="flash-toggle inactive" id="ctx-compress-btn" onclick="toggleContextCompression()">オフ</button>
                 <select class="form-select" id="ctx-compress-model" style="width:auto;font-size:11px" onchange="saveContextSettings()">
                   <option value="flash">Flash (高速・低コスト)</option>
                   <option value="pro">Pro (高品質な要約)</option>
@@ -825,7 +825,9 @@
             </div>
           </div>
 
-          <div class="section-hd" style="margin-top:24px">OAuth2 セットアップ</div>
+          <!-- A one-time procedure, folded: it is not something to read every visit. -->
+          <details class="feed-fold" style="margin-top:24px">
+          <summary class="section-hd" style="display:flex">Gmail をつなぐ手順（初回だけ）</summary>
           <div style="font-size:11px;color:var(--m);line-height:1.7">
             <ol style="padding-left:16px;margin:6px 0">
               <li>Gmail で IMAP を有効化: 設定 → すべての設定 → メール転送と POP/IMAP → IMAP を有効にする</li>
@@ -833,8 +835,9 @@
               <li><code>node scripts/gmail-oauth-setup.js</code> をローカルで実行し、リフレッシュトークンを <code>hachi-sec-019</code> に保存</li>
               <li>Cloud Run に <code>--update-secrets HACHI_SEC_017=hachi-sec-017:latest ...</code> を追加して再デプロイ</li>
             </ol>
-            <div style="margin-top:6px">OAuth2 設定後はアカウントカードの OAuth バッジが <span style="color:#4caf50">●</span> に変わります。</div>
+            <div style="margin-top:6px">つながると、アカウントの OAuth の印が <span style="color:#4caf50">●</span> に変わります。</div>
           </div>
+          </details>
         </div>
 
         <!-- ADMIN -->
@@ -844,7 +847,7 @@
             <div style="font-size:11px;color:var(--m);margin-bottom:10px">このダッシュボードにログインできる GitHub アカウント。自分自身は削除できません。</div>
             <div id="access-user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
             <div style="display:flex;gap:8px;align-items:center">
-              <input class="form-input" id="access-add-input" type="text" placeholder="github-username" autocomplete="off" style="flex:1;font-size:12px"
+              <input class="form-input" id="access-add-input" type="text" placeholder="GitHub のユーザー名" autocomplete="off" style="flex:1;font-size:12px"
                 onkeydown="if(event.key==='Enter')addDashboardUser()">
               <button class="save-btn" onclick="addDashboardUser()">追加</button>
             </div>
@@ -1077,8 +1080,8 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=113"></script>
-<script src="x-affiliate.js?v=113"></script>
-<script src="app.js?v=113"></script>
+<script src="../shared/ui.js?v=114"></script>
+<script src="x-affiliate.js?v=114"></script>
+<script src="app.js?v=114"></script>
 </body>
 </html>
