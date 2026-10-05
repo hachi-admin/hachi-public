@@ -23,21 +23,20 @@
 
   // ── who sits where ──────────────────────────────────────────────────────────
   const FLOORS = [
-    { key: 'exec',  no: '8F', name: '社長室', wall: '#ece4d6', sign: '#8a6b3a', carpet: ['#cbb89a', '#c4b090'], deco: 'exec',
+    { key: 'exec',  no: '7F', name: '社長室', wall: '#ece4d6', sign: '#8a6b3a', carpet: ['#cbb89a', '#c4b090'], deco: 'exec',
       ids: ['orchestrator', 'advisor', 'visionary', 'efficiency-audit', 'channel-audit'] },
-    { key: 'intel', no: '7F', name: '情報部', wall: '#e3e9f2', sign: '#3b6fb6', carpet: ['#c3c9d6', '#bac1cf'], deco: 'intel',
+    { key: 'intel', no: '6F', name: '情報部', wall: '#e3e9f2', sign: '#3b6fb6', carpet: ['#c3c9d6', '#bac1cf'], deco: 'intel',
       ids: ['scout-agent', 'news-agent', 'mail-agent', 'log-monitor-agent', 'financial-agent', 'location-agent', 'chat-agent', 'summary-agent', 'choice-interpreter'] },
-    { key: 'lib',   no: '6F', name: '書庫', wall: '#e4f1e8', sign: '#2e7d5b', carpet: ['#c9d8cd', '#c0d0c4'], deco: 'lib',
+    { key: 'lib',   no: '5F', name: '書庫', wall: '#e4f1e8', sign: '#2e7d5b', carpet: ['#c9d8cd', '#c0d0c4'], deco: 'lib',
       ids: ['context-agent', 'knowledge-agent', 'lint-agent', 'db-audit-agent'] },
-    { key: 'dev',   no: '5F', name: '開発部', wall: '#e6e8ee', sign: '#e0702c', carpet: ['#b9bfcc', '#b1b8c6'], deco: 'dev',
+    { key: 'dev',   no: '4F', name: '開発部', wall: '#e6e8ee', sign: '#e0702c', carpet: ['#b9bfcc', '#b1b8c6'], deco: 'dev',
       ids: ['dev-agent', 'review-agent', 'jp-censor-agent', 'system-audit-agent', 'design-critic'] },
-    { key: 'plan',  no: '4F', name: '企画室', wall: '#f1e9f7', sign: '#7c4dbd', carpet: ['#d3cbe0', '#cbc2da'], deco: 'plan',
+    { key: 'plan',  no: '3F', name: '企画室', wall: '#f1e9f7', sign: '#7c4dbd', carpet: ['#d3cbe0', '#cbc2da'], deco: 'plan',
       ids: ['article-ideas', 'article-angle', 'topic-scout', 'note-study', 'craft-study', 'category-prompt', 'reader-questions'] },
-    { key: 'write', no: '3F', name: '執筆室', wall: '#f4ede4', sign: '#9a5b2e', carpet: ['#d6cbbb', '#cec2b1'], deco: 'write',
+    { key: 'write', no: '2F', name: '執筆室', wall: '#f4ede4', sign: '#9a5b2e', carpet: ['#d6cbbb', '#cec2b1'], deco: 'write',
       ids: ['article-writer', 'drafting-agent', 'structure-agent', 'editorial-agent', 'reflection-writer', 'answer-researcher', 'slide-agent'] },
-    { key: 'art',   no: '2F', name: '美術室', wall: '#f7ecee', sign: '#c2185b', carpet: ['#dccbd0', '#d4c1c7'], deco: 'art',
+    { key: 'art',   no: '1F', name: '美術室', wall: '#f7ecee', sign: '#c2185b', carpet: ['#dccbd0', '#d4c1c7'], deco: 'art',
       ids: ['hero-style', 'category-recipe', 'recipe-vision', 'image-scout', 'image-curator', 'design-agent', 'product-pick'] },
-    { key: 'cafe',  no: '1F', name: 'カフェ', wall: '#f3e6c9', sign: '#8a6b3a', carpet: ['#d9c49e', '#d0ba92'], deco: 'cafe', ids: [] },
   ];
   // Species and the one thing each holds — chosen from what the agent actually does.
   const CAST = {
@@ -140,7 +139,8 @@
       if (kind === 'bee') { p(5, 1, '#3a2f2a'); p(6, 2, '#3a2f2a'); p(10, 1, '#3a2f2a'); p(9, 2, '#3a2f2a'); }
       if (['fox', 'shiba', 'squirrel'].includes(kind)) r(6, 8, 4, 3, '#fff6ea');
       const eye = pose === 'blink' ? shade(C, .7) : '#111';
-      p(6, 6, eye); p(9, 6, eye);
+      if (pose === 'ko') for (const ex of [6, 9]) { p(ex - 1, 5, '#111'); p(ex + 1, 5, '#111'); p(ex, 6, '#111'); p(ex - 1, 7, '#111'); p(ex + 1, 7, '#111'); }
+      else { p(6, 6, eye); p(9, 6, eye); }
       if (['pigeon', 'bird', 'chick', 'owl'].includes(kind)) r(7, 8, 2, 1, '#f28c28');
       else if (kind !== 'elephant' && kind !== 'beaver') { p(7, 8, shade(C, .55)); p(8, 8, shade(C, .55)); }
       // shirt (bees wear their stripes)
@@ -149,6 +149,13 @@
       r(3, 12, 1, 4, C); r(12, 12, 1, 4, C);
       r(5, 17, 2, 2, kind === 'human' ? '#3a4150' : shade(C, .7)); r(9, 17, 2, 2, kind === 'human' ? '#3a4150' : shade(C, .7));
     }
+    // walking: legs alternate
+    if (pose === 'walk1' || pose === 'walk2') {
+      const leg = kind === 'human' || kind === 'robot' ? (kind === 'robot' ? '#8e99ad' : '#3a4150') : shade(C, .7);
+      r(4, 17, 8, 3, null);
+      if (pose === 'walk1') { r(4, 17, 2, 2, leg); r(9, 17, 2, 3, leg); } else { r(5, 17, 2, 3, leg); r(10, 17, 2, 2, leg); }
+    }
+    if (pose === 'mug') { r(11, 12, 3, 3, '#ffffff'); p(14, 13, '#ffffff'); p(12, 11, 'rgba(255,255,255,.5)'); }
     // the prop that says what they do (typing pose shifts the hand)
     const hy = pose === 'type' ? 14 : 13;
     const PROP = {
@@ -176,7 +183,7 @@
       frame: () => { r(10, hy - 2, 5, 4, '#c9a06a'); r(11, hy - 1, 3, 2, '#9fd8ff'); },
       bag: () => { r(10, hy - 1, 5, 4, '#e57373'); p(11, hy - 2, '#e57373'); p(13, hy - 2, '#e57373'); },
     };
-    if (prop && PROP[prop]) PROP[prop]();
+    if (prop && PROP[prop] && pose !== 'mug') PROP[prop]();
     // outline
     const o = g.map((row) => row.slice());
     for (let y = 0; y < 20; y++) for (let x = 0; x < 16; x++)
@@ -213,141 +220,226 @@
   };
   const carpet = (x, y, w, h, [a, b]) => { for (let yy = y; yy < y + h; yy += 14) for (let xx = x; xx < x + w; xx += 14) R(xx, yy, Math.min(14, x + w - xx), Math.min(14, y + h - yy), ((xx - x) / 14 + (yy - y) / 14) % 2 ? a : b); };
 
-  // ── layout ──────────────────────────────────────────────────────────────────
-  const WALL = 54, ROW = 104, PAD = 18;
-  let layout = null;   // { floors:[{...,y,h,seats:[{id,x,y}]}], height }
+
+  // ── the floor: few shared desks, a break corner, things to walk to ─────────
+  // Operator, 2026-10-05: one desk per agent made a boring office. Desks are shared (2–4, as many
+  // as are working), and everyone not working moves about — coffee, sofa, window, a chat.
+  const FH = 270, WALL = 54;
+  const DESKS = [{ x: 18, y: 104 }, { x: 108, y: 104 }, { x: 18, y: 196 }, { x: 108, y: 196 }];
+  const SPOTS = {                     // feet positions, relative to the floor's top
+    coffee: [{ x: 326, y: 104 }], water: [{ x: 358, y: 106 }], window: [{ x: 110, y: 74 }, { x: 172, y: 74 }],
+    sofa: [{ x: 252, y: 214 }, { x: 288, y: 214 }, { x: 324, y: 214 }], plant: [{ x: 360, y: 246 }],
+    table: [{ x: 228, y: 146 }, { x: 292, y: 146 }, { x: 260, y: 166 }], dept: [{ x: 238, y: 78 }],
+  };
+  const ACT = ['coffee', 'water', 'window', 'sofa', 'sofa', 'plant', 'table', 'dept', 'chat', 'chat', 'wander', 'wander'];
+  const SOLO = {
+    coffee: ['コーヒーおいしい{e}', 'もう一杯いく{e}'], water: ['水分補給{e}'], sofa: ['ひと休み{e}', 'ふかふか{e}'],
+    window: () => isNight() ? ['夜景きれい{e}', '星が見える{e}'] : ['いい天気{e}', '外は暑そう{e}'], plant: ['水やり{e}', '大きくなった{e}'],
+    table: ['資料まとめる{e}', '会議の準備{e}'], wander: ['ちょっと散歩{e}', 'のびー{e}'],
+    dept: { exec: ['今月の数字を見る{e}'], intel: ['ニュースを見張る{e}'], lib: ['本を並べ直す{e}'], dev: ['サーバー元気{e}'], plan: ['付箋を貼る{e}'], write: ['構成を考える{e}'], art: ['色を選ぶ{e}'] },
+  };
+  const PAIRS = [['コーヒー飲む{e}？', 'いただく{e}！'], ['今日の記事どう{e}？', 'いい感じ{e}'], ['週末なにする{e}？', '寝る{e}'],
+    ['あの件どうなった{e}？', 'もう少し{e}'], ['お昼なに食べた{e}？', 'カレー{e}'], ['最近忙しい{e}？', 'ぼちぼち{e}']];
+
+  let layout = null;                         // { floors:[{...,y}], height }
+  const ents = new Map();                    // id → entity (survives data refreshes)
   function buildLayout() {
-    const fs = people();
-    const idle = REGISTRY.map((r) => r.id).filter((id) => stateOf(id) === 'idle');
     let y = 0;
-    const floors = fs.map((f) => {
-      const n = f.key === 'cafe' ? Math.min(idle.length, 12) : f.ids.length;
-      const rows = f.key === 'cafe' ? Math.max(1, Math.ceil(n / 4)) : Math.max(1, Math.ceil(n / 3));
-      const h = WALL + PAD + rows * (f.key === 'cafe' ? 62 : ROW) + (f.key === 'cafe' ? 70 : 20);
-      const seats = (f.key === 'cafe' ? idle.slice(0, 12) : f.ids).map((id, i) => f.key === 'cafe'
-        ? { id, x: 30 + (i % 4) * 82, y: y + WALL + PAD + 14 + Math.floor(i / 4) * 62 }
-        : { id, x: 26 + (i % 3) * 112, y: y + WALL + PAD + 30 + Math.floor(i / 3) * ROW });
-      const out = { ...f, y, h, seats, idleMore: f.key === 'cafe' ? Math.max(0, idle.length - 12) : 0 };
-      y += h + 6;
-      return out;
-    });
+    const floors = people().map((f) => { const o = { ...f, y }; y += FH + 6; return o; });
+    for (const f of floors) {
+      const working = f.ids.filter((id) => stateOf(id) === 'work');
+      f.desks = DESKS.slice(0, Math.min(4, Math.max(2, working.length)));
+      if (f.key === 'exec') f.desks = [{ x: 140, y: 112, big: true }];
+      let di = 0;
+      f.ids.forEach((id, i) => {
+        const st = stateOf(id);
+        let e = ents.get(id);
+        if (!e || e.floor !== f.key) {
+          const p = randomPoint(f, null);
+          e = { id, floor: f.key, x: p.x, y: p.y, tx: p.x, ty: p.y, mode: 'stay', act: 'wander', until: 0, face: 1, said: '' };
+          ents.set(id, e);
+        }
+        e.f = f; e.st = st;
+        if (st === 'work' || (f.key === 'exec' && id === 'orchestrator' && st !== 'error' && st !== 'idle')) {
+          const d = f.desks[Math.min(di++, f.desks.length - 1)];
+          e.desk = d; e.mode = 'sit';
+        } else if (st === 'error') {
+          e.desk = null; e.mode = 'lie';
+          const n = f.ids.filter((x) => stateOf(x) === 'error').indexOf(id);
+          e.x = 214 + n * 50; e.y = 250; e.tx = e.x; e.ty = e.y;
+        } else {
+          e.desk = null; if (e.mode === 'sit' || e.mode === 'lie') { e.mode = 'stay'; e.until = 0; }
+        }
+      });
+    }
     return { floors, height: y };
+  }
+  // Anywhere on the open floor: not on a desk, not on the sofa, and not where someone already stands.
+  const onFurniture = (f, x, y) => (f.desks || []).some((d) => x > d.x - 6 && x < d.x + (d.big ? 116 : 84) && y > d.y - 4 && y < d.y + 34)
+    || (x > 226 && x < 348 && y > 206 && y < 242) || (x > 170 && x < 210 && y > 200);
+  const taken = (x, y, self) => [...ents.values()].some((o) => o !== self && o.f && Math.hypot(o.tx - x, o.ty - y) < 22);
+  function randomPoint(f, self) {
+    for (let k = 0; k < 30; k++) {
+      const x = 24 + Math.random() * 330, y = 92 + Math.random() * 156;
+      if (!onFurniture(f, x, y) && !taken(x, y, self)) return { x, y };
+    }
+    return { x: 40 + Math.random() * 300, y: 240 };
+  }
+
+  // ── behaviour ───────────────────────────────────────────────────────────────
+  const free = (e) => e.mode !== 'sit' && e.mode !== 'lie';
+  function choose(e, now) {
+    const f = e.f; let act = ACT[Math.floor(Math.random() * ACT.length)];
+    if (act === 'chat') {
+      const mate = [...ents.values()].find((o) => o !== e && o.f === f && free(o) && o.mode === 'stay' && !o.partner);
+      if (mate) {
+        e.partner = mate; mate.partner = e;
+        const mx = Math.min(330, Math.max(40, mate.x)), my = Math.min(246, Math.max(96, mate.y));
+        mate.tx = mx; mate.ty = my; mate.mode = 'walk'; mate.act = 'chat';
+        e.tx = mx + (mx > 200 ? -26 : 26); e.ty = my; e.mode = 'walk'; e.act = 'chat';
+        return;
+      }
+      act = 'wander';
+    }
+    const pool = (SPOTS[act] || []).filter((q) => !taken(q.x, q.y, e));
+    const p = pool.length ? pool[Math.floor(Math.random() * pool.length)] : randomPoint(f, e);
+    e.act = pool.length ? act : 'wander'; e.tx = p.x; e.ty = p.y; e.mode = 'walk';
+  }
+  function arrive(e, now) {
+    e.mode = 'stay'; e.until = now + 5000 + Math.random() * 7000;
+    const kind = (CAST[e.id] || ['human'])[0];
+    if (e.act === 'chat' && e.partner && e.partner.mode === 'stay' && e.partner.act === 'chat') {
+      const pair = PAIRS[Math.floor(Math.random() * PAIRS.length)];
+      e.face = e.partner.x > e.x ? 1 : -1; e.partner.face = -e.face;
+      speak(e, say(kind, pair[0]), now);
+      const pk = (CAST[e.partner.id] || ['human'])[0];
+      const other = e.partner; setTimeout(() => speak(other, say(pk, pair[1]), performance.now()), 1600);
+      e.partner.until = e.until;
+      return;
+    }
+    if (Math.random() < .35) {
+      let pool = e.act === 'dept' ? SOLO.dept[e.f.key] : SOLO[e.act];
+      if (typeof pool === 'function') pool = pool();
+      if (pool) speak(e, say(kind, pool[Math.floor(Math.random() * pool.length)]), now);
+    }
+  }
+  function step(now) {
+    for (const e of ents.values()) {
+      if (!e.f) continue;
+      if (e.mode === 'walk') {
+        const dx = e.tx - e.x, dy = e.ty - e.y, dist = Math.hypot(dx, dy);
+        if (dist < 2.5) { e.x = e.tx; e.y = e.ty; arrive(e, now); }
+        else { e.x += dx / dist * 2.5; e.y += dy / dist * 2.5; if (Math.abs(dx) > 1) e.face = dx > 0 ? 1 : -1; }
+      } else if (e.mode === 'stay' && now > e.until) {
+        if (e.partner) { const p = e.partner; e.partner = null; if (p.partner === e) p.partner = null; }
+        choose(e, now);
+      }
+    }
+  }
+
+  // ── speech ──────────────────────────────────────────────────────────────────
+  const bubbles = new Map();                 // id → { text, kind, until }
+  function speak(e, text, now, kind = 'talk') { bubbles.set(e.id, { text, kind, until: now + 3800 }); }
+  function workTalk(now, visible) {
+    const sitters = visible.filter((e) => (e.mode === 'sit' || e.mode === 'lie') && !bubbles.has(e.id));
+    if (!sitters.length || bubbles.size >= 3) return;
+    const e = sitters[Math.floor(Math.random() * sitters.length)];
+    const kind = (CAST[e.id] || ['human'])[0];
+    const d = DETAIL_DATA[e.id] || {};
+    const title = d.task && typeof taskTitle === 'function' ? short(taskTitle(d.task)) : 'お仕事';
+    if (e.mode === 'lie') return speak(e, say(kind, ['ぐるぐる{e}…', 'もうだめ{e}…', '助けて{e}…'][Math.floor(Math.random() * 3)]), now, 'error');
+    if (e.id === 'financial-agent') {
+      const cost = (COST_BY_DAY || {})[new Date().toISOString().slice(0, 10)] || 0;
+      return speak(e, say(kind, `今日は$${cost.toFixed(2)}{e}`), now);
+    }
+    speak(e, say(kind, ['{t}、作業中{e}', 'あと少し{e}', '集中してる{e}'][Math.floor(Math.random() * 3)].replace('{t}', title)), now);
   }
 
   // ── painting ────────────────────────────────────────────────────────────────
-  const bubbles = new Map();     // id → { text, kind, until }
   let tick = 0;
-  function paintFloor(f, t) {
-    const night = isNight();
-    const y = f.y;
-    // wall
+  function paintRoom(f, t) {
+    const night = isNight(), y = f.y;
     R(0, y, W, WALL, f.wall); R(0, y, W, 4, '#9aa3b5'); R(0, y + WALL - 6, W, 6, '#aeb5c3');
-    for (const lx of [40, 160, 280]) { R(lx, y + 4, 70, 3, night ? '#fff3c4' : '#fffbe6'); }
+    for (const lx of [40, 160, 280]) R(lx, y + 4, 70, 3, night ? '#fff3c4' : '#fffbe6');
     R(8, y + 12, 64, 16, f.sign); TXT(`${f.no} ${f.name}`, 40, y + 20, '#fff', 9, 800);
     blinds(84, y + 12, night, t); blinds(146, y + 12, night, t);
-    if (f.deco === 'intel') { R(210, y + 10, 64, 32, '#3a4150'); R(212, y + 12, 60, 28, '#16202e'); for (let k = 0; k < 4; k++) R(216, y + 16 + k * 6, 20 + ((k * 13 + t) % 30), 2, k % 2 ? '#4be37a' : '#5ab0ff'); }
-    else if (f.deco === 'lib') { shelf(210, y + 6, 44); shelf(258, y + 6, 44); }
-    else if (f.deco === 'dev') { rack(210, y + 6, t); rack(236, y + 6, t + 1); rack(262, y + 6, t + 2); }
-    else if (f.deco === 'plan') { R(210, y + 8, 70, 34, '#c9a77c'); for (let k = 0; k < 9; k++) R(214 + (k % 5) * 13, y + 12 + Math.floor(k / 5) * 14, 10, 10, ['#ffe066', '#ff9cc2', '#8fd3ff', '#b5f5a0'][k % 4]); }
-    else if (f.deco === 'write') whiteboard(210, y + 10, 70, ['#2b3140', '#2b3140', '#e57373']);
-    else if (f.deco === 'art') { R(214, y + 8, 30, 36, '#8a5a36'); R(217, y + 11, 24, 18, '#fbfbf8'); R(220, y + 14, 8, 8, '#5ab0ff'); R(230, y + 18, 8, 8, '#f2c94c'); R(252, y + 12, 26, 26, '#c9a06a'); R(255, y + 15, 20, 20, '#9fd8ff'); }
-    else if (f.deco === 'exec') { shelf(210, y + 6, 44); R(260, y + 10, 40, 26, '#c9a06a'); R(264, y + 14, 32, 18, '#fff7c9'); }
-    else if (f.deco === 'cafe') { R(210, y + 14, 90, 30, '#6b4a33'); R(214, y + 18, 20, 14, '#3a2f2a'); R(238, y + 18, 20, 14, '#3a2f2a'); TXT('MENU', 288, y + 29, '#fff3c4', 7, 800); }
-    clock(310, y + 14); calendar(332, y + 12);
+    const dx = 206, dy = y + 6;
+    if (f.deco === 'intel') { R(dx, dy + 4, 64, 32, '#3a4150'); R(dx + 2, dy + 6, 60, 28, '#16202e'); for (let k = 0; k < 4; k++) R(dx + 6, dy + 10 + k * 6, 20 + ((k * 13 + t) % 30), 2, k % 2 ? '#4be37a' : '#5ab0ff'); }
+    else if (f.deco === 'lib') { shelf(dx, dy, 44); shelf(dx + 48, dy, 44); }
+    else if (f.deco === 'dev') { rack(dx, dy, t); rack(dx + 26, dy, t + 1); rack(dx + 52, dy, t + 2); }
+    else if (f.deco === 'plan') { R(dx, dy + 2, 70, 34, '#c9a77c'); for (let k = 0; k < 9; k++) R(dx + 4 + (k % 5) * 13, dy + 6 + Math.floor(k / 5) * 14, 10, 10, ['#ffe066', '#ff9cc2', '#8fd3ff', '#b5f5a0'][k % 4]); }
+    else if (f.deco === 'write') whiteboard(dx, dy + 4, 70, ['#2b3140', '#2b3140', '#e57373']);
+    else if (f.deco === 'art') { R(dx + 4, dy + 2, 30, 36, '#8a5a36'); R(dx + 7, dy + 5, 24, 18, '#fbfbf8'); R(dx + 10, dy + 8, 8, 8, '#5ab0ff'); R(dx + 20, dy + 12, 8, 8, '#f2c94c'); R(dx + 42, dy + 6, 26, 26, '#c9a06a'); R(dx + 45, dy + 9, 20, 20, '#9fd8ff'); }
+    else if (f.deco === 'exec') { shelf(dx, dy, 44); R(dx + 50, dy + 4, 40, 26, '#c9a06a'); R(dx + 54, dy + 8, 32, 18, '#fff7c9'); }
+    clock(300, y + 14); calendar(320, y + 12);
     R(358, y + 10, 24, 36, '#8b6b4a'); R(360, y + 12, 20, 34, '#a5825b'); TXT('EV', 370, y + 26, '#fff', 7, 800);
-    // floor
-    carpet(0, y + WALL, W, f.h - WALL, f.carpet);
-    if (f.key === 'exec') { R(60, y + WALL + 8, 270, f.h - WALL - 16, '#b5463c'); R(64, y + WALL + 12, 262, f.h - WALL - 24, '#c8584c'); }
-    if (f.key === 'cafe') { for (let k = 0; k < 3; k++) { const tx = 40 + k * 120; R(tx, y + f.h - 46, 50, 20, '#8a5a36'); R(tx + 4, y + f.h - 26, 4, 10, '#6b4428'); R(tx + 42, y + f.h - 26, 4, 10, '#6b4428'); R(tx + 18, y + f.h - 50, 6, 6, '#fff'); if ((t + k) % 6 < 3) R(tx + 20, y + f.h - 58, 2, 6, 'rgba(255,255,255,.6)'); } }
-    if (f.key !== 'cafe' && f.key !== 'exec') { cabinet(4, y + WALL + 8); plant(370, y + f.h - 40); }
-    if (f.key === 'intel') copier(350, y + WALL + 8);
-    if (f.key === 'exec') { water(8, y + WALL + 10); plant(368, y + f.h - 40); }
-    // seats
-    for (const s of f.seats) paintSeat(f, s, t);
-    if (f.idleMore) TXT(`ほか ${f.idleMore} 人`, W - 40, y + f.h - 12, '#6b7280', 9, 700);
+    carpet(0, y + WALL, W, FH - WALL, f.carpet);
+    if (f.key === 'exec') { R(70, y + WALL + 10, 250, FH - WALL - 24, '#b5463c'); R(74, y + WALL + 14, 242, FH - WALL - 32, '#c8584c'); }
+    // break corner: coffee, water, sofa, plant, a round table
+    R(314, y + 60, 22, 30, '#55606f'); R(318, y + 64, 14, 6, '#2b3140'); R(320, y + 65, 4, 2, '#ff6b6b'); R(320, y + 76, 8, 7, '#fff');
+    if (t % 6 < 3) R(323, y + 70, 2, 5, 'rgba(255,255,255,.6)');
+    water(346, y + 58);
+    R(236, y + 214, 104, 10, '#c0705a'); R(236, y + 224, 104, 14, '#d9876f'); R(232, y + 218, 6, 20, '#b0604c'); R(338, y + 218, 6, 20, '#b0604c');
+    g.fillStyle = '#a9825a'; g.beginPath(); g.ellipse(260, y + 152, 26, 12, 0, 0, Math.PI * 2); g.fill(); R(258, y + 158, 4, 10, '#7d5c3b');
+    R(252, y + 146, 5, 6, '#e85d5d'); R(264, y + 148, 10, 6, '#ffffff');
+    plant(364, y + 222); plant(196, y + 58);
+    if (f.key !== 'exec') cabinet(184, y + 214);
+    // desks (a sitter is drawn between chair and desk top)
+    for (const d of f.desks) {
+      const dw = d.big ? 110 : 78;
+      R(d.x + 22, y + d.y - 22, 28, 22, d.big ? '#5b3a2a' : '#4a5875');
+      const sitter = [...ents.values()].find((e) => e.desk === d && e.f === f);
+      if (sitter) {
+        const typing = sitter.st === 'work' && t % 2 === 0;
+        g.drawImage(sprite(sitter.id, typing ? 'type' : 'sit'), d.x + 20, y + d.y - 30 + (typing ? 1 : 0), 32, 40);
+      }
+      R(d.x, y + d.y, dw, 22, d.big ? '#8a5a36' : '#d5d9e2'); R(d.x, y + d.y + 22, dw, 4, d.big ? '#6b4428' : '#aeb5c3');
+      const on = sitter && sitter.st === 'work';
+      R(d.x + dw - 30, y + d.y - 8, 26, 16, '#3a4150'); R(d.x + dw - 28, y + d.y - 6, 22, 12, on ? (t % 4 < 2 ? '#5ab0ff' : '#6cc0ff') : '#4a5363');
+      if (on) for (let k = 0; k < 3; k++) R(d.x + dw - 26, y + d.y - 4 + k * 3, 6 + ((t + k * 5) % 12), 1, 'rgba(255,255,255,.75)');
+      R(d.x + 8, y + d.y + 8, 18, 5, '#f0f2f6'); R(d.x + 32, y + d.y + 6, 5, 6, '#e85d5d');
+      if (sitter) nameTag(sitter, d.x + 36, y + d.y + 38);
+    }
   }
-  function paintSeat(f, s, t) {
-    const st = stateOf(s.id);
-    const reg = REGISTRY.find((r) => r.id === s.id);
-    const name = reg?.name || s.id;
-    const [kind] = CAST[s.id] || ['human'];
-    if (f.key === 'cafe') {            // standing around the café
-      const bob = (t + s.x) % 8 < 4 ? 0 : 1;
-      g.drawImage(sprite(s.id, (t + s.x) % 23 === 0 ? 'blink' : 'stand'), s.x, s.y + bob, 32, 40);
-      TXT(name, s.x + 16, s.y + 48, '#4b5563', 8, 700);
+  function nameTag(e, cx, cy) {
+    const name = REGISTRY.find((r) => r.id === e.id)?.name || e.id;
+    g.font = '700 8px "Noto Sans JP",sans-serif'; const tw = g.measureText(name).width;
+    R(cx - tw / 2 - 3, cy - 6, tw + 6, 11, e.st === 'error' ? '#ffe1e1' : 'rgba(255,255,255,.85)');
+    TXT(name, cx, cy, e.st === 'error' ? '#e23b3b' : '#2b3140', 8, 700);
+  }
+  function paintWalker(e, t) {
+    const y0 = e.f.y;
+    g.fillStyle = 'rgba(0,0,0,.16)'; g.beginPath(); g.ellipse(e.x, y0 + e.y, 11, 4, 0, 0, Math.PI * 2); g.fill();
+    if (e.mode === 'lie') {
+      // knocked out on the floor: lying sideways, ×× eyes, stars going round
+      g.save(); g.translate(e.x, y0 + e.y - 8); g.rotate(-Math.PI / 2);
+      g.drawImage(sprite(e.id, 'ko'), -16, -20, 32, 40); g.restore();
+      for (let k = 0; k < 3; k++) { const a = t / 3 + k * 2.1; R(e.x - 22 + Math.cos(a) * 9, y0 + e.y - 22 + Math.sin(a) * 3, 3, 3, '#ffd400'); }
+      nameTag(e, e.x, y0 + e.y + 10);
       return;
     }
-    const x = s.x, y = s.y;
-    // desk with partition behind it, chair, monitor
-    R(x - 6, y - 30, 100, 4, '#9fb2cc');                         // partition
-    R(x + 12, y - 22, 26, 22, '#4a5875');                        // chair back
-    if (st !== 'idle') {
-      const typing = st === 'work' && (t % 2 === 0);
-      g.drawImage(sprite(s.id, typing ? 'type' : (t + x) % 29 === 0 ? 'blink' : 'sit'), x + 9, y - 28 + (typing ? 1 : 0), 32, 40);
-    } else {
-      R(x + 14, y - 14, 22, 10, '#f1e3c4'); TXT('カフェ', x + 25, y - 9, '#8a6b3a', 7, 700);
-    }
-    R(x - 4, y + 4, 96, 22, '#d5d9e2'); R(x - 4, y + 26, 96, 4, '#aeb5c3');             // desk top + edge
-    const screen = st === 'error' ? '#ff6b6b' : st === 'work' ? ((t % 4 < 2) ? '#5ab0ff' : '#6cc0ff') : st === 'done' ? '#7fd8a8' : '#4a5363';
-    R(x + 52, y - 6, 26, 16, '#3a4150'); R(x + 54, y - 4, 22, 12, screen); R(x + 63, y + 10, 4, 3, '#3a4150');
-    if (st === 'work') for (let k = 0; k < 3; k++) R(x + 56, y - 2 + k * 3, 6 + ((t + k * 5) % 12), 1, 'rgba(255,255,255,.75)');
-    R(x + 4, y + 12, 18, 5, '#f0f2f6'); R(x + 26, y + 10, 5, 6, '#e85d5d');               // keyboard, mug
-    if (kind !== 'robot' && (s.x + s.y) % 3 === 0) R(x + 80, y + 8, 6, 8, '#52b866');       // a little desk plant
-    // name tag with state stripe
-    const col = { work: '#2f80ed', done: '#1f9d55', error: '#e23b3b', idle: '#9aa3b5' }[st];
-    g.font = '700 8px "Noto Sans JP",sans-serif'; const tw = g.measureText(name).width;
-    R(x + 44 - tw / 2 - 4, y + 34, tw + 8, 12, 'rgba(255,255,255,.9)'); R(x + 44 - tw / 2 - 4, y + 45, tw + 8, 2, col);
-    TXT(name, x + 44, y + 40, '#2b3140', 8, 700);
-    // status mark
-    if (!bubbles.has(s.id)) {
-      if (st === 'error') mark(x + 24, y - 32, '！', '#ffe1e1', '#e23b3b');
-      else if (st === 'done') mark(x + 24, y - 32, '✓', '#ddf7e7', '#1f9d55');
-      else if (st === 'work') mark(x + 24, y - 32, '…', '#ffffff', '#2b3140');
-    }
+    const pose = e.mode === 'walk' ? (t % 2 ? 'walk1' : 'walk2') : e.act === 'coffee' ? 'mug' : ((t + e.x | 0) % 31 === 0 ? 'blink' : 'stand');
+    const bob = e.mode === 'walk' ? (t % 2) : 0;
+    g.save();
+    if (e.face < 0) { g.translate(e.x * 2, 0); g.scale(-1, 1); }
+    g.drawImage(sprite(e.id, pose), e.x - 16, y0 + e.y - 40 - bob, 32, 40);
+    g.restore();
+    nameTag(e, e.x, y0 + e.y + 8);
   }
-  function mark(x, y, s, bg, fg) { R(x - 8, y - 12, 16, 13, '#2b3140'); R(x - 7, y - 11, 14, 11, bg); R(x - 2, y + 1, 4, 2, '#2b3140'); TXT(s, x, y - 5, fg, 9, 800); }
-  function paintBubbles() {
-    const now = performance.now();
+  function paintBubbles(now) {
     for (const [id, b] of bubbles) {
       if (b.until < now) { bubbles.delete(id); continue; }
-      const all = layout.floors.flatMap((f) => f.seats.map((s) => ({ ...s, cafe: f.key === 'cafe' })));
-      const seat = all.find((s) => s.id === id && s.cafe === (stateOf(id) === 'idle')) || all.find((s) => s.id === id);
-      if (!seat) continue;
-      const cx = seat.cafe ? seat.x + 16 : seat.x + 24, cy = seat.cafe ? seat.y - 4 : seat.y - 32;
+      const e = ents.get(id); if (!e?.f) continue;
+      let cx, cy;
+      if (e.mode === 'sit' && e.desk) { cx = e.desk.x + 36; cy = e.f.y + e.desk.y - 32; }
+      else if (e.mode === 'lie') { cx = e.x; cy = e.f.y + e.y - 22; }
+      else { cx = e.x; cy = e.f.y + e.y - 42; }
       g.font = '700 9px "Noto Sans JP",sans-serif'; const w = g.measureText(b.text).width + 12;
       const bx = Math.min(Math.max(cx, w / 2 + 4), W - w / 2 - 4);
-      const [bg, fg] = { error: ['#ffe1e1', '#e23b3b'], done: ['#ddf7e7', '#1f9d55'] }[b.kind] || ['#ffffff', '#2b3140'];
+      const [bg, fg] = b.kind === 'error' ? ['#ffe1e1', '#e23b3b'] : ['#ffffff', '#2b3140'];
       R(bx - w / 2, cy - 15, w, 15, '#2b3140'); R(bx - w / 2 + 1, cy - 14, w - 2, 13, bg); R(cx - 2, cy, 4, 3, '#2b3140');
       TXT(b.text, bx, cy - 7, fg, 9, 700);
     }
-  }
-  // Who speaks next: someone in view, at most two bubbles at once, never the same line twice in a row.
-  let lastLine = '';
-  function nextBubble(visible) {
-    // An idle agent is in the café, so its empty desk does not speak.
-    visible = visible.filter((s) => !(s.desk && stateOf(s.id) === 'idle'));
-    if (bubbles.size >= 2 || !visible.length) return;
-    const s = visible[Math.floor(Math.random() * visible.length)];
-    if (bubbles.has(s.id)) return;
-    const [kind] = CAST[s.id] || ['human'];
-    let st = stateOf(s.id);
-    const night = isNight() && jstHour() < 6;
-    const d = DETAIL_DATA[s.id] || {};
-    let base;
-    if (s.id === 'financial-agent' && st !== 'error') {
-      const cost = (typeof COST_BY_DAY === 'object' && COST_BY_DAY) ? (COST_BY_DAY[new Date().toISOString().slice(0, 10)] || 0) : 0;
-      base = cost > 1 ? `今日は$${cost.toFixed(2)}、使いすぎ{e}…` : `今日は$${cost.toFixed(2)}、セーフだ{e}`;
-    } else if (s.id === 'orchestrator' && st !== 'error') {
-      base = '次の仕事を配った{e}！';
-    } else {
-      const pool = st === 'idle' && night ? LINES.night : LINES[st];
-      base = pool[Math.floor(Math.random() * pool.length)];
-    }
-    const title = d.task && typeof taskTitle === 'function' ? short(taskTitle(d.task)) : '';
-    let text = say(kind, base.replace('{t}', title || 'お仕事'));
-    if (text === lastLine) return;
-    lastLine = text;
-    bubbles.set(s.id, { text, kind: st === 'error' ? 'error' : st === 'done' ? 'done' : 'talk', until: performance.now() + 4000 });
   }
 
   // ── mount, loop, input ──────────────────────────────────────────────────────
@@ -384,74 +476,76 @@
     g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = false;
     const n = { work: 0, done: 0, error: 0, idle: 0 }; REGISTRY.forEach((r) => n[stateOf(r.id)]++);
     root.querySelector('.office-counts').innerHTML =
-      `<span class="oc work">作業中 ${n.work}</span><span class="oc done">完了 ${n.done}</span><span class="oc error">要対応 ${n.error}</span><span class="oc idle">待機 ${n.idle}</span>`;
+      `<span class="oc work">作業中 ${n.work}</span><span class="oc error">要対応 ${n.error}</span><span class="oc idle">休憩中 ${n.idle + n.done}</span>`;
     root.querySelector('.office-time').textContent = new Date().toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
     const chips = root.querySelector('.office-chips');
     chips.innerHTML = layout.floors.map((f, i) => {
-      const bad = f.seats.some((s) => stateOf(s.id) === 'error');
+      const bad = f.ids.some((id) => stateOf(id) === 'error');
       return `<button type="button" data-i="${i}" class="office-chip${bad ? ' bad' : ''}">${f.name}</button>`;
     }).join('');
     chips.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => goFloor(+b.dataset.i)));
-    // Open where something is happening: a failure first, else someone working, else the top.
-    const err = layout.floors.findIndex((f) => f.seats.some((s) => stateOf(s.id) === 'error'));
-    const work = layout.floors.findIndex((f) => f.seats.some((s) => stateOf(s.id) === 'work'));
+    const err = layout.floors.findIndex((f) => f.ids.some((id) => stateOf(id) === 'error'));
+    const work = layout.floors.findIndex((f) => f.ids.some((id) => stateOf(id) === 'work'));
     if (pendingFloor == null && !render.done) pendingFloor = err >= 0 ? err : work >= 0 ? work : 0;
     render.done = true;
     requestAnimationFrame(() => {
       if (pendingFloor != null && box.clientHeight) { goFloor(pendingFloor, false); pendingFloor = null; }
-      draw(); loop();
+      draw(performance.now()); loop();
     });
   }
   function goFloor(i, smooth = true) {
     const f = layout.floors[i]; if (!f) return;
-    const k = box.clientWidth / W;
-    box.scrollTo({ top: f.y * k, behavior: smooth ? 'smooth' : 'instant' });
+    box.scrollTo({ top: f.y * (box.clientWidth / W), behavior: smooth ? 'smooth' : 'instant' });
   }
   function syncChips() {
     if (!layout) return;
-    const k = box.clientWidth / W, top = box.scrollTop / k + 40;
-    const i = layout.floors.findIndex((f) => top >= f.y && top < f.y + f.h + 6);
+    const top = box.scrollTop / (box.clientWidth / W) + 40;
+    const i = layout.floors.findIndex((f) => top >= f.y && top < f.y + FH + 6);
     root.querySelectorAll('.office-chip').forEach((b) => b.classList.toggle('on', +b.dataset.i === i));
   }
   function visibleFloors() {
     const k = box.clientWidth / W, top = box.scrollTop / k, bottom = top + box.clientHeight / k;
-    return layout.floors.filter((f) => f.y + f.h > top && f.y < bottom);
+    return layout.floors.filter((f) => f.y + FH > top && f.y < bottom);
   }
-  function draw() {
+  function draw(now) {
     if (!layout) return;
-    g.clearRect(0, 0, W, layout.height);
     const vis = visibleFloors();
-    for (const f of layout.floors) if (vis.includes(f)) paintFloor(f, tick);
-    paintBubbles();
+    for (const f of vis) {
+      g.clearRect(0, f.y, W, FH + 6);
+      paintRoom(f, tick);
+      [...ents.values()].filter((e) => e.f === f && e.mode !== 'sit').sort((a, b) => a.y - b.y).forEach((e) => paintWalker(e, tick));
+    }
+    paintBubbles(now);
   }
   function loop() {
     cancelAnimationFrame(raf);
-    const step = (ts) => {
-      const onPage = root && root.offsetParent !== null;
-      if (!onPage || !visibleBox || document.hidden) { raf = 0; return; }
-      if (ts - last > 160) {           // ~6fps is plenty for pixel art and kind to the battery
+    const frame = (ts) => {
+      if (!root || root.offsetParent === null || !visibleBox || document.hidden) { raf = 0; return; }
+      if (ts - last > 110) {           // ~9fps: smooth enough for pixel walking, light on the battery
         last = ts; tick++;
-        if (tick % 12 === 0) nextBubble(visibleFloors().flatMap((f) => f.seats.map((s) => ({ ...s, desk: f.key !== 'cafe' }))));
-        draw(); syncChips();
+        step(ts);
+        if (tick % 25 === 0) { const vis = visibleFloors(); workTalk(ts, [...ents.values()].filter((e) => vis.includes(e.f))); }
+        draw(ts); if (tick % 5 === 0) syncChips();
       }
-      raf = requestAnimationFrame(step);
+      raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(step);
+    raf = requestAnimationFrame(frame);
   }
-  function onTap(e) {
+  function onTap(ev) {
     const rect = cv.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (W / rect.width), y = (e.clientY - rect.top) * (W / rect.width);
-    for (const f of layout.floors) for (const s of f.seats) {
-      const hit = f.key === 'cafe' ? (x >= s.x && x <= s.x + 32 && y >= s.y && y <= s.y + 48)
-        : (x >= s.x - 4 && x <= s.x + 92 && y >= s.y - 32 && y <= s.y + 48);
-      if (hit) {
-        const [kind] = CAST[s.id] || ['human'];
-        bubbles.set(s.id, { text: say(kind, 'はい、なんでしょう{e}？'), kind: 'talk', until: performance.now() + 1500 });
-        draw();
-        if (typeof openDetail === 'function') setTimeout(() => openDetail(s.id), 250);
-        return;
-      }
+    const x = (ev.clientX - rect.left) * (W / rect.width), y = (ev.clientY - rect.top) * (W / rect.width);
+    let best = null, bd = 1e9;
+    for (const e of ents.values()) {
+      if (!e.f) continue;
+      const cx = e.mode === 'sit' && e.desk ? e.desk.x + 36 : e.x;
+      const cy = e.mode === 'sit' && e.desk ? e.f.y + e.desk.y - 10 : e.f.y + e.y - (e.mode === 'lie' ? 8 : 20);
+      const dd = Math.hypot(cx - x, cy - y);
+      if (dd < 30 && dd < bd) { bd = dd; best = e; }
     }
+    if (!best) return;
+    speak(best, say((CAST[best.id] || ['human'])[0], best.mode === 'lie' ? 'う、うう…{e}' : 'はい、なんでしょう{e}？'), performance.now());
+    draw(performance.now());
+    if (typeof openDetail === 'function') setTimeout(() => openDetail(best.id), 300);
   }
   window.HachiOffice = { render };
 })();
