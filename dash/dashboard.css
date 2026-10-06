@@ -3573,3 +3573,12 @@ body.sheet-open{overflow:hidden}
 .cal-ev-hd b{display:inline}
 .cal-note,.cal-emo{display:inline-block;vertical-align:-2px;margin-right:3px}
 .cal-mday-list .cal-note{vertical-align:-3px}
+/* The date strip is driven by the columns' own scroll position (no script, no lag). */
+.cal-wk-v{timeline-scope:--wkx}
+.cal-wk-h{scroll-timeline:--wkx x}
+@keyframes cal-wk-follow{from{transform:translateX(0)}to{transform:translateX(calc(var(--cw) * (3 - var(--n))))}}
+@supports (animation-timeline: --wkx){
+  .cal-wk-hds .cal-wk-row{animation:cal-wk-follow linear both;animation-timeline:--wkx;will-change:transform}
+}
+.cal-wk-hds .cal-wk-row{will-change:transform}
+.cal-note{border-radius:3px;box-shadow:0 0 0 .5px color-mix(in srgb,var(--m) 35%,transparent);background:#fff}

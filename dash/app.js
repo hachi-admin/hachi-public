@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '133';
+const DASH_BUILD = '134';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1720,7 +1720,8 @@ const _CAL_ICON = {
   infer_location: '📍', visionary_review: '🔭', channel_audit: '🗂️', news_digest: '📰', scout: '🔍', fact_check_news: '✅',
   deep_context: '📚', import_scout: '🌏', wiki_lint: '🧹', log_monitor: '🚨',
 };
-const _CAL_NOTE_MARK = '<svg class="cal-note" viewBox="0 0 16 16" aria-label="note"><rect width="16" height="16" rx="4" fill="#111"/><path d="M4.6 11.6V5.2h1.3l.1.8c.5-.6 1.2-1 2.1-1 1.4 0 2.3.9 2.3 2.5v4.1H9V7.8c0-.9-.4-1.4-1.2-1.4-.8 0-1.3.6-1.3 1.5v3.7z" fill="#fff"/></svg>';
+// note's own app icon (assets.st-note.com, unaltered), used to mark what becomes a note article.
+const _CAL_NOTE_MARK = '<img class="cal-note" alt="note" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACTElEQVR42u2YsWoyQRSFz53ZRbAJGBRMFRv7tMkrpEyRN/ERxEryHOksA2K9nb0IVhGs06y7M+evZtD8KyRjom6YC5dlcS/L5865c+4ISaLGoVDziAARIAJEgAgQAWodSUgRSVhrg14oIj5/IuRcXshaC5LQWp/uC5CEiGCz2WC1WkFEUJYljDEoyxJFUcAYA2MMrLUwxoAklFLQWqPRaKDVauH29hbX19ceRKkjVjK/EUVRkCTH4zEBBGe73ebj4yPf3t5IksYYhkYQwMvLC0WEaZpSRKiU2kuttb+6dL99hhmNRkdBqCO+nE9rrRe1E2eVSHefSZIESikMBgNMp1MopWCMOW8bdeu+Kq21vvuQRFmWUEpBRDAcDg9C/0obrWqNJNHv99HpdCAi0FpDRGCtxXa7xWazwXK53KtzIs+yDOv1Gt1u9/uiDtUAACZJQgDUWhMAJ5PJwdo8z/n6+spms0kRoYgQgNfFbDYjSZZleRoNVEVRFLDW+qtLkkjTFE9PT3h+ft7r/27ZrNdrr62zaUBEoJT6L3f3i/v7+8raj4+Py/ZCbjO7urqq/KfzPK+Hmfvcadx9qKM5OcChDlMbgNrPA4dseKg9PznAoaUS6kjjEooAfwUgdEZOQl+mtYbWutLXfLV2d4cOFXEQQJ7n3uc7W+zM3FcMX1VtyDDz7VMJN9QvFgvM53Norf2gYq3Fw8MDbm5u/HNVte/v78iyzM8Qrvbu7g69Xq+y9iKPVS7yYMtZ59+q/ZNfIO4DESACRIAIEAEiwDnjH/GR2N7OVcY5AAAAAElFTkSuQmCC">';
 function _calIcon(e) {
   if (e.k === 'fail') return '<span class="cal-emo">⚠️</span>';
   if (e.k === 'cont') return _CAL_NOTE_MARK;
@@ -1780,9 +1781,15 @@ function _calWeekWire() {
   const n = CAL.days.length;
   const cells = sc.querySelectorAll('.cal-wk-cell');
   document.querySelectorAll('.cal-wk-times .cal-wk-t').forEach((t, r) => { t.style.height = `${cells[r * n]?.offsetHeight || 0}px`; });
-  sc.addEventListener('scroll', () => { hds.scrollLeft = sc.scrollLeft; }, { passive: true });
+  // The date strip follows the columns on the compositor where the browser can (CSS scroll-driven
+  // animation, no lag); elsewhere it is moved per frame.
+  const row = hds.firstElementChild;
+  if (!CSS.supports?.('animation-timeline: --wkx')) {
+    let raf = 0;
+    sc.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; row.style.transform = `translate3d(${-sc.scrollLeft}px,0,0)`; }); }, { passive: true });
+  }
   const i = CAL.days.findIndex((d) => d.date === _calSel);
-  if (i > 0) { sc.scrollLeft = (sc.querySelector('.cal-wk-cell')?.offsetWidth || 0) * i; hds.scrollLeft = sc.scrollLeft; }
+  if (i > 0) { sc.scrollLeft = (sc.querySelector('.cal-wk-cell')?.offsetWidth || 0) * i; if (!CSS.supports?.('animation-timeline: --wkx')) row.style.transform = `translate3d(${-sc.scrollLeft}px,0,0)`; }
   const now = sc.querySelector('.cal-wk-now');
   if (now) v.scrollTop = Math.max(0, now.closest('.cal-wk-cell').offsetTop - 140);
 }
