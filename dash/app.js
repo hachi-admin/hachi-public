@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '121';
+const DASH_BUILD = '122';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1472,7 +1472,7 @@ function _calCell(d, today, { month = false } = {}) {
   const ym = _calMonthKey();
   const out = month && d.date.slice(0, 7) !== ym;
   const sel = d.date === _calSel;
-  const over = _calOver(d);
+  const over = _calOver(d) || _calCrowded(d);
   return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${sel ? ' sel' : ''}${over ? ' over' : ''}${d.date < today ? ' past' : ''}"
       onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)}" aria-pressed="${sel}">
     ${month ? '' : `<span class="cal-m-wd-in">${_CAL_WD[_calWd(d.date)]}</span>`}
@@ -1542,14 +1542,31 @@ function _renderCalendar() {
   box.innerHTML = grid + _calLegend() + _calWarn(today) + days.map((d) => _calDay(d, today)).join('');
 }
 
-// Days that will get more approval cards than the daily cap, with the fix next to the problem.
+// Days that will get more approval cards than the daily cap, with the fix next to the problem:
+// cards already made can be re-spread over the week; magazines due together can be given
+// different start days, so the pile-up does not come back next cycle.
+const _calCrowded = (d) => (d.planned || []).filter((p) => p.mode === 'propose').length * 3 > (CAL?.perDay || 8);
 function _calWarn(today) {
-  const over = CAL.days.filter((d) => d.date >= today && _calOver(d));
-  if (!over.length) return '';
-  return `<div class="cal-warn">
-    <span>${over.map((d) => _calLabel(d.date)).join('・')} は承認カードが1日の上限（${CAL.perDay || 8}件）を超えています</span>
-    <button class="act-btn" onclick="calRebalance(this)">均等に並べ直す</button>
-  </div>`;
+  const fut = CAL.days.filter((d) => d.date >= today);
+  const over = fut.filter(_calOver), crowded = fut.filter(_calCrowded);
+  const days = (list) => list.map((d) => _calLabel(d.date)).join('・');
+  const cap = CAL.perDay || 8;
+  return (crowded.length ? `<div class="cal-warn">
+      <span>${days(crowded)} は記事案を作るマガジンが重なっています（承認は1日${cap}件まで）</span>
+      <button class="act-btn" onclick="calSpread(this)">作る日を散らす</button></div>` : '')
+    + (over.length ? `<div class="cal-warn">
+      <span>${days(over)} は承認カードが1日の上限（${cap}件）を超えています</span>
+      <button class="act-btn" onclick="calRebalance(this)">均等に並べ直す</button></div>` : '');
+}
+
+async function calSpread(btn) {
+  btn?.setAttribute('disabled', 'true');
+  const res = await fetch(apiUrl('/api/calendar/spread'), { method: 'POST', headers: _authHeaders() }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  btn?.removeAttribute('disabled');
+  if (!res?.ok) { showToast(data?.error || '散らせませんでした', 'error'); return; }
+  showToast(`${data.moved}誌の作る日を決め直しました`, 'success');
+  _loadCalendar();
 }
 
 function calSelectDay(key) {
@@ -1647,16 +1664,56 @@ function _calPlannedGroups(planned) {
       <div class="cal-plan-main">
         <span class="cal-item-title">${mode === 'auto' ? '自動で記事を書く' : '記事案を作る'}<small>${mode === 'auto' ? `${list.length}本` : `${list.length}誌 · カード約${list.length * 3}件`}</small></span>
         ${mode !== 'auto' && list.length * 3 > (CAL.perDay || 8) ? `<span class="cal-item-meta">承認は1日${CAL.perDay || 8}件までなので、あふれた分は空いている日に回ります</span>` : ''}
-        <span class="cal-plan-chips">${list.map((p) => `<button class="cal-chip${mode === 'auto' ? ' auto' : ''}" onclick="calOpenMagazine('${esc(p.categoryId || '')}')">${esc(p.name)}</button>`).join('')}</span>
+        <span class="cal-plan-chips">${list.map((p) => `<button class="cal-chip${mode === 'auto' ? ' auto' : ''}" onclick="calMagazineSheet('${esc(p.categoryId || '')}')">${esc(p.name)}</button>`).join('')}</span>
       </div>
     </div>`;
   }).join('')}</div>`;
 }
 
-// A magazine chip opens that magazine's settings — where its cadence (and so this schedule) is set.
+/* A magazine chip opens a small sheet: when it next makes ideas (movable — every later cycle
+   follows from that day) and a way into the magazine's own settings. */
+const _CAL_FREQ_JA = { daily: '毎日', every_2_days: '2日ごと', twice_weekly: '週2回', weekly: '毎週', biweekly: '隔週', monthly: '毎月' };
+function calMagazineSheet(id) {
+  const all = (CAL?.days || []).flatMap((d) => d.planned || []).filter((p) => p.categoryId === id);
+  if (!id || !all.length) return;
+  const p = all[0];
+  const today = _calTodayKey();
+  const next = all.map((x) => _calDayOf(x.at)).find((k) => k >= today) || today;
+  const freq = (CAT_META?.frequencies || []).find((f) => f.id === p.freq)?.label || _CAL_FREQ_JA[p.freq] || '';
+  const opts = Array.from({ length: 14 }, (_, i) => _calAdd(today, i))
+    .map((k) => `<option value="${k}"${k === next ? ' selected' : ''}>${_calLabel(k)}${k === next ? '（今の予定）' : ''}</option>`).join('');
+  document.getElementById('detail-panel')?.classList.remove('panel-wide');
+  document.getElementById('detail-content').innerHTML = `<div class="cal-sheet">
+    <div class="cal-sheet-hd">${esc(p.name)}</div>
+    <div class="cal-item-meta">${esc([freq, p.mode === 'auto' ? '自動で記事を書く' : '記事案を出して承認を待つ'].filter(Boolean).join(' · '))}</div>
+    ${p.freq === 'daily' ? '<p class="cal-job-note">毎日作るマガジンなので、作る日は動かせません。</p>' : `
+    <label class="cal-field">次に作る日
+      <select onchange="calSetAnchor('${esc(id)}',this.value,this)">${opts}</select></label>
+    <p class="cal-job-note">選んだ日の ${CAL.releaseHour ?? 9}:00 から、${esc(freq || '頻度')}の間隔で作ります。</p>`}
+    <button class="act-btn" onclick="closeDetail();calOpenMagazine('${esc(id)}')">マガジンの設定を開く</button>
+  </div>`;
+  document.getElementById('detail-overlay')?.classList.add('open');
+  document.getElementById('detail-panel')?.focus();
+}
+const _calDayOf = (iso) => new Date(Date.parse(iso) + 9 * 3600e3).toISOString().slice(0, 10);
+
+async function calSetAnchor(id, day, sel) {
+  sel.disabled = true;
+  const res = await fetch(apiUrl(`/api/article-categories/${encodeURIComponent(id)}`), {
+    method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cycleAnchor: day }),
+  }).catch(() => null);
+  sel.disabled = false;
+  if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
+  showToast(`${_calLabel(day)} から作ります`, 'success');
+  closeDetail();
+  _loadCalendar();
+}
+
+// The magazine's full settings — where its cadence itself is set.
 async function calOpenMagazine(id) {
   if (!id) return;
-  if (!CATEGORIES.some((c) => c.id === id) && true) await _loadTopics().catch(() => {});
+  if (!CATEGORIES.some((c) => c.id === id)) await _loadTopics().catch(() => {});
   if (!CATEGORIES.some((c) => c.id === id)) { showToast('マガジンを開けませんでした', 'error'); return; }
   openCategoryDetail(id);
 }
