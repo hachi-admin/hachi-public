@@ -3479,3 +3479,11 @@ body.sheet-open{overflow:hidden}
 .cal-wk-cell .cal-ev small{font-size:10.5px}
 .cal-wk-bg{font-size:10.5px;color:var(--m);text-align:center;padding:2px 0}
 .cal-wk-now{display:block;font-size:10.5px;font-weight:700;color:var(--red);border-top:2px solid var(--red);padding-top:1px;margin-top:2px}
+/* 2026-10-06: one look for every event, done or to come; no 定期ジョブ button in the bar. */
+.cal-nav{grid-template-columns:auto 1fr}
+.cal-wk-cell.today{background-color:transparent}
+.cal-field small{margin-left:6px;color:var(--m);font-size:11.5px}
+.cal-wd-pick{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:4px}
+.cal-wd{border:0;font:inherit;font-size:14px;min-height:42px;border-radius:12px;background:var(--bg);color:var(--txt);box-shadow:var(--sh-sm);cursor:pointer}
+.cal-wd.on{box-shadow:var(--sh-in);color:var(--acc);font-weight:800}
+.cal-sheet-btns .act-btn.primary{color:var(--acc);font-weight:700}
