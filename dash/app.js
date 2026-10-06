@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '125';
+const DASH_BUILD = '126';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1573,47 +1573,43 @@ function calMagazineSheet(id) {
   const next = all.map((x) => _calDayOf(x.at)).find((k) => k >= today) || today;
   const seen = [...new Set(all.filter((x) => _calDayOf(x.at) >= today).map((x) => _calWd(_calDayOf(x.at))))];
   _calSched = { id, freq, weekdays: [...(p.schedule?.weekdays || seen.slice(0, _CAL_WD_NEED[freq] || 1))], hour: p.schedule?.hour ?? _calHour(p.at) | 0, anchor: p.schedule?.anchor || next };
-  const upcoming = all.filter((x) => _calDayOf(x.at) >= today).slice(0, 3).map((x) => `${_calLabel(_calDayOf(x.at))} ${_calHm(x.at)}`).join('、');
   _calSheet(`<div class="cal-sheet-k k-cont">${p.mode === 'auto' ? '記事' : '案'}</div><div class="cal-sheet-hd">${esc(p.name)}</div>
-    <div class="cal-item-meta">${esc(_CAL_FREQ_JA[freq] || '')} · ${p.mode === 'auto' ? '自動で記事を書く' : '記事案を出して承認を待つ'}</div>
-    <div class="cal-kv"><span>いまの設定</span><b>${esc(_calSchedText(freq, p.schedule))}</b>${upcoming ? `<span>次</span><b>${esc(upcoming)}</b>` : ''}</div>
-    <div id="cal-sched-edit">${_calSchedEditor()}</div>
-    <div class="cal-sheet-btns">
-      <button class="act-btn" onclick="closeDetail();calOpenMagazine('${esc(id)}')">マガジンを開く</button>
-      <button class="act-btn primary" id="cal-sched-save" onclick="calSaveSchedule(this)">この曜日・時刻にする</button>
-    </div>`);
+    <div class="cal-item-meta">${esc(_CAL_FREQ_JA[freq] || '')}</div>
+    <div id="cal-sched-edit">${_calSchedEditor()}</div>`);
 }
 function _calSchedEditor() {
   const s = _calSched, need = _CAL_WD_NEED[s.freq];
   const hours = Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === s.hour ? ' selected' : ''}>${h}:00</option>`).join('');
   const days14 = Array.from({ length: 14 }, (_, i) => _calAdd(_calTodayKey(), i));
-  return `${need ? `<div class="cal-field">曜日<small>${need}つ選びます</small>
+  const left = need ? need - s.weekdays.length : 0;
+  return `${need ? `<div class="cal-field">曜日<small>${left > 0 ? `あと${left}つ選んでください` : need > 1 ? `${need}つまで` : ''}</small>
       <div class="cal-wd-pick">${[1, 2, 3, 4, 5, 6, 0].map((w) => `<button class="cal-wd${s.weekdays.includes(w) ? ' on' : ''}" onclick="calPickWd(${w})" aria-pressed="${s.weekdays.includes(w)}">${_CAL_WD[w]}</button>`).join('')}</div></div>` : ''}
     ${s.freq === 'every_2_days' || s.freq === 'biweekly' ? `<label class="cal-field">${s.freq === 'biweekly' ? '始める週' : '次に作る日'}
-      <select onchange="_calSched.anchor=this.value">${days14.map((k) => `<option value="${k}"${k === s.anchor ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
+      <select onchange="_calSched.anchor=this.value;calSaveSchedule()">${days14.map((k) => `<option value="${k}"${k === s.anchor ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
     ${s.freq === 'monthly' ? `<label class="cal-field">日にち
-      <select onchange="_calSched.anchor='2026-01-'+String(this.value).padStart(2,'0')">${Array.from({ length: 28 }, (_, i) => i + 1).map((n) => `<option value="${n}"${n === Number(s.anchor.slice(8)) ? ' selected' : ''}>${n}日</option>`).join('')}</select></label>` : ''}
-    <label class="cal-field">時刻<select onchange="_calSched.hour=Number(this.value)">${hours}</select></label>`;
+      <select onchange="_calSched.anchor='2026-01-'+String(this.value).padStart(2,'0');calSaveSchedule()">${Array.from({ length: 28 }, (_, i) => i + 1).map((n) => `<option value="${n}"${n === Number(s.anchor.slice(8)) ? ' selected' : ''}>${n}日</option>`).join('')}</select></label>` : ''}
+    <label class="cal-field">時刻<select onchange="_calSched.hour=Number(this.value);calSaveSchedule()">${hours}</select></label>`;
 }
-// Tapping a weekday adds it; past the cadence's count the earliest pick gives way.
+// Up to as many weekdays as the cadence has: a tap adds one while there is room and removes a
+// chosen one; a full set is saved at once, as is any change of day or hour.
 function calPickWd(w) {
   const s = _calSched, need = _CAL_WD_NEED[s.freq] || 1;
-  if (s.weekdays.includes(w)) { if (s.weekdays.length > 1) s.weekdays = s.weekdays.filter((x) => x !== w); }
-  else { s.weekdays = [...s.weekdays, w]; if (s.weekdays.length > need) s.weekdays.shift(); }
+  if (s.weekdays.includes(w)) s.weekdays = s.weekdays.filter((x) => x !== w);
+  else if (s.weekdays.length < need) s.weekdays = [...s.weekdays, w];
+  else if (need === 1) s.weekdays = [w];
+  else return;
   document.getElementById('cal-sched-edit').innerHTML = _calSchedEditor();
+  if (s.weekdays.length === need) calSaveSchedule();
 }
-async function calSaveSchedule(btn) {
+async function calSaveSchedule() {
   const s = _calSched, need = _CAL_WD_NEED[s.freq];
-  if (need && s.weekdays.length !== need) { showToast(`曜日を${need}つ選んでください`, 'error'); return; }
-  btn.disabled = true;
+  if (need && s.weekdays.length !== need) return;
   const schedule = { hour: s.hour, ...(need ? { weekdays: [...s.weekdays].sort() } : {}), ...(['every_2_days', 'biweekly', 'monthly'].includes(s.freq) ? { anchor: s.anchor } : {}) };
   const res = await fetch(apiUrl(`/api/article-categories/${encodeURIComponent(s.id)}`), {
     method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ schedule }),
   }).catch(() => null);
-  btn.disabled = false;
   if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
   showToast(`${_calSchedText(s.freq, schedule)} にしました`, 'success');
-  closeDetail();
   _loadCalendar();
 }
 
