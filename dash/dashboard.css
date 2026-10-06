@@ -3520,3 +3520,4 @@ body.sheet-open{overflow:hidden}
 .cal-wk-grid{grid-template-columns:34px repeat(var(--n),calc((100cqw - 34px) / 3))}
 .cal-wk-t,.cal-wk-corner{box-shadow:6px 0 6px -6px color-mix(in srgb,var(--m) 25%,transparent)}
 .cal-wk-hd span{display:block}
+.cal-sheet .cal-switch{display:flex;justify-content:space-between;align-items:center;width:100%}

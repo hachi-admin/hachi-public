@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '128';
+const DASH_BUILD = '129';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1654,14 +1654,6 @@ const _CAL_JOB_STATUS = {
 };
 const _calJobName = (j) => (typeof TASK_TYPE_LABELS !== 'undefined' && TASK_TYPE_LABELS[j.type]) || j.label;
 
-function _calJob(j) {
-  const tone = j.status === 'failed' ? 'red' : (j.status === 'completed' ? 'green' : '');
-  return `<button class="cal-item cal-job" onclick="calEditJob('${esc(j.type)}')">
-    <span class="cal-job-time">${j.at ? _calTime(j.at) : '—'}</span>
-    <span class="cal-item-title">${esc(_calJobName(j))}</span>
-    ${srcChip(_CAL_JOB_STATUS[j.status] || j.status, tone)}
-  </button>`;
-}
 
 function _calRangeText() {
   if (_calMode === 'month') { const [y, m] = _calMonthKey().split('-'); return `${y}年${Number(m)}月`; }
@@ -1761,7 +1753,6 @@ function _calEvents(d) {
 function _calWeekAxis(days, evByDay, today) {
   const nowIso = new Date().toISOString(), nowH = _calHour(nowIso);
   const main = (d) => evByDay[d.date].filter((e) => e.k !== 'bg');
-  const bg = (d) => evByDay[d.date].filter((e) => e.k === 'bg');
   const hours = [...new Set(days.flatMap((d) => main(d).map((e) => Math.floor(_calHour(e.at)))))].sort((a, b) => a - b);
   const segs = [];
   let prev = 0;
@@ -1775,21 +1766,18 @@ function _calWeekAxis(days, evByDay, today) {
     if (h < 24) segs.push({ gap: false, a: h, b: h + 1 });
     prev = h + 1;
   }
-  const bgText = (list) => list.length ? `裏方 ${list.length}` : '';
   const cell = (d, s) => {
     const isNow = d.date === today && nowH >= s.a && nowH < s.b;
     const nowMark = isNow ? `<span class="cal-wk-now">今 ${_calHm(nowIso)}</span>` : '';
-    const inSeg = (e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b;
-    const b = bg(d).filter(inSeg);
-    if (s.gap) return `<div class="cal-wk-cell gap${d.date === today ? ' today' : ''}">${bgText(b) ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
-    const ev = main(d).filter(inSeg);
-    return `<div class="cal-wk-cell${d.date === today ? ' today' : ''}">
+    if (s.gap) return `<div class="cal-wk-cell gap">${nowMark}</div>`;
+    const ev = main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b);
+    return `<div class="cal-wk-cell">
       ${ev.map((e) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${esc(e.tag)} · ${_calHm(e.at)}</small>${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`).join('')}
-      ${b.length ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
+      ${nowMark}</div>`;
   };
   const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${_calOver(d) ? ' over' : ''}${d.date < today ? ' past' : ''}">
       <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b></div>`).join('');
-  const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? `${s.a}–${s.b}` : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
+  const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? '' : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
   return `<div class="cal-wk"><div class="cal-wk-scroll" id="cal-wk-scroll"><div class="cal-wk-grid" style="--n:${days.length}">
       <div class="cal-wk-t cal-wk-corner"></div>${head}${rows}</div></div></div>
     <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>`;
@@ -1908,15 +1896,51 @@ async function calToggleJobs(force) {
   _renderJobsPanel();
 }
 
-function calEditJob(type) {
-  const panel = document.getElementById('cal-jobs');
-  const open = () => {
-    const el = document.getElementById('cal-job-' + type);
-    el?.setAttribute('open', '');
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  if (panel?.hidden || !CAL_JOBS) calToggleJobs(true).then(open);
-  else open();
+/* A job's own sheet: whether it runs, which day and hour, where it posts — each saved as it is
+   changed. The full list of jobs is no longer a panel on the calendar; every job that matters
+   appears on it, and tapping it is how it is edited. */
+let _calJob = null;
+async function calEditJob(type) {
+  try {
+    if (!CAL_JOBS) {
+      const r = await fetch(apiUrl('/api/job-schedules'), { headers: _authHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      CAL_JOBS = (await r.json()).jobs || [];
+    }
+    if (!CAL_CHANNELS) CAL_CHANNELS = (await fetch(apiUrl('/api/channels'), { headers: _authHeaders() }).then((r) => r.json()).catch(() => ({}))).channels || {};
+  } catch (err) { showToast(`ジョブを読み込めませんでした（${err.message}）`, 'error'); return; }
+  const j = CAL_JOBS.find((x) => x.type === type);
+  if (!j) return;
+  const s = j.schedule || {};
+  _calJob = { type, posts: j.posts, enabled: s.enabled !== false, freq: s.external ? 'daily' : s.freq, weekday: s.weekday ?? 1,
+    dayOfMonth: s.dayOfMonth ?? 1, hour: s.hour ?? 9, destination: j.destination || {} };
+  _calSheet(`${_calSheetHd('job', _calJobName(j), _CAL_DESC[type] || j.note || '', 'ジョブ')}<div id="cal-job-edit">${_calJobForm()}</div>`);
+}
+function _calJobForm() {
+  const j = _calJob;
+  const keys = Object.keys(CAL_CHANNELS || {}).sort();
+  const destVal = j.destination.channelId ? '__id__' : (j.destination.channelKey || '');
+  return `<label class="cal-switch"><span>動かす</span><input type="checkbox" role="switch"${j.enabled ? ' checked' : ''} onchange="_calJob.enabled=this.checked;calSaveJobSheet()"></label>
+    ${j.freq === 'weekly' ? `<div class="cal-field">曜日<div class="cal-wd-pick">${[1, 2, 3, 4, 5, 6, 0].map((w) => `<button class="cal-wd${w === j.weekday ? ' on' : ''}" onclick="_calJob.weekday=${w};calSaveJobSheet()">${_CAL_WD[w]}</button>`).join('')}</div></div>` : ''}
+    ${j.freq === 'monthly' ? `<label class="cal-field">日にち<select onchange="_calJob.dayOfMonth=Number(this.value);calSaveJobSheet()">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}"${i + 1 === j.dayOfMonth ? ' selected' : ''}>毎月${i + 1}日</option>`).join('')}</select></label>` : ''}
+    <label class="cal-field">時刻<select onchange="_calJob.hour=Number(this.value);calSaveJobSheet()">${_calHours(j.hour)}</select></label>
+    ${j.posts ? `<label class="cal-field">投稿先<select onchange="_calJob.destination=this.value?{channelKey:this.value}:{};calSaveJobSheet()">
+      <option value=""${destVal === '' ? ' selected' : ''}>いつもの場所</option>
+      ${keys.map((k) => `<option value="${esc(k)}"${destVal === k ? ' selected' : ''}>#${esc(k)}</option>`).join('')}
+      ${destVal === '__id__' ? '<option value="__id__" selected disabled>指定のチャンネル</option>' : ''}</select></label>` : ''}`;
+}
+async function calSaveJobSheet() {
+  const j = _calJob;
+  document.getElementById('cal-job-edit').innerHTML = _calJobForm();
+  const res = await fetch(apiUrl(`/api/job-schedules/${encodeURIComponent(j.type)}`), {
+    method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: j.enabled, freq: j.freq, hour: j.hour, weekday: j.weekday, dayOfMonth: j.dayOfMonth, destination: j.destination }),
+  }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (!res?.ok) { showToast(data?.error || '保存できませんでした', 'error'); return; }
+  CAL_JOBS = CAL_JOBS.map((x) => (x.type === j.type ? data.job : x));
+  showToast('保存しました', 'success');
+  _loadCalendar();
 }
 
 function _renderJobsPanel() {
