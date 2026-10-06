@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '129';
+const DASH_BUILD = '131';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1462,23 +1462,6 @@ function calShift(n) {
   _loadCalendar();
 }
 
-/* Both views share one cell: weekday, date, and a mark per kind of thing on that day — approvals
-   (magazines to answer for), articles, and weekly/monthly jobs. Solid = already there, pale = what
-   the magazines' cadence will bring. A day carrying more approval cards than the daily cap is
-   ringed in amber, so an overloaded day shows before it arrives. */
-function _calCell(d, today, { month = false } = {}) {
-  const ym = _calMonthKey();
-  const out = month && d.date.slice(0, 7) !== ym;
-  const sel = d.date === _calSel;
-  const over = _calOver(d);
-  return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${sel ? ' sel' : ''}${over ? ' over' : ''}${d.date < today ? ' past' : ''}"
-      onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)}" aria-pressed="${sel}">
-    ${month ? '' : `<span class="cal-m-wd-in">${_CAL_WD[_calWd(d.date)]}</span>`}
-    <span class="cal-m-num">${Number(d.date.slice(8))}</span>
-    <span class="cal-m-marks">${_calMarks(d)}</span>
-  </button>`;
-}
-
 // What a day weighs, in the unit a person decides in.
 function _calCounts(d) {
   const planned = d.planned || [];
@@ -1496,21 +1479,6 @@ function _calCounts(d) {
 // Daily jobs are left off the grid and folded in the day — a mark on every square says nothing.
 const _calNotableJob = (j) => (j.freq && j.freq !== 'daily' && j.freq !== 'hourly') || j.status === 'failed';
 const _calOver = (d) => d.approvals.filter((x) => x.status === 'pending' && !x.released).length > (CAL?.perDay || 8);
-
-function _calMarks(d) {
-  const c = _calCounts(d);
-  const pill = (cls, now, plan, title) => (now + plan
-    ? `<i class="cal-m-pill ${cls}${now ? '' : ' plan'}" title="${title}">${now + plan}</i>` : '');
-  return pill('appr', c.apprNow, c.apprPlan, '承認するマガジン')
-    + pill('art', c.artNow, c.artPlan, '記事')
-    + (c.jobs.length ? `<i class="cal-m-dot job${c.failed ? ' fail' : ''}" title="週次・月次ジョブ"></i>` : '')
-    + (d.bundles.length ? '<i class="cal-m-dot bun" title="まとめファイル"></i>' : '');
-}
-
-const _calLegend = () => `<div class="cal-legend cal-m-legend">
-  <span><i class="cal-m-pill appr">n</i>承認</span><span><i class="cal-m-pill art">n</i>記事</span>
-  <span><i class="cal-m-pill appr plan">n</i>予定</span>
-  <span><i class="cal-m-dot job"></i>週次ジョブ</span><span><i class="cal-m-dot bun"></i>まとめ</span></div>`;
 
 /* Approvals are answered in Discord — the calendar only shows *when* they arrive, one line per
    magazine, so the page is a schedule rather than a second copy of #approvals. Moving a line to
@@ -1797,8 +1765,17 @@ function _renderCalendar() {
   _calEv = [];
   const evByDay = Object.fromEntries(CAL.days.map((d) => [d.date, _calEvents(d)]));
   if (month) {
-    const grid = `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map((d) => _calCell(d, today, { month })).join('')}</div>${_calLegend()}`;
-    box.innerHTML = grid + '<p class="cal-legend">日付をタップすると、その日からの週を時間軸で開きます</p>';
+    // Same events and colours as the week: one dot per thing on the day (up to six, then +n).
+    const cell = (d) => {
+      const ev = evByDay[d.date].filter((e) => e.k !== 'bg');
+      const out = d.date.slice(0, 7) !== _calMonthKey();
+      return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
+        <span class="cal-m-num">${Number(d.date.slice(8))}</span>
+        <span class="cal-m-dots">${ev.slice(0, 6).map((e) => `<i class="k-${e.k}"></i>`).join('')}${ev.length > 6 ? `<small>+${ev.length - 6}</small>` : ''}</span></button>`;
+    };
+    box.innerHTML = `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map(cell).join('')}</div>
+      <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>
+      <p class="cal-legend">日付をタップすると、その日からの週を開きます</p>`;
     return;
   }
   box.innerHTML = _calWeekAxis(CAL.days, evByDay, today);
@@ -1806,6 +1783,9 @@ function _renderCalendar() {
   const i = CAL.days.findIndex((d) => d.date === _calSel);
   const sc = document.getElementById('cal-wk-scroll');
   if (sc && i > 0) sc.scrollLeft = sc.querySelector('.cal-wk-hd')?.offsetWidth * i || 0;
+  // The axis scrolls inside its own box (so the dates stay on top); open it a little above now.
+  const now = sc?.querySelector('.cal-wk-now');
+  if (sc && now) sc.scrollTop = Math.max(0, now.closest('.cal-wk-cell').offsetTop - 140);
 }
 
 // In the month grid a day opens the week that starts on it, on the time axis.

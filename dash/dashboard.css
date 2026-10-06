@@ -3521,3 +3521,13 @@ body.sheet-open{overflow:hidden}
 .cal-wk-t,.cal-wk-corner{box-shadow:6px 0 6px -6px color-mix(in srgb,var(--m) 25%,transparent)}
 .cal-wk-hd span{display:block}
 .cal-sheet .cal-switch{display:flex;justify-content:space-between;align-items:center;width:100%}
+/* The axis is its own scroll box: dates stay pinned on top and hours on the left while it scrolls. */
+.cal-wk-scroll{overflow:auto;max-height:max(380px,calc(100dvh - 300px));overscroll-behavior:contain}
+.cal-wk-hd{position:sticky;top:0;z-index:2;background:var(--bg)}
+.cal-wk-corner{position:sticky;top:0;left:0;z-index:4}
+.cal-wk-cell{position:relative}
+.cal-m-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;max-width:34px;min-height:12px;align-items:center}
+.cal-m-dots i{width:6px;height:6px;border-radius:50%;background:var(--c)}
+.cal-m-dots small{font-size:9px;color:var(--m);line-height:1}
+.cal-m-cell.past:not(.today){opacity:.55}
+.cal-month+.cal-tt-lg{margin-left:0}
