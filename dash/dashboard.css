@@ -3582,3 +3582,8 @@ body.sheet-open{overflow:hidden}
 }
 .cal-wk-hds .cal-wk-row{will-change:transform}
 .cal-note{border-radius:3px;box-shadow:0 0 0 .5px color-mix(in srgb,var(--m) 35%,transparent);background:#fff}
+/* Mark centred against the whole name; the time still floats right inside the name block. */
+.cal-ev-hd{display:flex;align-items:center;gap:4px}
+.cal-ev-t{flex:1;min-width:0;display:block}
+.cal-note,.cal-emo{margin-right:0;vertical-align:baseline}
+.cal-emo{line-height:1}

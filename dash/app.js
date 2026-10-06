@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '134';
+const DASH_BUILD = '135';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1701,7 +1701,8 @@ function _calEvents(d) {
   for (const p of d.planned || []) {
     const at = p.at < new Date().toISOString() ? new Date().toISOString() : p.at;
     add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事を書く' : '案を作る',
-      lines: [], plan: p, date: d.date });
+      // within the week the slate is being made ahead (a few heartbeats); after that it shows its ideas
+      lines: p.mode !== 'auto' && Date.parse(p.at) - Date.now() < 7 * 86400e3 ? ['案を準備中…'] : [], plan: p, date: d.date });
   }
   // Scheduled runs still to come; what already ran is a task above.
   for (const j of d.jobs || []) {
@@ -1729,7 +1730,7 @@ function _calIcon(e) {
   return `<span class="cal-emo">${_CAL_ICON[type] || (e.k === 'job' ? '⚙️' : '🔍')}</span>`;
 }
 const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
-    <span class="cal-ev-hd"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time>${_calIcon(e)}<b>${esc(e.name)}</b></span>
+    <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time><b>${esc(e.name)}</b></span></span>
     ${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
 
 // ── The week on one time axis ──────────────────────────────────────────────
