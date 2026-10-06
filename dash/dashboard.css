@@ -3487,3 +3487,15 @@ body.sheet-open{overflow:hidden}
 .cal-wd{border:0;font:inherit;font-size:14px;min-height:42px;border-radius:12px;background:var(--bg);color:var(--txt);box-shadow:var(--sh-sm);cursor:pointer}
 .cal-wd.on{box-shadow:var(--sh-in);color:var(--acc);font-weight:800}
 .cal-sheet-btns .act-btn.primary{color:var(--acc);font-weight:700}
+/* Sheets that hold a few lines take their own height. */
+@media (max-width:768px){.panel.panel-fit{min-height:0}}
+.panel.panel-fit .cal-sheet{gap:10px;padding:0 2px 4px}
+.cal-sheet-hd{margin-top:-6px;font-size:17px}
+.cal-sheet .cal-field{gap:6px}
+/* Grid: a line between the days and a line at every hour row, so time and date read off the page. */
+.cal-wk-hd{border-bottom:1px solid color-mix(in srgb,var(--m) 30%,transparent);border-radius:0}
+.cal-wk-hd.today b{padding:1px 8px}
+.cal-wk-cell{border-left:1px solid color-mix(in srgb,var(--m) 18%,transparent);border-top:1px solid color-mix(in srgb,var(--m) 18%,transparent);padding:5px 3px}
+.cal-wk-t{border-top:1px solid color-mix(in srgb,var(--m) 18%,transparent)}
+.cal-wk-grid{column-gap:0}
+.cal-wk-grid{grid-template-columns:34px repeat(var(--n),calc((100cqw - 48px) / 3))}

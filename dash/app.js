@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '126';
+const DASH_BUILD = '127';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1558,7 +1558,7 @@ let _calSched = null;   // the schedule being edited in the open sheet
 const _calDayOf = (iso) => new Date(Date.parse(iso) + 9 * 3600e3).toISOString().slice(0, 10);
 function _calSchedText(freq, s) {
   if (!s) return '自動で決めます';
-  const h = `${s.hour}時`;
+  const h = `${s.hour}:${String(s.minute || 0).padStart(2, '0')}`;
   if (_CAL_WD_NEED[freq]) return `${freq === 'biweekly' ? '隔週' : '毎週'}${s.weekdays.map((w) => _CAL_WD[w]).join('・')}曜 ${h}`;
   if (freq === 'monthly') return `毎月${Number(s.anchor.slice(8))}日 ${h}`;
   if (freq === 'every_2_days') return `2日ごと ${h}`;
@@ -1572,14 +1572,15 @@ function calMagazineSheet(id) {
   const today = _calTodayKey();
   const next = all.map((x) => _calDayOf(x.at)).find((k) => k >= today) || today;
   const seen = [...new Set(all.filter((x) => _calDayOf(x.at) >= today).map((x) => _calWd(_calDayOf(x.at))))];
-  _calSched = { id, freq, weekdays: [...(p.schedule?.weekdays || seen.slice(0, _CAL_WD_NEED[freq] || 1))], hour: p.schedule?.hour ?? _calHour(p.at) | 0, anchor: p.schedule?.anchor || next };
+  _calSched = { id, freq, weekdays: [...(p.schedule?.weekdays || seen.slice(0, _CAL_WD_NEED[freq] || 1))], hour: p.schedule?.hour ?? _calHour(p.at) | 0, minute: p.schedule?.minute ?? 0, anchor: p.schedule?.anchor || next };
   _calSheet(`<div class="cal-sheet-k k-cont">${p.mode === 'auto' ? '記事' : '案'}</div><div class="cal-sheet-hd">${esc(p.name)}</div>
     <div class="cal-item-meta">${esc(_CAL_FREQ_JA[freq] || '')}</div>
     <div id="cal-sched-edit">${_calSchedEditor()}</div>`);
 }
 function _calSchedEditor() {
   const s = _calSched, need = _CAL_WD_NEED[s.freq];
-  const hours = Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === s.hour ? ' selected' : ''}>${h}:00</option>`).join('');
+  const hours = Array.from({ length: 96 }, (_, q) => { const h = q >> 2, m = (q % 4) * 15;
+    return `<option value="${h}:${m}"${h === s.hour && m === (s.minute || 0) ? ' selected' : ''}>${h}:${String(m).padStart(2, '0')}</option>`; }).join('');
   const days14 = Array.from({ length: 14 }, (_, i) => _calAdd(_calTodayKey(), i));
   const left = need ? need - s.weekdays.length : 0;
   return `${need ? `<div class="cal-field">曜日<small>${left > 0 ? `あと${left}つ選んでください` : need > 1 ? `${need}つまで` : ''}</small>
@@ -1588,7 +1589,7 @@ function _calSchedEditor() {
       <select onchange="_calSched.anchor=this.value;calSaveSchedule()">${days14.map((k) => `<option value="${k}"${k === s.anchor ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
     ${s.freq === 'monthly' ? `<label class="cal-field">日にち
       <select onchange="_calSched.anchor='2026-01-'+String(this.value).padStart(2,'0');calSaveSchedule()">${Array.from({ length: 28 }, (_, i) => i + 1).map((n) => `<option value="${n}"${n === Number(s.anchor.slice(8)) ? ' selected' : ''}>${n}日</option>`).join('')}</select></label>` : ''}
-    <label class="cal-field">時刻<select onchange="_calSched.hour=Number(this.value);calSaveSchedule()">${hours}</select></label>`;
+    <label class="cal-field">時刻<select onchange="[_calSched.hour,_calSched.minute]=this.value.split(':').map(Number);calSaveSchedule()">${hours}</select></label>`;
 }
 // Up to as many weekdays as the cadence has: a tap adds one while there is room and removes a
 // chosen one; a full set is saved at once, as is any change of day or hour.
@@ -1604,7 +1605,7 @@ function calPickWd(w) {
 async function calSaveSchedule() {
   const s = _calSched, need = _CAL_WD_NEED[s.freq];
   if (need && s.weekdays.length !== need) return;
-  const schedule = { hour: s.hour, ...(need ? { weekdays: [...s.weekdays].sort() } : {}), ...(['every_2_days', 'biweekly', 'monthly'].includes(s.freq) ? { anchor: s.anchor } : {}) };
+  const schedule = { hour: s.hour, minute: s.minute || 0, ...(need ? { weekdays: [...s.weekdays].sort() } : {}), ...(['every_2_days', 'biweekly', 'monthly'].includes(s.freq) ? { anchor: s.anchor } : {}) };
   const res = await fetch(apiUrl(`/api/article-categories/${encodeURIComponent(s.id)}`), {
     method: 'PATCH', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ schedule }),
   }).catch(() => null);
@@ -1682,11 +1683,20 @@ function _calEvents(d) {
     const tag = t.status === 'failed' ? '失敗' : cont ? (t.type === 'article_generate' ? '記事' : '案') : _CAL_TAG_JA[k] || '調査';
     add({ type: 'task', at: t.at, k, name: cont && subj ? subj : (TASK_TYPE_LABELS[t.type] || taskTitle(t)), tag, task: t, date: d.date });
   }
-  const pend = d.approvals.filter((a) => a.status === 'pending');
-  if (pend.length) {
-    const at = new Date(Date.parse(`${d.date}T00:00:00Z`) + ((CAL.releaseHour ?? 9) - 9) * 3600e3).toISOString();
-    add({ type: 'appr', at, k: 'appr', name: `承認 ${pend.length}件`, tag: 'Discord', date: d.date });
+  // One event per slate, at the time it reaches Discord (one slate every 15 minutes from the
+  // release hour); an older service sends no time, so the same spacing is drawn here.
+  const slates = new Map();
+  for (const a of d.approvals.filter((x) => x.status === 'pending')) {
+    const key = a.slotGroup || a.id;
+    if (!slates.has(key)) slates.set(key, []);
+    slates.get(key).push(a);
   }
+  [...slates.values()].forEach((cards, n) => {
+    const first = cards[0];
+    const at = first.releaseAt || new Date(Date.parse(`${d.date}T00:00:00Z`) + ((CAL.releaseHour ?? 9) - 9) * 3600e3 + n * 15 * 60e3).toISOString();
+    add({ type: 'appr', at, k: 'appr', name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind,
+      tag: `承認 ${cards.length}件`, cards, date: d.date });
+  });
   for (const p of d.planned || []) {
     const at = p.at < new Date().toISOString() ? new Date().toISOString() : p.at;
     add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事' : '案', plan: p, date: d.date });
@@ -1735,12 +1745,8 @@ function _calWeekAxis(days, evByDay, today) {
       ${ev.map((e) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${esc(e.tag)} · ${_calHm(e.at)}</small></button>`).join('')}
       ${b.length ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
   };
-  const head = days.map((d) => {
-    const c = _calCounts(d), over = _calOver(d);
-    return `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${over ? ' over' : ''}${d.date < today ? ' past' : ''}">
-      <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b>
-      <small>${[c.cards ? `承認${c.cards}` : '', c.apprPlan ? `案${c.apprPlan}誌` : '', _calTasks(d).filter((t) => !_CAL_BG.has(t.type)).length ? `タスク${_calTasks(d).filter((t) => !_CAL_BG.has(t.type)).length}` : ''].filter(Boolean).join(' · ') || '—'}</small></div>`;
-  }).join('');
+  const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${_calOver(d) ? ' over' : ''}${d.date < today ? ' past' : ''}">
+      <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b></div>`).join('');
   const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? `${s.a}–${s.b}` : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
   return `<div class="cal-wk"><div class="cal-wk-scroll" id="cal-wk-scroll"><div class="cal-wk-grid" style="--n:${days.length}">
       <div class="cal-wk-t cal-wk-corner"></div>${head}${rows}</div></div></div>
@@ -1780,8 +1786,10 @@ function calSelectDay(key) {
 }
 
 // ── Detail sheets ──────────────────────────────────────────────────────────
+// Calendar sheets are a few lines: they take their own height, not the half-screen floor.
 function _calSheet(html) {
   document.getElementById('detail-panel')?.classList.remove('panel-wide');
+  document.getElementById('detail-panel')?.classList.add('panel-fit');
   document.getElementById('detail-content').innerHTML = `<div class="cal-sheet">${html}</div>`;
   document.getElementById('detail-overlay')?.classList.add('open');
   document.getElementById('detail-panel')?.focus();
@@ -1794,10 +1802,10 @@ function calOpenEvent(i) {
   if (e.type === 'plan') return calMagazineSheet(e.plan.categoryId);
   if (e.type === 'job') return calEditJob(e.job.type);
   if (e.type === 'appr') {
-    const d = CAL.days.find((x) => x.date === e.date);
-    return _calSheet(`${_calSheetHd('appr', `承認カード ${e.name.replace('承認 ', '')}`, `${_calLabel(e.date)} ${CAL.releaseHour ?? 9}:00 にDiscordへ · 1日${CAL.perDay || 8}件まで`)}
-      <div class="cal-sheet-list">${_calApprovalGroups(d.approvals, d.date)}</div>
-      <p class="cal-job-note">カードへの回答はDiscordの #approvals で行います。まだ届いていないカードは別の日へ移せます。</p>`);
+    const sent = e.cards.some((c) => c.released);
+    return _calSheet(`${_calSheetHd('appr', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} · Discordの #approvals ${sent ? 'で回答待ち' : 'に届く'}`, '承認')}
+      <div class="cal-sheet-list">${e.cards.map((c) => `<div class="cal-sheet-row"><span>${esc(c.title || c.choices?.[0]?.label || '')}</span></div>`).join('')}</div>
+      ${sent ? '' : `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>`}`);
   }
   // a task
   const t = e.task;
@@ -8377,7 +8385,7 @@ function openDetail(id) {
 
 function closeDetail() {
   document.getElementById('detail-overlay').classList.remove('open');
-  document.getElementById('detail-panel')?.classList.remove('panel-wide');
+  document.getElementById('detail-panel')?.classList.remove('panel-wide', 'panel-fit');
 }
 function closeDetailIfBg(e) { if (e.target === document.getElementById('detail-overlay')) closeDetail(); }
 
