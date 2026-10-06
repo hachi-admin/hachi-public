@@ -3531,3 +3531,45 @@ body.sheet-open{overflow:hidden}
 .cal-m-dots small{font-size:9px;color:var(--m);line-height:1}
 .cal-m-cell.past:not(.today){opacity:.55}
 .cal-month+.cal-tt-lg{margin-left:0}
+/* ── Week axis, split by scroll direction (2026-10-07) ──
+   The box scrolls vertically; only the day columns scroll sideways inside it, so a vertical swipe
+   cannot drift. The date strip mirrors the columns' sideways position and stays pinned on top. */
+.cal-wk{--cw:calc((100cqw - 34px) / 3)}
+.cal-wk-v{overflow-y:auto;overflow-x:hidden;max-height:max(380px,calc(100dvh - 300px));overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.cal-wk-top{position:sticky;top:0;z-index:3;display:flex;background:var(--bg);border-bottom:1px solid color-mix(in srgb,var(--m) 30%,transparent)}
+.cal-wk-corner{flex:0 0 34px;position:static;box-shadow:none}
+.cal-wk-hds{flex:1;min-width:0;overflow:hidden}
+.cal-wk-row,.cal-wk .cal-wk-grid{display:grid;grid-template-columns:repeat(var(--n),var(--cw));width:max-content;column-gap:0}
+.cal-wk-hd{position:static;border-bottom:0}
+.cal-wk-body{display:flex}
+.cal-wk-times{flex:0 0 34px}
+.cal-wk-times .cal-wk-t{position:static;box-sizing:border-box;box-shadow:none}
+.cal-wk-h{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none}
+.cal-wk-h::-webkit-scrollbar{display:none}
+.cal-wk-h .cal-wk-cell{scroll-snap-align:start;box-sizing:border-box}
+/* Card: mark · name · time on one line, small detail lines under it. */
+.cal-ev-hd{display:flex;align-items:flex-start;gap:4px}
+.cal-ev-hd b{flex:1;min-width:0}
+.cal-ev-hd time{flex:none;font-size:9.5px;color:var(--m);font-weight:600;padding-top:1px;font-variant-numeric:tabular-nums}
+.cal-note{flex:none;width:12px;height:12px;margin-top:1px}
+.cal-emo{flex:none;font-size:11px;line-height:1.3}
+.cal-wk-cell .cal-ev{padding:4px 5px 5px}
+.cal-ev-lines{margin-top:3px;gap:2px}
+.cal-ev-lines i{font-size:9px;line-height:1.35}
+/* Month: the selected day's events under the grid. */
+.cal-m-cell.sel{box-shadow:var(--sh-in)}
+.cal-mday{margin-top:6px}
+.cal-mday-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:15px}
+.cal-mday-hd .act-btn{min-height:36px;font-size:12.5px;padding:0 12px}
+.cal-mday-list{display:grid;gap:6px}
+.cal-mday-list .cal-ev{padding:8px 10px;font-size:13px}
+.cal-mday-list .cal-ev-hd time{font-size:11.5px}
+.cal-mday-list .cal-note{width:15px;height:15px}
+.cal-mday-list .cal-emo{font-size:14px}
+.cal-mday-list .cal-ev-lines i{font-size:11.5px}
+/* The time floats right, so only the first line of the name gives way to it. */
+.cal-ev-hd{display:block}
+.cal-ev-hd time{float:right;margin:0 0 0 4px}
+.cal-ev-hd b{display:inline}
+.cal-note,.cal-emo{display:inline-block;vertical-align:-2px;margin-right:3px}
+.cal-mday-list .cal-note{vertical-align:-3px}

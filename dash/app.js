@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '131';
+const DASH_BUILD = '133';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1701,7 +1701,7 @@ function _calEvents(d) {
   for (const p of d.planned || []) {
     const at = p.at < new Date().toISOString() ? new Date().toISOString() : p.at;
     add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事を書く' : '案を作る',
-      lines: [p.mode === 'auto' ? '自動で書いて公開' : '3案を作り、承認待ちへ'], plan: p, date: d.date });
+      lines: [], plan: p, date: d.date });
   }
   // Scheduled runs still to come; what already ran is a task above.
   for (const j of d.jobs || []) {
@@ -1711,13 +1711,36 @@ function _calEvents(d) {
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
+// ── One card ───────────────────────────────────────────────────────────────
+/* A mark before the name says what it is at a glance — the note mark for anything that becomes a
+   note article, an emoji per job — and the time sits at the right edge. Under the name, only
+   what you would otherwise have to open the card for: the ideas, what a job does, the article. */
+const _CAL_ICON = {
+  topic_scout: '🧭', note_study: '📊', note_stats: '📈', advisor_review: '🧑‍🏫', design_audit: '🎨', efficiency_audit: '💰',
+  infer_location: '📍', visionary_review: '🔭', channel_audit: '🗂️', news_digest: '📰', scout: '🔍', fact_check_news: '✅',
+  deep_context: '📚', import_scout: '🌏', wiki_lint: '🧹', log_monitor: '🚨',
+};
+const _CAL_NOTE_MARK = '<svg class="cal-note" viewBox="0 0 16 16" aria-label="note"><rect width="16" height="16" rx="4" fill="#111"/><path d="M4.6 11.6V5.2h1.3l.1.8c.5-.6 1.2-1 2.1-1 1.4 0 2.3.9 2.3 2.5v4.1H9V7.8c0-.9-.4-1.4-1.2-1.4-.8 0-1.3.6-1.3 1.5v3.7z" fill="#fff"/></svg>';
+function _calIcon(e) {
+  if (e.k === 'fail') return '<span class="cal-emo">⚠️</span>';
+  if (e.k === 'cont') return _CAL_NOTE_MARK;
+  const type = e.job?.type || e.task?.type;
+  return `<span class="cal-emo">${_CAL_ICON[type] || (e.k === 'job' ? '⚙️' : '🔍')}</span>`;
+}
+const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
+    <span class="cal-ev-hd"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time>${_calIcon(e)}<b>${esc(e.name)}</b></span>
+    ${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
+
 // ── The week on one time axis ──────────────────────────────────────────────
-/* The week timetable and the day's axis were two views of one thing; now they are one. Seven day
-   columns share a time axis, three fit the screen and the rest scroll sideways (snapping per day).
-   Every hour in which anything happens on any day of the week gets a row — so 9:00 lines up across
-   the week — and the stretches between shrink to one line each, counting the housekeeping run
-   there. Events are the cards of the day view (name and time, colour by kind, outlined when still
-   to come); the hour column stays put while the days scroll. */
+/* Seven day columns on one time axis; three fit, the rest scroll sideways (snapping per day).
+   Every hour in which anything happens on any day gets a row, so an hour lines up across the week,
+   and the stretches between shrink to a thin band.
+
+   Scrolling is split by axis so a vertical swipe never drifts sideways: the box scrolls up and
+   down; inside it only the day columns scroll left and right. A browser hands a gesture to the
+   scroller of its own axis, which is the axis lock a single two-way scroller cannot give. The date
+   row is its own strip, kept in step with the columns, and pinned at the top of the box; the hour
+   labels sit outside the sideways scroller and take their row heights from it after drawing. */
 function _calWeekAxis(days, evByDay, today) {
   const nowIso = new Date().toISOString(), nowH = _calHour(nowIso);
   const main = (d) => evByDay[d.date].filter((e) => e.k !== 'bg');
@@ -1726,7 +1749,6 @@ function _calWeekAxis(days, evByDay, today) {
   let prev = 0;
   for (const h of [...hours, 24]) {
     if (h > prev) {
-      // today's 'now' splits the gap it falls in, so the red line sits where it belongs
       const cut = Math.floor(nowH);
       if (days.some((d) => d.date === today) && cut > prev && cut < h) segs.push({ gap: true, a: prev, b: cut }, { gap: true, a: cut, b: h });
       else segs.push({ gap: true, a: prev, b: h });
@@ -1735,20 +1757,34 @@ function _calWeekAxis(days, evByDay, today) {
     prev = h + 1;
   }
   const cell = (d, s) => {
-    const isNow = d.date === today && nowH >= s.a && nowH < s.b;
-    const nowMark = isNow ? `<span class="cal-wk-now">今 ${_calHm(nowIso)}</span>` : '';
+    const nowMark = d.date === today && nowH >= s.a && nowH < s.b ? `<span class="cal-wk-now">今 ${_calHm(nowIso)}</span>` : '';
     if (s.gap) return `<div class="cal-wk-cell gap">${nowMark}</div>`;
-    const ev = main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b);
-    return `<div class="cal-wk-cell">
-      ${ev.map((e) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${esc(e.tag)} · ${_calHm(e.at)}</small>${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`).join('')}
-      ${nowMark}</div>`;
+    return `<div class="cal-wk-cell">${main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b).map((e) => _calCard(e)).join('')}${nowMark}</div>`;
   };
-  const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${_calOver(d) ? ' over' : ''}${d.date < today ? ' past' : ''}">
+  const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}">
       <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b></div>`).join('');
-  const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? '' : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
-  return `<div class="cal-wk"><div class="cal-wk-scroll" id="cal-wk-scroll"><div class="cal-wk-grid" style="--n:${days.length}">
-      <div class="cal-wk-t cal-wk-corner"></div>${head}${rows}</div></div></div>
+  const style = `style="--n:${days.length}"`;
+  return `<div class="cal-wk"><div class="cal-wk-v" id="cal-wk-v">
+      <div class="cal-wk-top"><div class="cal-wk-corner"></div><div class="cal-wk-hds" id="cal-wk-hds"><div class="cal-wk-row" ${style}>${head}</div></div></div>
+      <div class="cal-wk-body">
+        <div class="cal-wk-times">${segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? '' : `${s.a}:00`}</div>`).join('')}</div>
+        <div class="cal-wk-h" id="cal-wk-scroll"><div class="cal-wk-grid" ${style}>${segs.map((s) => days.map((d) => cell(d, s)).join('')).join('')}</div></div>
+      </div></div></div>
     <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>`;
+}
+
+// After drawing: hour labels take their rows' heights, and the date strip follows the columns.
+function _calWeekWire() {
+  const sc = document.getElementById('cal-wk-scroll'), hds = document.getElementById('cal-wk-hds'), v = document.getElementById('cal-wk-v');
+  if (!sc || !hds || !v) return;
+  const n = CAL.days.length;
+  const cells = sc.querySelectorAll('.cal-wk-cell');
+  document.querySelectorAll('.cal-wk-times .cal-wk-t').forEach((t, r) => { t.style.height = `${cells[r * n]?.offsetHeight || 0}px`; });
+  sc.addEventListener('scroll', () => { hds.scrollLeft = sc.scrollLeft; }, { passive: true });
+  const i = CAL.days.findIndex((d) => d.date === _calSel);
+  if (i > 0) { sc.scrollLeft = (sc.querySelector('.cal-wk-cell')?.offsetWidth || 0) * i; hds.scrollLeft = sc.scrollLeft; }
+  const now = sc.querySelector('.cal-wk-now');
+  if (now) v.scrollTop = Math.max(0, now.closest('.cal-wk-cell').offsetTop - 140);
 }
 
 function _renderCalendar() {
@@ -1769,29 +1805,27 @@ function _renderCalendar() {
     const cell = (d) => {
       const ev = evByDay[d.date].filter((e) => e.k !== 'bg');
       const out = d.date.slice(0, 7) !== _calMonthKey();
-      return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
+      return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${d.date === _calSel ? ' sel' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
         <span class="cal-m-num">${Number(d.date.slice(8))}</span>
         <span class="cal-m-dots">${ev.slice(0, 6).map((e) => `<i class="k-${e.k}"></i>`).join('')}${ev.length > 6 ? `<small>+${ev.length - 6}</small>` : ''}</span></button>`;
     };
+    const sel = CAL.days.find((d) => d.date === _calSel);
+    const list = sel ? evByDay[sel.date].filter((e) => e.k !== 'bg') : [];
     box.innerHTML = `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map(cell).join('')}</div>
       <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>
-      <p class="cal-legend">日付をタップすると、その日からの週を開きます</p>`;
+      ${sel ? `<section class="cal-mday"><div class="cal-mday-hd"><b>${_calLabel(sel.date)}</b><button class="act-btn" onclick="calSelectDay('${sel.date}')">週で見る</button></div>
+        ${list.length ? `<div class="cal-mday-list">${list.map((e) => _calCard(e)).join('')}</div>` : '<div class="cal-empty">予定はありません</div>'}</section>` : ''}`;
     return;
   }
   box.innerHTML = _calWeekAxis(CAL.days, evByDay, today);
-  // open on today when it is in view (it is the first column unless the week was moved)
-  const i = CAL.days.findIndex((d) => d.date === _calSel);
-  const sc = document.getElementById('cal-wk-scroll');
-  if (sc && i > 0) sc.scrollLeft = sc.querySelector('.cal-wk-hd')?.offsetWidth * i || 0;
-  // The axis scrolls inside its own box (so the dates stay on top); open it a little above now.
-  const now = sc?.querySelector('.cal-wk-now');
-  if (sc && now) sc.scrollTop = Math.max(0, now.closest('.cal-wk-cell').offsetTop - 140);
+  _calWeekWire();
 }
 
-// In the month grid a day opens the week that starts on it, on the time axis.
+// In the month grid a tap selects a day (its events listed below); tapping it again opens the
+// week starting on it.
 function calSelectDay(key) {
+  if (_calMode === 'month' && _calSel === key) { _calMode = 'week'; _calFrom = key; CAL = null; _loadCalendar(); return; }
   _calSel = key;
-  if (_calMode === 'month') { _calMode = 'week'; _calFrom = key; CAL = null; _loadCalendar(); return; }
   _renderCalendar();
 }
 
