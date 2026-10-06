@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '123';
+const DASH_BUILD = '124';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1691,7 +1691,7 @@ function _calEvents(d) {
     const released = pend.some((a) => a.released);
     const at = new Date(Date.parse(`${d.date}T00:00:00Z`) + ((CAL.releaseHour ?? 9) - 9) * 3600e3).toISOString();
     const names = [...new Set(pend.map((a) => a.categoryName || _PROP_KIND_LABEL[a.kind] || a.kind))];
-    add({ type: 'appr', at, k: 'appr', name: `承認カード ${pend.length}件${released ? 'がDiscordに届いた' : 'が届く'}`, sub: names.join('・'), plan: !released, date: d.date });
+    add({ type: 'appr', at, k: 'appr', name: `承認カード ${pend.length}件${released ? 'がDiscordに届いた' : 'が届く'}`, short: `承認カード ${pend.length}件`, ssub: `${names.length}誌`, sub: names.join('・'), plan: !released, date: d.date });
   }
   const groups = new Map();
   for (const p of d.planned || []) {
@@ -1704,6 +1704,7 @@ function _calEvents(d) {
     const auto = mode === 'auto';
     const name = list.length === 1 ? `${auto ? '記事を書く' : '記事案を出す'}：${list[0].name}` : `${auto ? '記事を書く' : '記事案を出す'} ${list.length}誌`;
     add({ type: 'plan', at: at < new Date().toISOString() ? new Date().toISOString() : at, k: 'cont', name,
+      short: list.length === 1 ? name : `${auto ? '記事を書く' : '記事案'} ${list.length}誌`,
       sub: list.length === 1 ? (auto ? '自動' : '承認カード約3件') : `${list.map((p) => p.name).join('・')}${auto ? '' : `（カード約${list.length * 3}件）`}`, plan: true, list, date: d.date });
   }
   // Scheduled runs still to come; what already ran is a task above.
@@ -1715,73 +1716,52 @@ function _calEvents(d) {
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-// ── The week as a timetable ────────────────────────────────────────────────
-/* 7 columns × 24 hours, one small block per hour and kind with a count — the shape of the week at a
-   glance (10/8: 記11). Housekeeping is left out; a tap on a column opens that day below. */
-const _CAL_TAG = { appr: '承', cont: '記', res: '調', job: '週', fail: '✗' };
-function _calTimetable(days, evByDay, today) {
-  const PX = 13, H = 24 * PX;
-  const nowH = _calHour(new Date().toISOString());
-  const col = (d) => {
-    const by = {};
-    for (const e of evByDay[d.date].filter((x) => x.k !== 'bg')) {
-      const key = `${Math.floor(_calHour(e.at))}|${e.k}|${e.plan ? 1 : 0}`;
-      (by[key] ??= { h: Math.floor(_calHour(e.at)), k: e.k, plan: e.plan, n: 0 }).n += e.type === 'plan' ? e.list.length : 1;
-    }
-    let bottom = -99;
-    const blocks = Object.values(by).sort((a, b) => a.h - b.h || (a.k > b.k ? 1 : -1)).map((b) => {
-      const top = Math.min(H - 14, Math.max(b.h * PX, bottom + 1)); bottom = top + 13;
-      return `<i class="cal-tt-b k-${b.k}${b.plan ? ' plan' : ''}" style="top:${top}px">${_CAL_TAG[b.k]}${b.n > 1 ? b.n : ''}</i>`;
-    }).join('');
-    const over = _calOver(d) || _calCrowded(d);
-    return `<button class="cal-tt-col${d.date === _calSel ? ' sel' : ''}${d.date === today ? ' today' : ''}${over ? ' over' : ''}${d.date < today ? ' past' : ''}" style="height:${H}px"
-        onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)}" aria-pressed="${d.date === _calSel}">${blocks}
-      ${d.date === today ? `<span class="cal-now-line" style="top:${nowH * PX}px"></span>` : ''}</button>`;
-  };
-  return `<div class="cal-tt">
-    <div></div>${days.map((d) => `<button class="cal-tt-hd${d.date === _calSel ? ' sel' : ''}${d.date === today ? ' today' : ''}" onclick="calSelectDay('${d.date}')">${_CAL_WD[_calWd(d.date)]}<b>${Number(d.date.slice(8))}</b></button>`).join('')}
-    <div class="cal-tt-hrs" style="height:${H}px">${[0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span style="top:${h * PX}px">${h}</span>`).join('')}</div>
-    ${days.map(col).join('')}
-  </div>
-  <div class="cal-tt-lg">${['appr', 'cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}<span class="plan">点線＝これから</span></div>`;
-}
-
-// ── The selected day on a time axis ────────────────────────────────────────
-/* Hours with something in them get a row; the stretches between shrink to one line that counts
-   the housekeeping run there ("0:00〜9:00 裏方 12件"). The red line is now. */
-function _calAxis(d, evs, today) {
-  const main = evs.filter((e) => e.k !== 'bg'), bg = evs.filter((e) => e.k === 'bg');
-  const nowH = d.date === today ? _calHour(new Date().toISOString()) : d.date < today ? 25 : -1;
-  const hours = [...new Set(main.map((e) => Math.floor(_calHour(e.at))))].sort((a, b) => a - b);
-  const bgIn = (a, b) => bg.filter((e) => _calHour(e.at) >= a && _calHour(e.at) < b);
-  const bgText = (list) => {
-    if (!list.length) return '';
-    const names = [...new Set(list.map((e) => e.name.split('：')[0]))];
-    return `裏方 ${list.length}件（${names.slice(0, 2).join('・')}${names.length > 2 ? ' ほか' : ''}）`;
-  };
-  const gap = (a, b) => b > a ? `<div class="cal-gap"><b>${a}:00〜${b}:00</b>${bgText(bgIn(a, b)) || '予定なし'}</div>` : '';
-  const now = `<div class="cal-now">今 ${_calHm(new Date().toISOString())}</div>`;
-  let html = '', prev = 0;
+// ── The week on one time axis ──────────────────────────────────────────────
+/* The week timetable and the day's axis were two views of one thing; now they are one. Seven day
+   columns share a time axis, three fit the screen and the rest scroll sideways (snapping per day).
+   Every hour in which anything happens on any day of the week gets a row — so 9:00 lines up across
+   the week — and the stretches between shrink to one line each, counting the housekeeping run
+   there. Events are the cards of the day view (name and time, colour by kind, outlined when still
+   to come); the hour column stays put while the days scroll. */
+function _calWeekAxis(days, evByDay, today) {
+  const nowIso = new Date().toISOString(), nowH = _calHour(nowIso);
+  const main = (d) => evByDay[d.date].filter((e) => e.k !== 'bg');
+  const bg = (d) => evByDay[d.date].filter((e) => e.k === 'bg');
+  const hours = [...new Set(days.flatMap((d) => main(d).map((e) => Math.floor(_calHour(e.at)))))].sort((a, b) => a - b);
+  const segs = [];
+  let prev = 0;
   for (const h of [...hours, 24]) {
-    if (h > prev) html += nowH >= prev && nowH < h ? gap(prev, Math.floor(nowH)) + now + gap(Math.floor(nowH), h) : gap(prev, h);
-    if (h === 24) break;
-    const row = main.filter((e) => Math.floor(_calHour(e.at)) === h);
-    const bgRow = bgIn(h, h + 1);
-    html += `<div class="cal-row"><span class="cal-row-h">${h}:00</span><div class="cal-row-ev">
-      ${row.map((e) => `<button class="cal-ev k-${e.k}${e.plan ? ' plan' : ''}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${_calHm(e.at)} · ${esc(e.sub || '')}</small></button>`).join('')}
-      ${bgRow.length ? `<div class="cal-bg">${bgText(bgRow)}</div>` : ''}</div></div>`;
-    if (nowH >= h && nowH < h + 1) html += now;
+    if (h > prev) {
+      // today's 'now' splits the gap it falls in, so the red line sits where it belongs
+      const cut = Math.floor(nowH);
+      if (days.some((d) => d.date === today) && cut > prev && cut < h) segs.push({ gap: true, a: prev, b: cut }, { gap: true, a: cut, b: h });
+      else segs.push({ gap: true, a: prev, b: h });
+    }
+    if (h < 24) segs.push({ gap: false, a: h, b: h + 1 });
     prev = h + 1;
   }
-  const c = _calCounts(d);
-  const sum = [c.cards ? `承認 ${c.cards}件` : '', c.apprPlan ? `記事案 ${c.apprPlan}誌` : '', c.artNow + c.artPlan ? `記事 ${c.artNow + c.artPlan}本` : '',
-    `タスク ${_calTasks(d).length}`].filter(Boolean).join(' · ');
-  return `<section class="cal-day${d.date === today ? ' today' : ''}" id="cal-${d.date}">
-    <div class="cal-day-hd"><span class="cal-day-date">${_calLabel(d.date)}${d.date === today ? ' <b>今日</b>' : ''}</span><span class="cal-day-count">${sum}</span></div>
-    ${main.length || bg.length ? html : '<div class="cal-empty">予定はありません</div>'}
-    ${d.articles.length ? `<div class="cal-sec art"><div class="cal-group-label">書いた記事</div>${d.articles.map(_calArticle).join('')}</div>` : ''}
-    ${d.bundles.length ? `<div class="cal-sec bun"><div class="cal-group-label">まとめファイル</div>${d.bundles.map(_calBundle).join('')}</div>` : ''}
-  </section>`;
+  const bgText = (list) => list.length ? `裏方 ${list.length}` : '';
+  const cell = (d, s) => {
+    const isNow = d.date === today && nowH >= s.a && nowH < s.b;
+    const nowMark = isNow ? `<span class="cal-wk-now">今 ${_calHm(nowIso)}</span>` : '';
+    const inSeg = (e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b;
+    const b = bg(d).filter(inSeg);
+    if (s.gap) return `<div class="cal-wk-cell gap${d.date === today ? ' today' : ''}">${bgText(b) ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
+    const ev = main(d).filter(inSeg);
+    return `<div class="cal-wk-cell${d.date === today ? ' today' : ''}">
+      ${ev.map((e) => `<button class="cal-ev k-${e.k}${e.plan ? ' plan' : ''}" onclick="calOpenEvent(${e.i})"><b>${esc(e.short || e.name)}</b><small>${_calHm(e.at)}${e.plan ? '' : ` · ${esc(e.ssub ?? e.sub ?? '')}`}</small></button>`).join('')}
+      ${b.length ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
+  };
+  const head = days.map((d) => {
+    const c = _calCounts(d), over = _calOver(d) || _calCrowded(d);
+    return `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${over ? ' over' : ''}${d.date < today ? ' past' : ''}">
+      <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b>
+      <small>${[c.cards ? `承認${c.cards}` : '', c.apprPlan ? `案${c.apprPlan}誌` : '', _calTasks(d).filter((t) => !_CAL_BG.has(t.type)).length ? `タスク${_calTasks(d).filter((t) => !_CAL_BG.has(t.type)).length}` : ''].filter(Boolean).join(' · ') || '—'}</small></div>`;
+  }).join('');
+  const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? `${s.a}–${s.b}` : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
+  return `<div class="cal-wk"><div class="cal-wk-scroll" id="cal-wk-scroll"><div class="cal-wk-grid" style="--n:${days.length}">
+      <div class="cal-wk-t cal-wk-corner"></div>${head}${rows}</div></div></div>
+    <div class="cal-tt-lg">${['appr', 'cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}<span class="plan">枠だけ＝これから</span></div>`;
 }
 
 function _renderCalendar() {
@@ -1797,15 +1777,22 @@ function _renderCalendar() {
   if (range) range.textContent = _calRangeText();
   _calEv = [];
   const evByDay = Object.fromEntries(CAL.days.map((d) => [d.date, _calEvents(d)]));
-  const top = month
-    ? `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map((d) => _calCell(d, today, { month })).join('')}</div>${_calLegend()}`
-    : _calTimetable(CAL.days, evByDay, today);
-  const sel = CAL.days.find((d) => d.date === _calSel);
-  box.innerHTML = top + _calWarn(today) + (sel ? _calAxis(sel, evByDay[sel.date], today) : '');
+  if (month) {
+    const grid = `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map((d) => _calCell(d, today, { month })).join('')}</div>${_calLegend()}`;
+    box.innerHTML = grid + _calWarn(today) + '<p class="cal-legend">日付をタップすると、その日からの週を時間軸で開きます</p>';
+    return;
+  }
+  box.innerHTML = _calWarn(today) + _calWeekAxis(CAL.days, evByDay, today);
+  // open on today when it is in view (it is the first column unless the week was moved)
+  const i = CAL.days.findIndex((d) => d.date === _calSel);
+  const sc = document.getElementById('cal-wk-scroll');
+  if (sc && i > 0) sc.scrollLeft = sc.querySelector('.cal-wk-hd')?.offsetWidth * i || 0;
 }
 
+// In the month grid a day opens the week that starts on it, on the time axis.
 function calSelectDay(key) {
   _calSel = key;
+  if (_calMode === 'month') { _calMode = 'week'; _calFrom = key; CAL = null; _loadCalendar(); return; }
   _renderCalendar();
 }
 
