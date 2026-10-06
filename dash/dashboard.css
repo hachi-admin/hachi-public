@@ -3361,3 +3361,49 @@ body.sheet-open{overflow:hidden}
 .office-chip.bad::after{content:'！';margin-left:2px}
 .office-box{height:min(62vh,560px);overflow-y:auto;border-radius:12px;box-shadow:var(--d-well);background:#e7eaf1;overscroll-behavior:contain}
 .office-box canvas{display:block;image-rendering:pixelated;cursor:pointer}
+
+/* ── Calendar, 2026-10-06 ──
+   One compact control row (週/月 · ‹ range › · 定期ジョブ); the week lists every day under the strip;
+   each day is split into colour-keyed sections in the order you act on them. */
+.cal-nav{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-bottom:10px}
+.cal-step{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}
+.cal-step .act-btn{min-width:40px;padding:0 10px}
+.cal-range{margin:0;border:0;background:none;font:inherit;font-size:14px;font-weight:700;color:var(--text);min-height:40px;padding:0 6px;cursor:pointer;white-space:nowrap}
+.cal-jobs-btn.active{color:var(--accent);box-shadow:var(--sh-in)}
+.cal-m-cell.past:not(.today){opacity:.6}
+.cal-m-cell.over{box-shadow:var(--sh-sm),inset 0 0 0 2px var(--warn)}
+.cal-m-cell.over.today{box-shadow:var(--sh-sm),inset 0 0 0 2px var(--accent),inset 0 0 0 4px var(--warn)}
+.cal-m-legend{font-size:11.5px;gap:4px 12px;margin-bottom:10px}
+.cal-m-legend .cal-m-pill{min-width:14px;line-height:14px;font-size:10px;padding:0 3px}
+.cal-warn{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border-radius:12px;font-size:12.5px;line-height:1.5;
+  background:color-mix(in srgb,var(--warn) 14%,var(--surface));color:var(--text)}
+.cal-warn span{flex:1}
+.cal-warn .act-btn{min-height:38px;font-size:12.5px;white-space:nowrap}
+.cal-day{scroll-margin-top:120px}
+.cal-day-hd{padding-bottom:6px;border-bottom:1px solid color-mix(in srgb,var(--m) 22%,transparent)}
+.cal-sec{position:relative;padding-left:12px;margin-top:10px}
+.cal-sec::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--m)}
+.cal-sec.appr::before{background:var(--accent)}
+.cal-sec.plan::before{background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.cal-sec.art::before{background:var(--success)}
+.cal-sec.job::before{background:var(--info)}
+.cal-sec.bun::before{background:var(--warn)}
+.cal-sec .cal-group-label{margin:0 0 4px}
+.cal-group-label span{font-weight:400;margin-left:6px;letter-spacing:0}
+.cal-appr.sent .cal-item-meta{color:var(--accent)}
+.cal-plan-row{display:flex;gap:10px;padding:6px 0;border-top:1px solid color-mix(in srgb,var(--m) 22%,transparent)}
+.cal-plan-row:first-of-type{border-top:0}
+.cal-plan-row .cal-job-time{padding-top:1px}
+.cal-plan-main{flex:1;min-width:0;display:grid;gap:4px}
+.cal-plan-main .cal-item-title small{font-size:12px;color:var(--muted);margin-left:6px}
+.cal-plan-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cal-chip{border:0;font:inherit;font-size:12.5px;line-height:1.3;padding:6px 10px;min-height:32px;border-radius:10px;cursor:pointer;text-align:left;
+  background:var(--bg);color:var(--text);box-shadow:var(--sh-sm)}
+.cal-chip.auto{color:var(--success)}
+.cal-daily summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;min-height:40px;padding:8px 0;font-size:13px;
+  border-top:1px solid color-mix(in srgb,var(--m) 22%,transparent)}
+.cal-daily summary::-webkit-details-marker{display:none}
+.cal-daily summary::after{content:"▾";margin-left:auto;color:var(--muted)}
+.cal-daily[open] summary::after{content:"▴"}
+.cal-daily summary span{font-size:12px;color:var(--muted);flex-basis:100%}
+.cal-sec .cal-item:first-of-type,.cal-sec .cal-appr:first-of-type{border-top:0}
