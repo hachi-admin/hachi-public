@@ -3499,3 +3499,24 @@ body.sheet-open{overflow:hidden}
 .cal-wk-t{border-top:1px solid color-mix(in srgb,var(--m) 18%,transparent)}
 .cal-wk-grid{column-gap:0}
 .cal-wk-grid{grid-template-columns:34px repeat(var(--n),calc((100cqw - 48px) / 3))}
+/* Cards carry a line or three under the name: the ideas of a slate, a job's purpose, an article's title. */
+.cal-ev-lines{display:grid;gap:2px;margin-top:3px}
+.cal-ev-lines i{font-style:normal;font-size:10.5px;line-height:1.35;color:var(--txt);opacity:.8;padding-left:7px;position:relative;word-break:break-word}
+.cal-ev-lines i::before{content:"";position:absolute;left:0;top:.55em;width:3px;height:3px;border-radius:50%;background:var(--c)}
+.cal-ideas{display:grid;border-radius:14px;box-shadow:var(--sh-in);padding:2px 12px}
+.cal-idea{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid color-mix(in srgb,var(--m) 18%,transparent)}
+.cal-idea:first-child{border-top:0}
+.cal-idea>div{flex:1;min-width:0;display:grid;gap:2px}
+.cal-idea b{font-size:13.5px;line-height:1.45;font-weight:600}
+.cal-idea small{font-size:12px;color:var(--m);line-height:1.5}
+.cal-idea .act-btn{flex:none;min-height:38px;font-size:12.5px;padding:0 12px}
+.cal-sheet-sec{display:grid;gap:8px;margin-top:4px}
+.cal-sheet-sub{font-size:13px;font-weight:700}.cal-sheet-sub small{font-weight:400;color:var(--m);margin-left:6px}
+/* Header: weekday above the date for every day, today's date in a pill. No gap left of the hour column. */
+.cal-wk-hd b{display:block}
+.cal-wk-hd.today b{display:inline-block;margin-top:1px}
+.cal-wk{margin:0}
+.cal-wk-scroll{padding:0 0 6px;scroll-padding-left:34px}
+.cal-wk-grid{grid-template-columns:34px repeat(var(--n),calc((100cqw - 34px) / 3))}
+.cal-wk-t,.cal-wk-corner{box-shadow:6px 0 6px -6px color-mix(in srgb,var(--m) 25%,transparent)}
+.cal-wk-hd span{display:block}

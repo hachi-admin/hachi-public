@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '127';
+const DASH_BUILD = '128';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1564,18 +1564,25 @@ function _calSchedText(freq, s) {
   if (freq === 'every_2_days') return `2日ごと ${h}`;
   return `毎日 ${h}`;
 }
-function calMagazineSheet(id) {
+// The weekday/time block of a magazine, for any sheet that concerns it; '' when the calendar has
+// nothing scheduled for it.
+function _calMagSched(id) {
   const all = (CAL?.days || []).flatMap((d) => d.planned || []).filter((p) => p.categoryId === id);
-  if (!id || !all.length) { calOpenMagazine(id); return; }
+  if (!id || !all.length) return '';
   const p = all[0];
   const freq = p.freq || 'weekly';
   const today = _calTodayKey();
   const next = all.map((x) => _calDayOf(x.at)).find((k) => k >= today) || today;
   const seen = [...new Set(all.filter((x) => _calDayOf(x.at) >= today).map((x) => _calWd(_calDayOf(x.at))))];
-  _calSched = { id, freq, weekdays: [...(p.schedule?.weekdays || seen.slice(0, _CAL_WD_NEED[freq] || 1))], hour: p.schedule?.hour ?? _calHour(p.at) | 0, minute: p.schedule?.minute ?? 0, anchor: p.schedule?.anchor || next };
-  _calSheet(`<div class="cal-sheet-k k-cont">${p.mode === 'auto' ? '記事' : '案'}</div><div class="cal-sheet-hd">${esc(p.name)}</div>
-    <div class="cal-item-meta">${esc(_CAL_FREQ_JA[freq] || '')}</div>
-    <div id="cal-sched-edit">${_calSchedEditor()}</div>`);
+  _calSched = { id, freq, weekdays: [...(p.schedule?.weekdays || seen.slice(0, _CAL_WD_NEED[freq] || 1))],
+    hour: p.schedule?.hour ?? _calHour(p.at) | 0, minute: p.schedule?.minute ?? 0, anchor: p.schedule?.anchor || next };
+  return `<div class="cal-sheet-sec"><div class="cal-sheet-sub">案を作る曜日・時刻<small>${esc(_CAL_FREQ_JA[freq] || '')}</small></div><div id="cal-sched-edit">${_calSchedEditor()}</div></div>`;
+}
+function calMagazineSheet(id) {
+  const p = (CAL?.days || []).flatMap((d) => d.planned || []).find((x) => x.categoryId === id);
+  const sched = _calMagSched(id);
+  if (!p || !sched) { calOpenMagazine(id); return; }
+  _calSheet(`${_calSheetHd('cont', p.name, p.mode === 'auto' ? '自動で記事を書いて公開' : '3案を作り、届く前にここで確認・作り直しできます', p.mode === 'auto' ? '記事を書く' : '案を作る')}${sched}`);
 }
 function _calSchedEditor() {
   const s = _calSched, need = _CAL_WD_NEED[s.freq];
@@ -1611,6 +1618,25 @@ async function calSaveSchedule() {
   }).catch(() => null);
   if (!res?.ok) { showToast('変更できませんでした', 'error'); return; }
   showToast(`${_calSchedText(s.freq, schedule)} にしました`, 'success');
+  _loadCalendar();
+}
+
+// One idea of a slate, proposed again (about half a minute: a model call and a new tile).
+async function calRegen(id, btn) {
+  btn.disabled = true; btn.textContent = '作り直し中…';
+  const res = await fetch(apiUrl(`/api/proposals/${encodeURIComponent(id)}/regenerate`), { method: 'POST', headers: _authHeaders() }).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (!res?.ok) { btn.disabled = false; btn.textContent = '作り直す'; showToast(data?.error || '作り直せませんでした', 'error'); return; }
+  const row = document.getElementById(`cal-idea-${id}`);
+  if (row) {
+    row.id = `cal-idea-${data.id}`;
+    row.querySelector('b').textContent = String(data.title || '').replace(/^\d+\.\s*/, '');
+    const small = row.querySelector('small') || row.firstElementChild.appendChild(document.createElement('small'));
+    small.textContent = data.description || '';
+    btn.disabled = false; btn.textContent = '作り直す';
+    btn.setAttribute('onclick', `calRegen('${data.id}',this)`);
+  }
+  showToast('案を作り直しました', 'success');
   _loadCalendar();
 }
 
@@ -1652,8 +1678,17 @@ function _calRangeText() {
 const _CAL_BG = new Set([...ROUTINE_TYPES, 'note_import_bundle', 'proposal_expiry', 'integrity_audit', 'experiment_check',
   'plan', 'category_backfill', 'recipe_sample_fill', 'news_digest']);
 const _CAL_CONT = new Set(['article_ideas', 'article_generate', 'article_url_ideas', 'content']);
-const _CAL_KIND_JA = { appr: '承認', cont: '記事', res: '調査', job: '週次ジョブ', fail: '失敗', bg: '裏方' };
-const _calKind = (t) => t.status === 'failed' ? 'fail' : _CAL_BG.has(t.type) ? 'bg' : _CAL_CONT.has(t.type) ? 'cont'
+const _CAL_KIND_JA = { appr: '記事', cont: '記事', res: '調査', job: 'ジョブ', fail: '失敗', bg: '裏方' };
+// One line under a job's name: what it does.
+const _CAL_DESC = {
+  topic_scout: 'noteの流行りから新しいマガジン候補を探す', note_study: '伸びているnote記事の傾向を調べる',
+  note_stats: '公開した記事の反応を集める', advisor_review: '1週間の動きを見て助言する', design_audit: 'ダッシュボードの見た目を点検',
+  efficiency_audit: '使った費用と効果を点検', infer_location: '最近の様子から現在地を推定', visionary_review: '先の構想を考える',
+  channel_audit: 'Discordのチャンネル構成を点検', news_digest: '朝のニュースをまとめて配信', scout: '国内外のトレンドを調べて報告',
+  fact_check_news: 'ニュースの事実を確認', deep_context: 'Wikiの知識ページを作る', import_scout: '海外の話題から題材を探す',
+};
+// A finished idea run is shown by the slate it made (when it reaches Discord), so the run itself is housekeeping.
+const _calKind = (t) => t.status === 'failed' ? 'fail' : _CAL_BG.has(t.type) || (t.type === 'article_ideas' && t.status === 'completed') ? 'bg' : _CAL_CONT.has(t.type) ? 'cont'
   : /audit|advisor|visionary|channel/.test(t.type) ? 'job' : 'res';
 const _calHour = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600e3); return d.getUTCHours() + d.getUTCMinutes() / 60; };
 const _calHm = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600e3); return `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}`; };
@@ -1681,10 +1716,15 @@ function _calEvents(d) {
     const k = _calKind(t), subj = _calSubject(t);
     const cont = _CAL_CONT.has(t.type);
     const tag = t.status === 'failed' ? '失敗' : cont ? (t.type === 'article_generate' ? '記事' : '案') : _CAL_TAG_JA[k] || '調査';
-    add({ type: 'task', at: t.at, k, name: cont && subj ? subj : (TASK_TYPE_LABELS[t.type] || taskTitle(t)), tag, task: t, date: d.date });
+    // what it produced or does: an article's title, a job's purpose, a failure's reason
+    const art = t.type === 'article_generate' ? d.articles.find((a) => a.categoryName === subj) : null;
+    const lines = t.status === 'failed' ? [t.error || ''] : art ? [art.title] : _CAL_DESC[t.type] ? [_CAL_DESC[t.type]] : [];
+    add({ type: 'task', at: t.at, k, name: cont && subj ? subj : (TASK_TYPE_LABELS[t.type] || taskTitle(t)), tag, lines, art, task: t, date: d.date });
   }
-  // One event per slate, at the time it reaches Discord (one slate every 15 minutes from the
-  // release hour); an older service sends no time, so the same spacing is drawn here.
+  /* A slate of ideas is shown where it reaches Discord (one slate every 15 minutes from the
+     release hour), with its ideas on the card: approving them is the article's next step, so it
+     is an article event, not a separate kind. An older service sends no time; the spacing is
+     drawn here then. */
   const slates = new Map();
   for (const a of d.approvals.filter((x) => x.status === 'pending')) {
     const key = a.slotGroup || a.id;
@@ -1694,17 +1734,19 @@ function _calEvents(d) {
   [...slates.values()].forEach((cards, n) => {
     const first = cards[0];
     const at = first.releaseAt || new Date(Date.parse(`${d.date}T00:00:00Z`) + ((CAL.releaseHour ?? 9) - 9) * 3600e3 + n * 15 * 60e3).toISOString();
-    add({ type: 'appr', at, k: 'appr', name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind,
-      tag: `承認 ${cards.length}件`, cards, date: d.date });
+    const ideas = first.kind === 'article_idea';
+    add({ type: 'appr', at, k: 'cont', name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind,
+      tag: ideas ? `案 ${cards.length}件` : `承認 ${cards.length}件`, lines: cards.map((c) => String(c.title || '').replace(/^\d+\.\s*/, '')), cards, date: d.date });
   });
   for (const p of d.planned || []) {
     const at = p.at < new Date().toISOString() ? new Date().toISOString() : p.at;
-    add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事' : '案', plan: p, date: d.date });
+    add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事を書く' : '案を作る',
+      lines: [p.mode === 'auto' ? '自動で書いて公開' : '3案を作り、承認待ちへ'], plan: p, date: d.date });
   }
   // Scheduled runs still to come; what already ran is a task above.
   for (const j of d.jobs || []) {
     if (j.status !== 'scheduled' || !j.at) continue;
-    add({ type: 'job', at: j.at, k: _calNotableJob(j) ? 'job' : 'bg', name: _calJobName(j), tag: 'ジョブ', job: j, date: d.date });
+    add({ type: 'job', at: j.at, k: _calNotableJob(j) ? 'job' : 'bg', name: _calJobName(j), tag: 'ジョブ', lines: _CAL_DESC[j.type] ? [_CAL_DESC[j.type]] : [], job: j, date: d.date });
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
@@ -1742,7 +1784,7 @@ function _calWeekAxis(days, evByDay, today) {
     if (s.gap) return `<div class="cal-wk-cell gap${d.date === today ? ' today' : ''}">${bgText(b) ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
     const ev = main(d).filter(inSeg);
     return `<div class="cal-wk-cell${d.date === today ? ' today' : ''}">
-      ${ev.map((e) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${esc(e.tag)} · ${_calHm(e.at)}</small></button>`).join('')}
+      ${ev.map((e) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})"><b>${esc(e.name)}</b><small>${esc(e.tag)} · ${_calHm(e.at)}</small>${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`).join('')}
       ${b.length ? `<span class="cal-wk-bg">${bgText(b)}</span>` : ''}${nowMark}</div>`;
   };
   const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${_calOver(d) ? ' over' : ''}${d.date < today ? ' past' : ''}">
@@ -1750,7 +1792,7 @@ function _calWeekAxis(days, evByDay, today) {
   const rows = segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? `${s.a}–${s.b}` : `${s.a}:00`}</div>${days.map((d) => cell(d, s)).join('')}`).join('');
   return `<div class="cal-wk"><div class="cal-wk-scroll" id="cal-wk-scroll"><div class="cal-wk-grid" style="--n:${days.length}">
       <div class="cal-wk-t cal-wk-corner"></div>${head}${rows}</div></div></div>
-    <div class="cal-tt-lg">${['appr', 'cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>`;
+    <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>`;
 }
 
 function _renderCalendar() {
@@ -1803,9 +1845,14 @@ function calOpenEvent(i) {
   if (e.type === 'job') return calEditJob(e.job.type);
   if (e.type === 'appr') {
     const sent = e.cards.some((c) => c.released);
-    return _calSheet(`${_calSheetHd('appr', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} · Discordの #approvals ${sent ? 'で回答待ち' : 'に届く'}`, '承認')}
-      <div class="cal-sheet-list">${e.cards.map((c) => `<div class="cal-sheet-row"><span>${esc(c.title || c.choices?.[0]?.label || '')}</span></div>`).join('')}</div>
-      ${sent ? '' : `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>`}`);
+    const ideas = e.cards[0].kind === 'article_idea';
+    const catId = e.cards[0].categoryId;
+    return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, e.tag)}
+      <div class="cal-ideas">${e.cards.map((c) => `<div class="cal-idea" id="cal-idea-${esc(c.id)}">
+        <div><b>${esc(String(c.title || '').replace(/^\d+\.\s*/, ''))}</b>${c.description ? `<small>${esc(c.description)}</small>` : ''}</div>
+        ${ideas && !sent ? `<button class="act-btn" onclick="calRegen('${esc(c.id)}',this)">作り直す</button>` : ''}</div>`).join('')}</div>
+      ${sent ? '<p class="cal-job-note">届いた案はDiscordで承認・却下します。</p>' : `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>`}
+      ${catId ? _calMagSched(catId) : ''}`);
   }
   // a task
   const t = e.task;
