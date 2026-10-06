@@ -141,6 +141,7 @@
       if (['fox', 'shiba', 'squirrel'].includes(kind)) r(6, 8, 4, 3, '#fff6ea');
       const eye = pose === 'blink' ? shade(C, .7) : '#111';
       if (pose === 'ko') for (const ex of [6, 9]) { p(ex - 1, 5, '#111'); p(ex + 1, 5, '#111'); p(ex, 6, '#111'); p(ex - 1, 7, '#111'); p(ex + 1, 7, '#111'); }
+      else if (pose === 'tired' || pose === 'tiredReach') { r(5, 6, 2, 1, '#111'); r(9, 6, 2, 1, '#111'); p(5, 7, shade(C, .75)); p(10, 7, shade(C, .75)); }
       else { p(6, 6, eye); p(9, 6, eye); }
       if (['pigeon', 'bird', 'chick', 'owl'].includes(kind)) r(7, 8, 2, 1, '#f28c28');
       else if (kind !== 'elephant' && kind !== 'beaver') { p(7, 8, shade(C, .55)); p(8, 8, shade(C, .55)); }
@@ -156,7 +157,11 @@
       r(4, 17, 8, 3, null);
       if (pose === 'walk1') { r(4, 17, 2, 2, leg); r(9, 17, 2, 3, leg); } else { r(5, 17, 2, 3, leg); r(10, 17, 2, 2, leg); }
     }
-    if (pose === 'mug') { r(11, 12, 3, 3, '#ffffff'); p(14, 13, '#ffffff'); p(12, 11, 'rgba(255,255,255,.5)'); }
+    if (pose === 'reach' || pose === 'tiredReach') {           // arm out, working a machine
+      if (kind === 'robot') r(11, 12, 5, 1, '#8e99ad');
+      else { r(12, 13, 1, 3, null); r(12, 12, 4, 1, C); }
+    }
+    if (kind === 'robot' && (pose === 'tired' || pose === 'tiredReach')) { p(6, 6, '#3d6b62'); p(9, 6, '#3d6b62'); }
     // the prop that says what they do (typing pose shifts the hand)
     const hy = pose === 'type' ? 14 : 13;
     const PROP = {
@@ -184,7 +189,7 @@
       frame: () => { r(10, hy - 2, 5, 4, '#c9a06a'); r(11, hy - 1, 3, 2, '#9fd8ff'); },
       bag: () => { r(10, hy - 1, 5, 4, '#e57373'); p(11, hy - 2, '#e57373'); p(13, hy - 2, '#e57373'); },
     };
-    if (prop && PROP[prop] && pose !== 'mug') PROP[prop]();
+    if (prop && PROP[prop] && pose !== 'reach' && pose !== 'tiredReach') PROP[prop]();
     // outline
     const o = g.map((row) => row.slice());
     for (let y = 0; y < 20; y++) for (let x = 0; x < 16; x++)
@@ -223,156 +228,239 @@
 
 
   // ── the floor: zones people move between ────────────────────────────────────
-  // Operator, 2026-10-05: one desk per agent made a boring office; then "a coffee space, printing,
-  // emailing, meeting, sofas…". Each floor is laid out in zones:
-  //   left: shared desks (as many as are working)   centre: meeting table under the board
-  //   right: coffee bar with stools                  bottom: print & mail station, vending
-  //   machine, phone booth, and the sofa lounge.
+  // Operator, 2026-10-05/06: fewer desks; a coffee bar, printing, mail, meetings, sofas; people
+  // *use* what is there (brew, buy, print, post, browse); overworked agents tire; everyone keeps
+  // their department's species but can take the lift to visit other floors — Orch. most of all.
+  //   left: shared desks   centre: meeting table under the board   right: coffee bar + stools
+  //   bottom: copier, postbox, vending machine, phone booth, sofa lounge.   EV: the lift, top right.
   const FH = 330, WALL = 54;
   const DESKS = [{ x: 14, y: 108 }, { x: 100, y: 108 }, { x: 14, y: 182 }, { x: 100, y: 182 }];
   const SPOT = {
-    coffee:  [{ x: 330, y: 112 }],
+    coffee:  [{ x: 316, y: 108, face: 1 }],
     bar:     [{ x: 318, y: 156, sit: 1 }, { x: 348, y: 156, sit: 1 }, { x: 376, y: 156, sit: 1 }],
-    meet:    [{ x: 228, y: 140, sit: 1 }, { x: 296, y: 140, sit: 1 }, { x: 228, y: 176, sit: 1 }, { x: 296, y: 176, sit: 1 }],
+    meet:    [{ x: 228, y: 140, sit: 1 }, { x: 296, y: 140, sit: 1, face: -1 }, { x: 228, y: 176, sit: 1 }, { x: 296, y: 176, sit: 1, face: -1 }],
     present: [{ x: 262, y: 106 }],
-    print:   [{ x: 32, y: 288 }], mail: [{ x: 74, y: 288 }], vend: [{ x: 112, y: 288 }], phone: [{ x: 160, y: 286 }],
+    print:   [{ x: 54, y: 290, face: -1 }], mail: [{ x: 92, y: 290, face: -1 }], vend: [{ x: 134, y: 292, face: -1 }], phone: [{ x: 160, y: 284 }],
     sofa:    [{ x: 252, y: 292, sit: 1 }, { x: 288, y: 292, sit: 1 }, { x: 324, y: 292, sit: 1 }],
-    window:  [{ x: 112, y: 76 }, { x: 172, y: 76 }], plant: [{ x: 366, y: 240 }], dept: [{ x: 244, y: 78 }],
+    window:  [{ x: 112, y: 76 }, { x: 172, y: 76 }], plant: [{ x: 352, y: 246, face: 1 }], dept: [{ x: 244, y: 78 }],
+    ev:      [{ x: 366, y: 84 }],
   };
-  // How likely each errand is; some agents have a favourite that fits their job.
-  const BASE = { coffee: 3, bar: 3, sofa: 3, print: 2, mail: 1, vend: 2, phone: 1, window: 2, plant: 1, dept: 2, chat: 4, wander: 2 };
+  // How long a machine takes, what it hands over, and what it says.
+  const USE = {
+    coffee: { ms: 3200, item: 'mug', then: ['bar', 'sofa', 'pc', 'window'], line: ['コーヒー淹れる{e}', 'いい香り{e}'] },
+    vend:   { ms: 1500, item: 'can', then: ['sofa', 'wander', 'chat'], line: ['ガコン！', 'どれにしよう{e}'] },
+    print:  { ms: 2600, item: 'paper', then: ['meet', 'pc', 'deliver'], line: ['印刷する{e}', '刷り上がった{e}！'] },
+    mail:   { ms: 1400, item: null, then: ['wander', 'coffee'], line: ['メール送った{e}', 'お便り出す{e}'] },
+    phone:  { ms: 5000, item: null, then: ['wander'], line: ['もしもし{e}', 'はい、承知した{e}'] },
+    pc:     { ms: 7000, item: null, then: ['coffee', 'wander', 'chat'], line: ['調べもの{e}', 'ネットサーフィン{e}'] },
+  };
+  const BASE = { coffee: 4, vend: 2, print: 2, mail: 1, phone: 1, pc: 3, sofa: 3, window: 2, plant: 1, dept: 2, chat: 4, wander: 2, visit: 2 };
   const FAV = {
-    'mail-agent': { mail: 12 }, 'chat-agent': { phone: 10 }, 'news-agent': { print: 8 }, 'article-writer': { print: 6 },
-    'drafting-agent': { print: 5 }, 'article-ideas': { print: 4 }, 'financial-agent': { vend: 4 }, 'scout-agent': { window: 6 },
-    'location-agent': { window: 6 }, 'visionary': { window: 8 }, 'lint-agent': { dept: 6 }, 'context-agent': { dept: 6 },
-    'system-audit-agent': { dept: 6 }, 'orchestrator': { coffee: 4 }, 'slide-agent': { print: 5 }, 'product-pick': { vend: 4 },
+    'orchestrator': { visit: 22, chat: 6 },                                  // the boss walks the building
+    'mail-agent': { mail: 12 }, 'chat-agent': { phone: 10 }, 'news-agent': { print: 8 }, 'article-writer': { print: 6, pc: 4 },
+    'drafting-agent': { print: 5 }, 'article-ideas': { print: 4, visit: 4 }, 'financial-agent': { vend: 4, pc: 4 }, 'scout-agent': { window: 6, pc: 4 },
+    'location-agent': { window: 6 }, 'visionary': { window: 8 }, 'lint-agent': { dept: 6 }, 'context-agent': { dept: 6, visit: 3 },
+    'system-audit-agent': { dept: 6, visit: 5 }, 'dev-agent': { pc: 6, coffee: 6 }, 'review-agent': { visit: 5 }, 'slide-agent': { print: 5 },
+    'product-pick': { vend: 4 }, 'advisor': { visit: 6 }, 'design-critic': { visit: 6 }, 'article-angle': { visit: 3 },
   };
+  // Where a visit tends to go: who works with whom.
+  const VISIT = { exec: ['intel', 'dev', 'plan', 'write', 'art', 'lib'], intel: ['exec', 'plan', 'lib'], lib: ['write', 'plan', 'intel'],
+    dev: ['exec', 'intel', 'lib', 'plan', 'write', 'art'], plan: ['write', 'art', 'intel'], write: ['plan', 'art', 'lib'], art: ['write', 'plan'] };
   const SOLO = {
-    coffee: ['コーヒー淹れる{e}', 'いい香り{e}'], bar: ['ほっと一息{e}', 'もう一杯いく{e}'], sofa: ['ふかふか{e}', 'ひと休み{e}'],
-    print: ['印刷する{e}', '刷り上がった{e}！'], mail: ['メール送った{e}', 'お便り出す{e}'], vend: ['ガコン！', '何飲もう{e}'],
-    phone: ['もしもし{e}', 'はい、承知した{e}'], plant: ['水やり{e}', '大きくなった{e}'], wander: ['ちょっと散歩{e}', 'のびー{e}'],
+    sofa: ['ふかふか{e}', 'ひと休み{e}'], plant: ['水やり{e}', '大きくなった{e}'], wander: ['ちょっと散歩{e}', 'のびー{e}'],
+    bar: ['ほっと一息{e}', 'おいしい{e}'], meet: ['資料置いとく{e}'],
     window: () => isNight() ? ['夜景きれい{e}', '星が見える{e}'] : ['いい天気{e}', '外は暑そう{e}'],
     dept: { exec: ['今月の数字を見る{e}'], intel: ['ニュースを見張る{e}'], lib: ['本を並べ直す{e}'], dev: ['サーバー元気{e}'], plan: ['付箋を貼る{e}'], write: ['構成を考える{e}'], art: ['色を選ぶ{e}'] },
   };
   const PAIRS = [['コーヒー飲む{e}？', 'いただく{e}！'], ['今日の記事どう{e}？', 'いい感じ{e}'], ['週末なにする{e}？', '寝る{e}'],
     ['あの件どうなった{e}？', 'もう少し{e}'], ['お昼なに食べた{e}？', 'カレー{e}'], ['最近忙しい{e}？', 'ぼちぼち{e}']];
+  const BOSS = [['進捗どう{e}？', '順調{e}！'], ['困ってることない{e}？', '大丈夫{e}'], ['次の仕事お願い{e}', '任せて{e}！'], ['いい感じ{e}！', 'ありがとう{e}']];
   const MEETING = { open: ['今週の方針です{e}', '進捗を共有する{e}', '何か意見ある{e}？'], react: ['いいと思う{e}', '賛成{e}', 'なるほど{e}', '質問ある{e}'] };
+  const TIRED = { 1: ['疲れてきた{e}', 'ちょっと休みたい{e}'], 2: ['限界{e}…', 'もう無理{e}…', '目がしょぼしょぼ{e}'] };
+
+  // Fatigue from real numbers: the share of its token budget used, and how many tasks it ran today.
+  function fatigueOf(id) {
+    const d = DETAIL_DATA[id] || {};
+    const pct = (d.tokensUsed || 0) / (d.tokenLimit || 1e12);
+    const today = new Date().toISOString().slice(0, 10);
+    const n = TASK_STATS?.byDay?.[today]?.agentCounts?.[id] || 0;
+    return pct > 0.7 || n >= 8 ? 2 : pct > 0.4 || n >= 4 ? 1 : 0;
+  }
 
   let layout = null;                         // { floors:[{...,y}], height }
   const ents = new Map();                    // id → entity (survives data refreshes)
-  const fx = [];                             // short effects: paper, envelope, can
+  const fx = [];                             // short effects: paper, envelope, can, lift doors
+  const floorBy = (key) => layout?.floors.find((f) => f.key === key);
   function buildLayout() {
     let y = 0;
-    const floors = people().map((f) => { const o = { ...f, y, meeting: null }; y += FH + 6; return o; });
+    const floors = people().map((f) => { const o = { ...f, y, meeting: null, busy: {} }; y += FH + 6; return o; });
+    const keep = layout;
+    layout = { floors, height: y };          // floorBy() needs it while seating
     for (const f of floors) {
       const working = f.ids.filter((id) => stateOf(id) === 'work');
-      f.desks = DESKS.slice(0, Math.min(4, Math.max(2, working.length)));
-      if (f.key === 'exec') f.desks = [{ x: 30, y: 120, big: true }];
+      f.desks = DESKS.slice(0, Math.min(4, Math.max(2, working.length + 1)));   // one spare to browse at
+      if (f.key === 'exec') f.desks = [{ x: 30, y: 120, big: true }, { x: 100, y: 196 }];
       let di = 0;
       f.ids.forEach((id) => {
         const st = stateOf(id);
         let e = ents.get(id);
-        if (!e || e.floor !== f.key) {
+        if (!e || e.home !== f.key) {
           const p = randomPoint(f, null);
-          e = { id, floor: f.key, x: p.x, y: p.y, tx: p.x, ty: p.y, mode: 'stay', act: 'wander', until: 0, face: 1 };
+          e = { id, home: f.key, x: p.x, y: p.y, tx: p.x, ty: p.y, mode: 'stay', act: 'wander', until: 0, face: 1, alpha: 1 };
           ents.set(id, e);
         }
-        e.f = f; e.st = st;
-        const atDesk = st === 'work' || (id === 'orchestrator' && st === 'done');
-        if (atDesk && st !== 'error') { e.desk = f.desks[Math.min(di++, f.desks.length - 1)]; e.mode = 'sit'; }
-        else if (st === 'error') {
+        if (!e.visiting) e.f = f; else e.f = floorBy(e.f.key) || f;
+        e.st = st; e.tired = fatigueOf(id);
+        const atDesk = st === 'work' || (id === 'orchestrator' && st === 'running');
+        if (atDesk) {
+          if (e.visiting) { e.visiting = false; e.f = f; e.alpha = 1; }
+          e.desk = f.desks[Math.min(di++, f.desks.length - 1)]; e.mode = 'sit'; e.item = null;
+        } else if (st === 'error') {
+          if (e.visiting) { e.visiting = false; e.f = f; e.alpha = 1; }
           const n = f.ids.filter((x) => stateOf(x) === 'error').indexOf(id);
-          e.desk = null; e.mode = 'lie'; e.x = e.tx = 196 + n * 46; e.y = e.ty = 232;
-        } else { e.desk = null; if (e.mode === 'sit' || e.mode === 'lie') { e.mode = 'stay'; e.until = 0; } }
+          e.desk = null; e.mode = 'lie'; e.x = e.tx = 196 + n * 46; e.y = e.ty = 232; e.item = null;
+        } else if (e.mode === 'sit' && !e.browsing || e.mode === 'lie') { e.desk = null; e.mode = 'stay'; e.until = 0; }
       });
     }
-    return { floors, height: y };
+    return layout;
   }
   // Anywhere on the open floor: not on furniture, and not where someone already stands.
-  const onFurniture = (f, x, y) => (f.desks || []).some((d) => x > d.x - 6 && x < d.x + (d.big ? 136 : 84) && y > d.y - 4 && y < d.y + 34)
-    || (x > 200 && x < 324 && y > 120 && y < 170)        // meeting table
-    || (x > 300 && y < 140) || (y > 250 && x < 190) || (x > 226 && x < 348 && y > 270);
-  const taken = (x, y, self) => [...ents.values()].some((o) => o !== self && o.f && Math.hypot(o.tx - x, o.ty - y) < 20);
+  const onFurniture = (f, x, y) => (f.desks || []).some((d) => x > d.x - 6 && x < d.x + (d.big ? 146 : 86) && y > d.y - 4 && y < d.y + 34)
+    || (x > 200 && x < 324 && y > 120 && y < 172) || (x > 296 && y < 140) || (y > 250 && x < 190) || (x > 226 && x < 352 && y > 268);
+  const taken = (x, y, self, f) => [...ents.values()].some((o) => o !== self && o.f === (f || self?.f) && Math.hypot(o.tx - x, o.ty - y) < 20);
   function randomPoint(f, self) {
     for (let k = 0; k < 40; k++) {
       const x = 22 + Math.random() * 330, y = 96 + Math.random() * 160;
-      if (!onFurniture(f, x, y) && !taken(x, y, self)) return { x, y };
+      if (!onFurniture(f, x, y) && !taken(x, y, self, f)) return { x, y };
     }
     return { x: 190 + Math.random() * 20, y: 240 };
   }
 
   // ── behaviour ───────────────────────────────────────────────────────────────
-  const free = (e) => e.mode !== 'sit' && e.mode !== 'lie' && !e.meeting;
+  const free = (e) => e.mode !== 'sit' && e.mode !== 'lie' && e.mode !== 'use' && e.mode !== 'lift' && !e.meeting;
   const kindOf = (e) => (CAST[e.id] || ['human'])[0];
-  function pickErrand(e) {
+  const speed = (e) => e.id === 'orchestrator' ? 3.2 : [2.5, 1.8, 1.1][e.tired || 0];
+  function pickErrand(e, from) {
     const w = { ...BASE, ...(FAV[e.id] || {}) };
-    if (jstHour() < 6) w.sofa += 8;                       // late night: the sofa wins
-    const total = Object.values(w).reduce((a, b) => a + b, 0);
+    if (from) for (const k of Object.keys(w)) if (!from.includes(k)) w[k] = 0;
+    if (jstHour() < 6) w.sofa += 8;
+    if (e.tired === 1) { w.coffee += 4; w.sofa += 4; }
+    if (e.tired === 2) { w.coffee += 8; w.sofa += 12; w.visit = 0; }
+    if (e.visiting) { w.visit = 0; w.home = 6; }
+    const total = Object.values(w).reduce((a, b) => a + b, 0) || 1;
     let r = Math.random() * total;
     for (const [k, v] of Object.entries(w)) { r -= v; if (r <= 0) return k; }
     return 'wander';
   }
-  function goTo(e, act, p) { e.act = act; e.tx = p.x; e.ty = p.y; e.seat = !!p.sit; e.mode = 'walk'; }
-  function choose(e, now) {
-    let act = pickErrand(e);
+  function goTo(e, act, p) { e.act = act; e.tx = p.x; e.ty = p.y; e.seat = !!p.sit; e.spotFace = p.face || 0; e.mode = 'walk'; }
+  function choose(e, now, from) {
+    let act = pickErrand(e, from);
+    if (act === 'home' || (e.visiting && now > e.visitUntil)) act = 'lift', e.dest = e.home;
+    if (act === 'visit' || act === 'deliver') {
+      const opts = VISIT[e.f.key] || [];
+      const dest = opts[Math.floor(Math.random() * opts.length)];
+      if (dest && floorBy(dest)) { e.errand = act; e.dest = dest; act = 'lift'; }
+      else act = 'wander';
+    }
+    if (act === 'lift') return goTo(e, 'lift', SPOT.ev[0]);
     if (act === 'chat') {
       const mate = [...ents.values()].find((o) => o !== e && o.f === e.f && free(o) && o.mode === 'stay' && !o.partner && !o.seat);
       if (mate) {
-        e.partner = mate; mate.partner = e;
         const side = [mate.x > 190 ? -26 : 26, mate.x > 190 ? 26 : -26].find((dx) => !onFurniture(e.f, mate.x + dx, mate.y) && mate.x + dx > 16 && mate.x + dx < 374);
         if (side != null) {
+          e.partner = mate; mate.partner = e;
           goTo(mate, 'chat', { x: mate.x, y: mate.y });
           goTo(e, 'chat', { x: mate.x + side, y: mate.y });
           return;
         }
-        e.partner = mate.partner = null;
       }
       act = 'wander';
     }
+    if (act === 'pc') {
+      const d = e.f.desks.find((dd) => !dd.big && ![...ents.values()].some((o) => o.desk === dd));
+      if (d) { e.pcDesk = d; return goTo(e, 'pc', { x: d.x + 38, y: d.y - 2 }); }
+      act = 'wander';
+    }
+    if (act === 'mail') e.item = 'letter';
+    if (act === 'meet') return goTo(e, 'meet', (SPOT.meet.filter((q) => !taken(q.x, q.y, e)))[0] || randomPoint(e.f, e));
     const pool = (SPOT[act] || []).filter((q) => !taken(q.x, q.y, e));
     if (pool.length) goTo(e, act, pool[Math.floor(Math.random() * pool.length)]);
     else goTo(e, 'wander', randomPoint(e.f, e));
   }
-  function effect(e, now) {
-    const y0 = e.f.y;
-    if (e.act === 'print') fx.push({ f: e.f, kind: 'paper', x: 22, y: y0 + 254, t0: now, dur: 2600 });
-    if (e.act === 'mail') fx.push({ f: e.f, kind: 'envelope', x: 74, y: y0 + 250, t0: now, dur: 1800 });
-    if (e.act === 'vend') fx.push({ f: e.f, kind: 'can', x: 112, y: y0 + 268, t0: now + 400, dur: 1400 });
-  }
+  function line(e, pool, now, kind) { if (pool?.length) speak(e, say(kindOf(e), pool[Math.floor(Math.random() * pool.length)]), now, kind); }
   function arrive(e, now) {
-    e.mode = 'stay'; e.until = now + 6000 + Math.random() * 8000;
-    if (e.act === 'chat' && e.partner && e.partner.mode === 'stay' && e.partner.act === 'chat') {
-      const pair = PAIRS[Math.floor(Math.random() * PAIRS.length)];
-      e.face = e.partner.x > e.x ? 1 : -1; e.partner.face = -e.face;
-      speak(e, say(kindOf(e), pair[0]), now);
-      const o = e.partner; setTimeout(() => speak(o, say(kindOf(o), pair[1]), performance.now()), 1600);
-      o.until = e.until;
+    e.mode = 'stay'; e.until = now + 5000 + Math.random() * 7000;
+    if (e.spotFace) e.face = e.spotFace;
+    // the lift: doors open, they vanish, and step out on another floor
+    if (e.act === 'lift') {
+      e.mode = 'lift'; e.liftAt = now; fx.push({ f: e.f, kind: 'door', t0: now, dur: 1400 });
       return;
     }
-    if (e.act === 'window' || e.act === 'dept' || e.act === 'present') e.face = 1;
-    effect(e, now);
-    const sure = ['print', 'mail', 'vend', 'phone'].includes(e.act);
-    if (sure || Math.random() < .3) {
+    if (e.act === 'chat' && e.partner && e.partner.mode === 'stay' && e.partner.act === 'chat') {
+      const boss = e.id === 'orchestrator' || e.partner.id === 'orchestrator';
+      const lead = e.id === 'orchestrator' ? e : e.partner.id === 'orchestrator' ? e.partner : e;
+      const other = lead === e ? e.partner : e;
+      const pair = (boss ? BOSS : PAIRS)[Math.floor(Math.random() * (boss ? BOSS.length : PAIRS.length))];
+      e.face = e.partner.x > e.x ? 1 : -1; e.partner.face = -e.face;
+      speak(lead, say(kindOf(lead), pair[0]), now);
+      setTimeout(() => speak(other, say(kindOf(other), pair[1]), performance.now()), 1600);
+      e.partner.until = e.until;
+      return;
+    }
+    if (e.act === 'pc' && e.pcDesk) { e.mode = 'sit'; e.desk = e.pcDesk; e.browsing = true; e.useUntil = now + USE.pc.ms; e.until = e.useUntil; if (Math.random() < .5) line(e, USE.pc.line, now); return; }
+    const use = USE[e.act];
+    if (use) {
+      e.mode = 'use'; e.useUntil = now + use.ms * (e.tired === 2 ? 1.6 : 1);
+      e.f.busy[e.act] = e.useUntil;
+      if (e.act === 'print') fx.push({ f: e.f, kind: 'paper', t0: now + 600, dur: use.ms - 600 });
+      if (e.act === 'vend') fx.push({ f: e.f, kind: 'can', t0: now + use.ms - 500, dur: 900 });
+      if (e.act === 'mail') { e.item = null; fx.push({ f: e.f, kind: 'envelope', t0: now + 300, dur: 1600 }); }
+      line(e, use.line, now);
+      return;
+    }
+    if (e.act === 'meet' && e.item === 'paper') { e.item = null; line(e, SOLO.meet, now); return; }
+    if (Math.random() < .3) {
       let pool = e.act === 'dept' ? SOLO.dept[e.f.key] : SOLO[e.act];
       if (typeof pool === 'function') pool = pool();
-      if (pool) speak(e, say(kindOf(e), pool[Math.floor(Math.random() * pool.length)]), now);
+      line(e, pool, now);
     }
   }
-  // A meeting now and then: up to four free people take the chairs, one presents at the board.
+  function finishUse(e, now) {
+    const use = USE[e.act];
+    e.mode = 'stay'; e.until = 0;
+    if (use?.item) e.item = use.item;
+    if (e.act === 'print' && e.item === 'paper' && Math.random() < .4) { e.errand = 'deliver'; choose(e, now, ['deliver']); return; }
+    choose(e, now, use?.then);
+  }
+  // Out of the lift on the destination floor (or home again).
+  function exitLift(e, now) {
+    const dest = floorBy(e.dest) || e.f;
+    const goingHome = e.dest === e.home;
+    e.f = dest; e.x = e.tx = SPOT.ev[0].x; e.y = e.ty = SPOT.ev[0].y; e.alpha = 1;
+    fx.push({ f: dest, kind: 'door', t0: now, dur: 1200 });
+    e.visiting = !goingHome; e.visitUntil = now + 16000 + Math.random() * 14000; e.mode = 'stay'; e.until = 0;
+    if (goingHome) { line(e, ['ただいま{e}'], now); choose(e, now, ['coffee', 'sofa', 'pc', 'wander']); return; }
+    if (e.id === 'orchestrator') line(e, ['みんな、調子どう{e}？', '見回りに来た{e}'], now);
+    else if (e.errand === 'deliver' && e.item === 'paper') line(e, ['資料持ってきた{e}'], now);
+    else line(e, ['おじゃまします{e}'], now);
+    // first thing on arrival: talk to someone (the boss), hand over a paper, or have a coffee
+    const pick = e.id === 'orchestrator' ? ['chat'] : e.item === 'paper' ? ['chat', 'meet'] : ['chat', 'coffee', 'wander'];
+    setTimeout(() => { if (e.mode === 'stay') { if (e.item === 'paper' && Math.random() < .7) e.item = null; choose(e, performance.now(), pick); } }, 1400);
+  }
   function maybeMeeting(f, now) {
     if (f.meeting) {
       if (now > f.meeting.until) { f.meeting.who.forEach((e) => { e.meeting = false; e.until = 0; }); f.meeting = null; }
       else if (Math.random() < .08) {
         const [lead, ...rest] = f.meeting.who;
         const someone = Math.random() < .5 ? lead : rest[Math.floor(Math.random() * rest.length)];
-        if (someone && someone.mode === 'stay') speak(someone, say(kindOf(someone), (someone === lead ? MEETING.open : MEETING.react)[Math.floor(Math.random() * 4) % (someone === lead ? 3 : 4)]), now);
+        if (someone && someone.mode === 'stay') line(someone, someone === lead ? MEETING.open : MEETING.react, now);
       }
       return;
     }
-    if (Math.random() > .015) return;
-    const cand = [...ents.values()].filter((e) => e.f === f && free(e) && !e.partner);
+    if (Math.random() > .012) return;
+    const cand = [...ents.values()].filter((e) => e.f === f && free(e) && !e.partner && e.tired < 2);
     if (cand.length < 3) return;
-    const who = cand.sort(() => Math.random() - .5).slice(0, Math.min(5, cand.length));
+    const who = cand.sort((a, b) => (b.id === 'orchestrator') - (a.id === 'orchestrator') || Math.random() - .5).slice(0, Math.min(5, cand.length));
     f.meeting = { who, until: now + 22000 };
     who.forEach((e, i) => { e.meeting = true; goTo(e, i === 0 ? 'present' : 'meet', i === 0 ? SPOT.present[0] : SPOT.meet[(i - 1) % 4]); });
   }
@@ -380,9 +468,14 @@
     for (const e of ents.values()) {
       if (!e.f) continue;
       if (e.mode === 'walk') {
-        const dx = e.tx - e.x, dy = e.ty - e.y, dist = Math.hypot(dx, dy);
-        if (dist < 2.5) { e.x = e.tx; e.y = e.ty; arrive(e, now); }
-        else { e.x += dx / dist * 2.5; e.y += dy / dist * 2.5; if (Math.abs(dx) > 1) e.face = dx > 0 ? 1 : -1; }
+        const dx = e.tx - e.x, dy = e.ty - e.y, dist = Math.hypot(dx, dy), v = speed(e);
+        if (dist < v) { e.x = e.tx; e.y = e.ty; arrive(e, now); }
+        else { e.x += dx / dist * v; e.y += dy / dist * v; if (Math.abs(dx) > 1) e.face = dx > 0 ? 1 : -1; }
+      } else if (e.mode === 'use' && now > e.useUntil) finishUse(e, now);
+      else if (e.mode === 'sit' && e.browsing && now > e.useUntil) { e.browsing = false; e.desk = null; e.mode = 'stay'; e.y += 4; finishUse(Object.assign(e, { act: 'pc' }), now); }
+      else if (e.mode === 'lift') {
+        const k = (now - e.liftAt) / 700; e.alpha = Math.max(0, 1 - k);
+        if (now - e.liftAt > 1600) exitLift(e, now);
       } else if (e.mode === 'stay' && now > e.until && !e.meeting) {
         if (e.partner) { const p = e.partner; e.partner = null; if (p.partner === e) p.partner = null; }
         choose(e, now);
@@ -395,128 +488,157 @@
   const bubbles = new Map();                 // id → { text, kind, until }
   function speak(e, text, now, kind = 'talk') { bubbles.set(e.id, { text, kind, until: now + 3800 }); }
   function workTalk(now, visible) {
-    const sitters = visible.filter((e) => (e.mode === 'sit' || e.mode === 'lie') && !bubbles.has(e.id));
-    if (!sitters.length || bubbles.size >= 3) return;
-    const e = sitters[Math.floor(Math.random() * sitters.length)];
-    const kind = kindOf(e);
+    const cands = visible.filter((e) => (e.mode === 'sit' || e.mode === 'lie' || e.tired) && !bubbles.has(e.id));
+    if (!cands.length || bubbles.size >= 3) return;
+    const e = cands[Math.floor(Math.random() * cands.length)];
     const d = DETAIL_DATA[e.id] || {};
     const title = d.task && typeof taskTitle === 'function' ? short(taskTitle(d.task)) : 'お仕事';
-    if (e.mode === 'lie') return speak(e, say(kind, ['ぐるぐる{e}…', 'もうだめ{e}…', '助けて{e}…'][Math.floor(Math.random() * 3)]), now, 'error');
+    if (e.mode === 'lie') return line(e, ['ぐるぐる{e}…', 'もうだめ{e}…', '助けて{e}…'], now, 'error');
+    if (e.tired && Math.random() < .6) return line(e, TIRED[e.tired], now);
+    if (e.browsing) return;
     if (e.id === 'financial-agent') {
       const cost = (COST_BY_DAY || {})[new Date().toISOString().slice(0, 10)] || 0;
-      return speak(e, say(kind, `今日は$${cost.toFixed(2)}{e}`), now);
+      return speak(e, say(kindOf(e), `今日は$${cost.toFixed(2)}{e}`), now);
     }
-    speak(e, say(kind, ['{t}、作業中{e}', 'あと少し{e}', '集中してる{e}'][Math.floor(Math.random() * 3)].replace('{t}', title)), now);
+    if (e.mode === 'sit') line(e, ['{t}、作業中{e}', 'あと少し{e}', '集中してる{e}'].map((s) => s.replace('{t}', title)), now);
   }
 
   // ── painting ────────────────────────────────────────────────────────────────
   let tick = 0;
-  function paintRoom(f, t) {
+  function paintRoom(f, t, now) {
     const night = isNight(), y = f.y;
+    const busy = (k) => (f.busy[k] || 0) > now;
     // wall
     R(0, y, W, WALL, f.wall); R(0, y, W, 4, '#9aa3b5'); R(0, y + WALL - 6, W, 6, '#aeb5c3');
     for (const lx of [40, 160, 280]) R(lx, y + 4, 70, 3, night ? '#fff3c4' : '#fffbe6');
     R(8, y + 12, 64, 16, f.sign); TXT(`${f.no} ${f.name}`, 40, y + 20, '#fff', 9, 800);
     blinds(84, y + 12, night, t); blinds(146, y + 12, night, t);
-    // the board the meeting presents at, in the department's own form
     const dx = 222, dy = y + 6;
     if (f.deco === 'intel') { R(dx, dy + 4, 80, 32, '#3a4150'); R(dx + 2, dy + 6, 76, 28, '#16202e'); for (let k = 0; k < 4; k++) R(dx + 6, dy + 10 + k * 6, 24 + ((k * 13 + t) % 36), 2, k % 2 ? '#4be37a' : '#5ab0ff'); }
     else if (f.deco === 'lib') { shelf(dx - 6, dy, 44); shelf(dx + 40, dy, 44); }
-    else if (f.deco === 'dev') { rack(dx - 4, dy, t); rack(dx + 22, dy, t + 1); rack(dx + 48, dy, t + 2); R(dx + 72, dy + 34, 14, 2, '#2f3644'); }
+    else if (f.deco === 'dev') { rack(dx - 4, dy, t); rack(dx + 22, dy, t + 1); rack(dx + 48, dy, t + 2); }
     else if (f.deco === 'plan') { R(dx, dy + 2, 80, 34, '#c9a77c'); for (let k = 0; k < 10; k++) R(dx + 4 + (k % 5) * 15, dy + 6 + Math.floor(k / 5) * 14, 11, 10, ['#ffe066', '#ff9cc2', '#8fd3ff', '#b5f5a0'][k % 4]); }
     else if (f.deco === 'write') whiteboard(dx, dy + 4, 80, ['#2b3140', '#2b3140', '#e57373']);
     else if (f.deco === 'art') { R(dx + 4, dy + 2, 30, 36, '#8a5a36'); R(dx + 7, dy + 5, 24, 18, '#fbfbf8'); R(dx + 10, dy + 8, 8, 8, '#5ab0ff'); R(dx + 20, dy + 12, 8, 8, '#f2c94c'); R(dx + 44, dy + 6, 30, 26, '#c9a06a'); R(dx + 47, dy + 9, 24, 20, '#9fd8ff'); }
     else if (f.deco === 'exec') whiteboard(dx, dy + 4, 80, ['#e57373', '#5ab0ff', '#4be37a']);
-    clock(312, y + 14); calendar(330, y + 12);
-    R(358, y + 10, 24, 36, '#8b6b4a'); R(360, y + 12, 20, 34, '#a5825b'); TXT('EV', 370, y + 26, '#fff', 7, 800);
+    clock(310, y + 14); calendar(328, y + 12);
+    // the lift: doors slide open while someone uses it
+    const door = fx.find((p) => p.f === f && p.kind === 'door' && now < p.t0 + p.dur);
+    const open = door ? Math.sin(Math.min(1, (now - door.t0) / door.dur) * Math.PI) * 9 : 0;
+    R(354, y + 8, 30, 40, '#7d8597'); R(356, y + 12, 26, 36, '#2b3140');
+    R(356, y + 12, 13 - open, 36, '#b8bfcc'); R(369 + open, y + 12, 13 - open, 36, '#b8bfcc');
+    R(363, y + 2, 12, 6, '#2b3140'); TXT(door ? '▲' : f.no, 369, y + 5, door ? '#ffd400' : '#9fe0ff', 6, 800);
     // floor
     carpet(0, y + WALL, W, FH - WALL, f.carpet);
     if (f.key === 'exec') { R(10, y + WALL + 8, 180, 150, '#b5463c'); R(14, y + WALL + 12, 172, 142, '#c8584c'); }
-    // ☕ coffee bar: counter, machine, cups, stools
+    // ☕ coffee bar: brewing light and a stream while someone makes a cup
     R(300, y + 60, 90, 26, '#6b4a33'); R(300, y + 86, 90, 6, '#4f3524');
-    R(322, y + 64, 20, 18, '#55606f'); R(326, y + 68, 12, 5, '#2b3140'); R(328, y + 69, 3, 2, '#ff6b6b'); R(330, y + 76, 5, 5, '#fff');
-    if (t % 6 < 3) R(331, y + 70, 1, 5, 'rgba(255,255,255,.7)');
+    R(322, y + 64, 20, 18, '#55606f'); R(326, y + 68, 12, 5, '#2b3140');
+    R(328, y + 69, 3, 2, busy('coffee') ? (t % 2 ? '#4be37a' : '#2e7d5b') : '#ff6b6b'); R(330, y + 76, 5, 5, '#fff');
+    if (busy('coffee')) { R(332, y + 73, 1, 3 + (t % 2), '#6b3a1a'); R(329, y + 64 - (t % 4), 2, 3, 'rgba(255,255,255,.7)'); }
+    else if (t % 6 < 3) R(331, y + 70, 1, 5, 'rgba(255,255,255,.5)');
     for (let k = 0; k < 4; k++) R(350 + k * 8, y + 72, 5, 6, ['#fff', '#e85d5d', '#fff', '#5ab0ff'][k]);
-    R(304, y + 64, 12, 10, '#d9a066'); R(306, y + 62, 8, 3, '#b07a3a');                      // a jar of cookies
-    R(300, y + 140, 90, 10, '#8a5a36');                                                     // high table
+    R(304, y + 64, 12, 10, '#d9a066'); R(306, y + 62, 8, 3, '#b07a3a');
+    R(300, y + 140, 90, 10, '#8a5a36');
     for (const st of SPOT.bar) { R(st.x - 6, y + st.y + 2, 12, 4, '#4a5875'); R(st.x - 1, y + st.y + 6, 2, 8, '#2b3140'); }
     // meeting table + chairs
     g.fillStyle = '#a9825a'; g.beginPath(); g.ellipse(262, y + 158, 36, 16, 0, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#c49a6c'; g.beginPath(); g.ellipse(262, y + 155, 34, 13, 0, 0, Math.PI * 2); g.fill();
     for (const c of SPOT.meet) R(c.x - 8, y + c.y - 6, 16, 10, '#4a5875');
     R(250, y + 150, 10, 7, '#fff'); R(266, y + 152, 12, 6, '#fff'); R(256, y + 160, 5, 5, '#e85d5d');
-    // 🖨 print & mail station, vending machine, phone booth
-    copier(16, y + 254);
-    R(62, y + 252, 24, 30, '#e53935'); R(64, y + 254, 20, 6, '#b71c1c'); R(66, y + 264, 16, 2, '#2b3140'); TXT('〒', 74, y + 274, '#fff', 8, 800);
-    R(98, y + 236, 28, 50, '#2f80ed'); R(101, y + 240, 22, 24, '#d7ecff'); for (let k = 0; k < 6; k++) R(103 + (k % 3) * 7, y + 243 + Math.floor(k / 3) * 10, 5, 8, ['#e53935', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1'][k]); R(104, y + 272, 16, 6, '#1b4f9c');
-    R(140, y + 232, 40, 56, '#9aa3b5'); R(143, y + 235, 34, 48, '#cfe6f5'); R(150, y + 244, 8, 10, '#2b3140'); R(152, y + 254, 4, 6, '#2b3140'); TXT('TEL', 170, y + 240, '#2b3140', 6, 800);
-    // 🛋 lounge: sofa, low table, rug, plant
+    // 🖨 copier (glows while printing), 〒 postbox, vending machine (button lights), phone booth
+    copier(16, y + 254); if (busy('print')) { R(22, y + 262, 6, 2, t % 2 ? '#4be37a' : '#ffd400'); R(26, y + 266, 18, 1, 'rgba(120,220,255,.9)'); }
+    R(80, y + 252, 24, 30, '#e53935'); R(82, y + 254, 20, 6, '#b71c1c'); R(84, y + 264, 16, 2, '#2b3140'); TXT('〒', 92, y + 274, '#fff', 8, 800);
+    R(112, y + 236, 28, 50, '#2f80ed'); R(115, y + 240, 22, 24, '#d7ecff');
+    for (let k = 0; k < 6; k++) R(117 + (k % 3) * 7, y + 243 + Math.floor(k / 3) * 10, 5, 8, ['#e53935', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1'][k]);
+    R(118, y + 272, 16, 6, '#1b4f9c'); R(134, y + 266, 3, 3, busy('vend') ? (t % 2 ? '#ffd400' : '#fff') : '#9aa3b5');
+    R(150, y + 232, 36, 56, '#9aa3b5'); R(153, y + 235, 30, 48, '#cfe6f5'); R(158, y + 244, 8, 10, '#2b3140'); TXT('TEL', 174, y + 240, '#2b3140', 6, 800);
+    // 🛋 lounge
     R(226, y + 300, 124, 22, '#e9d7b7');
     R(232, y + 272, 112, 10, '#c0705a'); R(232, y + 282, 112, 16, '#d9876f'); R(228, y + 276, 6, 22, '#b0604c'); R(342, y + 276, 6, 22, '#b0604c');
     R(262, y + 304, 52, 12, '#8a5a36'); R(270, y + 300, 8, 6, '#fff'); R(296, y + 302, 6, 5, '#52b866');
     plant(366, y + 228); plant(196, y + 60); plant(364, y + 300);
-    // desks (a sitter is drawn between chair and desk top)
+    // desks: a sitter (working, or someone browsing) is drawn between chair and desk top
     for (const d of f.desks) {
       const dw = d.big ? 140 : 80;
       R(d.x + 24, y + d.y - 22, 28, 22, d.big ? '#5b3a2a' : '#4a5875');
-      const sitter = [...ents.values()].find((e) => e.desk === d && e.f === f);
+      const sitter = [...ents.values()].find((e) => e.desk === d && e.f === f && e.mode === 'sit');
       if (sitter) {
-        const typing = sitter.st === 'work' && t % 2 === 0;
-        g.drawImage(sprite(sitter.id, typing ? 'type' : 'sit'), d.x + 22, y + d.y - 30 + (typing ? 1 : 0), 32, 40);
+        const typing = (sitter.st === 'work' || sitter.browsing) && t % 2 === 0 && sitter.tired < 2;
+        const nod = sitter.tired === 2 && (t % 16) < 5 ? 3 : 0;          // dozing off at the desk
+        g.globalAlpha = sitter.alpha ?? 1;
+        g.drawImage(sprite(sitter.id, sitter.tired === 2 ? 'tired' : typing ? 'type' : 'sit'), d.x + 22, y + d.y - 30 + (typing ? 1 : 0) + nod, 32, 40);
+        g.globalAlpha = 1;
+        if (sitter.tired) sweat(d.x + 50, y + d.y - 26, t);
       }
       R(d.x, y + d.y, dw, 22, d.big ? '#8a5a36' : '#d5d9e2'); R(d.x, y + d.y + 22, dw, 4, d.big ? '#6b4428' : '#aeb5c3');
-      const on = sitter && sitter.st === 'work';
-      R(d.x + dw - 30, y + d.y - 8, 26, 16, '#3a4150'); R(d.x + dw - 28, y + d.y - 6, 22, 12, on ? (t % 4 < 2 ? '#5ab0ff' : '#6cc0ff') : '#4a5363');
-      if (on) for (let k = 0; k < 3; k++) R(d.x + dw - 26, y + d.y - 4 + k * 3, 6 + ((t + k * 5) % 12), 1, 'rgba(255,255,255,.75)');
+      const on = sitter && (sitter.st === 'work' || sitter.browsing);
+      const sx = d.x + dw - 30, sy = y + d.y - 8;
+      R(sx, sy, 26, 16, '#3a4150');
+      if (sitter?.browsing) { R(sx + 2, sy + 2, 22, 12, '#ffffff'); R(sx + 2, sy + 2, 22, 3, '#e57373'); for (let k = 0; k < 3; k++) R(sx + 4, sy + 6 + ((k * 3 + t) % 8), 10 + k * 3, 1, '#9aa3b5'); R(sx + 18, sy + 6, 5, 5, '#5ab0ff'); }
+      else { R(sx + 2, sy + 2, 22, 12, on ? (t % 4 < 2 ? '#5ab0ff' : '#6cc0ff') : '#4a5363'); if (on) for (let k = 0; k < 3; k++) R(sx + 4, sy + 4 + k * 3, 6 + ((t + k * 5) % 12), 1, 'rgba(255,255,255,.75)'); }
       R(d.x + 8, y + d.y + 8, 18, 5, '#f0f2f6'); R(d.x + 34, y + d.y + 6, 5, 6, '#e85d5d');
       if (d.big) { R(d.x + 60, y + d.y + 4, 14, 10, '#fff'); R(d.x + 82, y + d.y + 6, 10, 8, '#ffcf33'); }
       if (sitter) nameTag(sitter, d.x + 38, y + d.y + 36);
     }
     if (f.meeting) TXT('会議中', 262, y + 194, '#8a5a36', 8, 800);
   }
+  function sweat(x, y, t) { const k = t % 8; if (k < 6) { R(x, y + k, 2, 3, '#7fc8ff'); R(x + 1, y + k - 1, 1, 1, '#bfe6ff'); } }
   function paintFx(f, now) {
     for (const p of fx) {
-      if (p.f !== f) continue;
-      const k = Math.max(0, Math.min(1, (now - p.t0) / p.dur));
-      if (p.kind === 'paper') { R(p.x + 4, p.y - 12 * k, 20, 4 + 10 * k, '#ffffff'); R(p.x + 7, p.y - 12 * k + 3, 12, 1, '#9aa3b5'); }
-      if (p.kind === 'envelope') { g.globalAlpha = 1 - k; R(p.x - 6 + k * 30, p.y - 30 * k, 12, 8, '#fff'); R(p.x - 6 + k * 30, p.y - 30 * k, 12, 2, '#e57373'); g.globalAlpha = 1; }
-      if (p.kind === 'can' && now > p.t0) R(p.x - 3, p.y + 2, 6, 8, ['#e53935', '#43a047', '#fdd835'][Math.floor(p.t0) % 3]);
+      if (p.f !== f || now < p.t0) continue;
+      const k = Math.max(0, Math.min(1, (now - p.t0) / p.dur)), y = f.y;
+      if (p.kind === 'paper') { R(26, y + 254 - 12 * k, 18, 4 + 10 * k, '#ffffff'); R(29, y + 254 - 12 * k + 3, 10, 1, '#9aa3b5'); }
+      if (p.kind === 'envelope') { g.globalAlpha = 1 - k; R(86 + k * 40, y + 250 - 40 * k, 12, 8, '#fff'); R(86 + k * 40, y + 250 - 40 * k, 12, 2, '#e57373'); g.globalAlpha = 1; }
+      if (p.kind === 'can') R(124, y + 272 + Math.min(4, k * 8), 6, 8, ['#e53935', '#43a047', '#fdd835'][Math.floor(p.t0) % 3]);
     }
   }
   function nameTag(e, cx, cy) {
     const name = REGISTRY.find((r) => r.id === e.id)?.name || e.id;
     g.font = '700 8px "Noto Sans JP",sans-serif'; const tw = g.measureText(name).width;
-    R(cx - tw / 2 - 3, cy - 6, tw + 6, 11, e.st === 'error' ? '#ffe1e1' : 'rgba(255,255,255,.85)');
+    R(cx - tw / 2 - 3, cy - 6, tw + 6, 11, e.st === 'error' ? '#ffe1e1' : e.visiting ? '#fff3c4' : 'rgba(255,255,255,.85)');
     TXT(name, cx, cy, e.st === 'error' ? '#e23b3b' : '#2b3140', 8, 700);
   }
-  function paintWalker(e, t) {
+  const ITEM = {
+    mug: (x, y) => { R(x, y, 4, 4, '#ffffff'); R(x + 4, y + 1, 1, 2, '#ffffff'); R(x + 1, y, 2, 1, '#6b3a1a'); },
+    can: (x, y) => R(x, y - 1, 3, 5, '#e53935'),
+    paper: (x, y) => { R(x - 1, y - 3, 6, 7, '#ffffff'); R(x, y - 1, 4, 1, '#9aa3b5'); },
+    letter: (x, y) => { R(x - 1, y, 6, 4, '#ffffff'); R(x - 1, y, 6, 1, '#e57373'); },
+  };
+  function paintWalker(e, t, now) {
     const y0 = e.f.y;
+    g.globalAlpha = e.alpha ?? 1;
     g.fillStyle = 'rgba(0,0,0,.16)'; g.beginPath(); g.ellipse(e.x, y0 + e.y, 11, 4, 0, 0, Math.PI * 2); g.fill();
     if (e.mode === 'lie') {
-      // knocked out on the floor: lying sideways, ×× eyes, stars going round
       g.save(); g.translate(e.x, y0 + e.y - 8); g.rotate(-Math.PI / 2);
       g.drawImage(sprite(e.id, 'ko'), -16, -20, 32, 40); g.restore();
       for (let k = 0; k < 3; k++) { const a = t / 3 + k * 2.1; R(e.x - 22 + Math.cos(a) * 9, y0 + e.y - 22 + Math.sin(a) * 3, 3, 3, '#ffd400'); }
-      nameTag(e, e.x, y0 + e.y + 10);
+      nameTag(e, e.x, y0 + e.y + 10); g.globalAlpha = 1;
       return;
     }
     const seated = e.mode === 'stay' && e.seat;
-    const holding = e.mode === 'stay' && (e.act === 'coffee' || e.act === 'bar');
-    const pose = e.mode === 'walk' ? (t % 2 ? 'walk1' : 'walk2') : holding ? 'mug' : ((t + (e.x | 0)) % 31 === 0 ? 'blink' : 'stand');
-    const bob = e.mode === 'walk' ? (t % 2) : 0;
+    const using = e.mode === 'use';
+    const tiredPose = e.tired === 2;
+    const pose = e.mode === 'walk' ? (t % 2 ? 'walk1' : 'walk2')
+      : using ? (tiredPose ? 'tiredReach' : 'reach')
+      : tiredPose ? 'tired' : ((t + (e.x | 0)) % 31 === 0 ? 'blink' : 'stand');
+    const bob = e.mode === 'walk' ? (t % 2) : using && t % 4 < 2 ? 1 : 0;
+    const slump = tiredPose && e.mode !== 'walk' ? 2 : 0;
     g.save();
     if (e.face < 0) { g.translate(e.x * 2, 0); g.scale(-1, 1); }
-    // seated: only the upper body shows above the seat
-    if (seated) g.drawImage(sprite(e.id, pose), 0, 0, 16, 15, e.x - 16, y0 + e.y - 34, 32, 30);
-    else g.drawImage(sprite(e.id, pose), e.x - 16, y0 + e.y - 40 - bob, 32, 40);
+    if (seated) g.drawImage(sprite(e.id, pose), 0, 0, 16, 15, e.x - 16, y0 + e.y - 34 + slump, 32, 30);
+    else g.drawImage(sprite(e.id, pose), e.x - 16, y0 + e.y - 40 - bob + slump, 32, 40);
+    if (e.item && ITEM[e.item] && !using) ITEM[e.item](e.x + 9, y0 + e.y - 16 + (seated ? 4 : 0));
     g.restore();
-    if (seated && e.act === 'sofa' && jstHour() < 6) TXT('z', e.x + 12, y0 + e.y - 38 - (t % 6), '#7a8396', 9, 800);
+    if (e.tired) sweat(e.x + 10 * (e.face || 1), y0 + e.y - 40, t);
+    if (seated && e.act === 'sofa' && (jstHour() < 6 || e.tired === 2)) TXT('z', e.x + 12, y0 + e.y - 38 - (t % 6), '#7a8396', 9, 800);
     nameTag(e, e.x, y0 + e.y + 8);
+    g.globalAlpha = 1;
   }
-  function paintBubbles(now) {
+  function paintBubbles(now, vis) {
     for (const [id, b] of bubbles) {
       if (b.until < now) { bubbles.delete(id); continue; }
-      const e = ents.get(id); if (!e?.f) continue;
+      const e = ents.get(id); if (!e?.f || !vis.includes(e.f) || e.mode === 'lift') continue;
       let cx, cy;
       if (e.mode === 'sit' && e.desk) { cx = e.desk.x + 38; cy = e.f.y + e.desk.y - 32; }
       else if (e.mode === 'lie') { cx = e.x; cy = e.f.y + e.y - 22; }
@@ -599,11 +721,11 @@
     const vis = visibleFloors();
     for (const f of vis) {
       g.clearRect(0, f.y, W, FH + 6);
-      paintRoom(f, tick);
+      paintRoom(f, tick, now);
       paintFx(f, now);
-      [...ents.values()].filter((e) => e.f === f && e.mode !== 'sit').sort((a, b) => a.y - b.y).forEach((e) => paintWalker(e, tick));
+      [...ents.values()].filter((e) => e.f === f && e.mode !== 'sit').sort((a, b) => a.y - b.y).forEach((e) => paintWalker(e, tick, now));
     }
-    paintBubbles(now);
+    paintBubbles(now, vis);
   }
   function loop() {
     cancelAnimationFrame(raf);
@@ -626,6 +748,7 @@
     let best = null, bd = 1e9;
     for (const e of ents.values()) {
       if (!e.f) continue;
+      if (e.mode === 'lift') continue;
       const cx = e.mode === 'sit' && e.desk ? e.desk.x + 36 : e.x;
       const cy = e.mode === 'sit' && e.desk ? e.f.y + e.desk.y - 10 : e.f.y + e.y - (e.mode === 'lie' ? 8 : 20);
       const dd = Math.hypot(cx - x, cy - y);
