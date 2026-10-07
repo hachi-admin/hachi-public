@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '137';
+const DASH_BUILD = '138';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1765,7 +1765,7 @@ function _calIcon(e) {
   return `<span class="cal-emo">${_CAL_ICON[type] || (e.k === 'job' ? '⚙️' : '🔍')}</span>`;
 }
 const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
-    <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time><b>${esc(e.name)}</b></span></span>
+    <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><b>${esc(e.name)}</b><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time></span></span>
     ${e.items ? _calItems(e.items) : (e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
 // A mark in front of each idea says what became of it; the words are in the sheet.
 const _CAL_WRITE = { done: '記事化済み', writing: '執筆中', failed: '執筆に失敗', queued: '執筆待ち' };
@@ -1802,7 +1802,7 @@ function _calWeekAxis(days, evByDay, today) {
     if (s.gap) return `<div class="cal-wk-cell gap">${nowMark}</div>`;
     return `<div class="cal-wk-cell">${main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b).map((e) => _calCard(e)).join('')}${nowMark}</div>`;
   };
-  const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}">
+  const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${[' sun', '', '', '', '', '', ' sat'][_calWd(d.date)]}">
       <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b></div>`).join('');
   const style = `style="--n:${days.length}"`;
   return `<div class="cal-wk"><div class="cal-wk-v" id="cal-wk-v">
@@ -1853,7 +1853,7 @@ function _renderCalendar() {
     const cell = (d) => {
       const ev = evByDay[d.date].filter((e) => e.k !== 'bg');
       const out = d.date.slice(0, 7) !== _calMonthKey();
-      return `<button class="cal-m-cell${out ? ' out' : ''}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${d.date === _calSel ? ' sel' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
+      return `<button class="cal-m-cell${out ? ' out' : ''}${[' sun', '', '', '', '', '', ' sat'][_calWd(d.date)]}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${d.date === _calSel ? ' sel' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
         <span class="cal-m-num">${Number(d.date.slice(8))}</span>
         <span class="cal-m-dots">${ev.slice(0, 6).map((e) => `<i class="k-${e.k}"></i>`).join('')}${ev.length > 6 ? `<small>+${ev.length - 6}</small>` : ''}</span></button>`;
     };
