@@ -3637,3 +3637,32 @@ body.sheet-open{overflow:hidden}
 .cal-wk-hd.sat span,.cal-wk-hd.sat b,.cal-m-cell.sat .cal-m-num{color:#3b6fd8}
 .cal-wk-hd.sun span,.cal-wk-hd.sun b,.cal-m-cell.sun .cal-m-num{color:#d8474a}
 .cal-wk-hd.today b{color:#fff}
+/* Review pass (2026-10-07): */
+/* now: a red rule with a dot at its start, not words on the hatching */
+.cal-wk-now{display:block;position:absolute;left:0;right:0;top:50%;height:2px;background:var(--red);border:0;padding:0;margin:0}
+.cal-wk-now::before{content:"";position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+.cal-wk-cell.gap{position:relative;min-height:14px}
+/* a fourth day peeks in, so sideways scrolling is visible */
+.cal-wk{--cw:calc((100cqw - 34px) / 3.25)}
+/* month: one line of up to four dots; today a filled number */
+.cal-m-dots{flex-wrap:nowrap;max-width:none}
+.cal-m-cell.today .cal-m-num{background:var(--acc);color:#fff;border-radius:999px;padding:0 6px}
+.cal-m-cell.today{box-shadow:var(--sh-sm)}
+.cal-m-cell.sel{box-shadow:var(--sh-in)}
+/* the day list is never hidden behind the bottom bar */
+#page-calendar{padding-bottom:calc(var(--nav-h,84px) + env(safe-area-inset-bottom) + 24px)}
+/* ideas sheet: a small ↻ per idea, so titles use the full width */
+.cal-regen{flex:none;width:34px;height:34px;border:0;border-radius:10px;background:var(--bg);box-shadow:var(--sh-sm);font-size:16px;color:var(--acc);cursor:pointer}
+.cal-regen.busy{animation:cal-spin 1s linear infinite;box-shadow:var(--sh-in)}
+@keyframes cal-spin{to{transform:rotate(360deg)}}
+.cal-idea-st:empty{display:none}
+#detail-panel.panel-fit{outline:none}
+#detail-panel.panel-fit:focus{outline:none}
+/* job sheet: pill switch, one label style, filled selected weekday */
+.cal-toggle{appearance:none;-webkit-appearance:none;width:44px !important;height:26px !important;border-radius:999px;background:var(--bg);box-shadow:var(--sh-in);position:relative;cursor:pointer;transition:background .15s}
+.cal-toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.cal-toggle:checked{background:var(--acc)}
+.cal-toggle:checked::after{left:21px}
+.cal-sheet .cal-field,.cal-sheet .cal-switch>span{font-size:13px;font-weight:500;color:var(--m)}
+.cal-sheet{gap:14px}
+.cal-wd.on{background:var(--acc);color:#fff;box-shadow:none}

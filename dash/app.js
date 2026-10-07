@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '138';
+const DASH_BUILD = '139';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1591,17 +1591,17 @@ async function calSaveSchedule() {
 
 // One idea of a slate, proposed again (about half a minute: a model call and a new tile).
 async function calRegen(id, btn) {
-  btn.disabled = true; btn.textContent = '作り直し中…';
+  btn.disabled = true; btn.classList.add('busy');
   const res = await fetch(apiUrl(`/api/proposals/${encodeURIComponent(id)}/regenerate`), { method: 'POST', headers: _authHeaders() }).catch(() => null);
   const data = await res?.json().catch(() => null);
-  if (!res?.ok) { btn.disabled = false; btn.textContent = '作り直す'; showToast(data?.error || '作り直せませんでした', 'error'); return; }
+  if (!res?.ok) { btn.disabled = false; btn.classList.remove('busy'); showToast(data?.error || '作り直せませんでした', 'error'); return; }
   const row = document.getElementById(`cal-idea-${id}`);
   if (row) {
     row.id = `cal-idea-${data.id}`;
     row.querySelector('b').textContent = String(data.title || '').replace(/^\d+\.\s*/, '');
     const small = row.querySelector('small') || row.firstElementChild.appendChild(document.createElement('small'));
     small.textContent = data.description || '';
-    btn.disabled = false; btn.textContent = '作り直す';
+    btn.disabled = false; btn.classList.remove('busy');
     btn.setAttribute('onclick', `calRegen('${data.id}',this)`);
   }
   showToast('案を作り直しました', 'success');
@@ -1790,15 +1790,13 @@ function _calWeekAxis(days, evByDay, today) {
   let prev = 0;
   for (const h of [...hours, 24]) {
     if (h > prev) {
-      const cut = Math.floor(nowH);
-      if (days.some((d) => d.date === today) && cut > prev && cut < h) segs.push({ gap: true, a: prev, b: cut }, { gap: true, a: cut, b: h });
-      else segs.push({ gap: true, a: prev, b: h });
+      segs.push({ gap: true, a: prev, b: h });
     }
     if (h < 24) segs.push({ gap: false, a: h, b: h + 1 });
     prev = h + 1;
   }
   const cell = (d, s) => {
-    const nowMark = d.date === today && nowH >= s.a && nowH < s.b ? `<span class="cal-wk-now">今 ${_calHm(nowIso)}</span>` : '';
+    const nowMark = d.date === today && nowH >= s.a && nowH < s.b ? `<span class="cal-wk-now" title="今 ${_calHm(nowIso)}"></span>` : '';
     if (s.gap) return `<div class="cal-wk-cell gap">${nowMark}</div>`;
     return `<div class="cal-wk-cell">${main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b).map((e) => _calCard(e)).join('')}${nowMark}</div>`;
   };
@@ -1811,7 +1809,7 @@ function _calWeekAxis(days, evByDay, today) {
         <div class="cal-wk-times">${segs.map((s) => `<div class="cal-wk-t${s.gap ? ' gap' : ''}">${s.gap ? '' : `${s.a}:00`}</div>`).join('')}</div>
         <div class="cal-wk-h" id="cal-wk-scroll"><div class="cal-wk-grid" ${style}>${segs.map((s) => days.map((d) => cell(d, s)).join('')).join('')}</div></div>
       </div></div></div>
-    <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>`;
+`;
 }
 
 // After drawing: hour labels take their rows' heights, and the date strip follows the columns.
@@ -1855,12 +1853,11 @@ function _renderCalendar() {
       const out = d.date.slice(0, 7) !== _calMonthKey();
       return `<button class="cal-m-cell${out ? ' out' : ''}${[' sun', '', '', '', '', '', ' sat'][_calWd(d.date)]}${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${d.date === _calSel ? ' sel' : ''}" onclick="calSelectDay('${d.date}')" aria-label="${_calLabel(d.date)} ${ev.length}件">
         <span class="cal-m-num">${Number(d.date.slice(8))}</span>
-        <span class="cal-m-dots">${ev.slice(0, 6).map((e) => `<i class="k-${e.k}"></i>`).join('')}${ev.length > 6 ? `<small>+${ev.length - 6}</small>` : ''}</span></button>`;
+        <span class="cal-m-dots">${ev.slice(0, 4).map((e) => `<i class="k-${e.k}"></i>`).join('')}${ev.length > 4 ? `<small>+${ev.length - 4}</small>` : ''}</span></button>`;
     };
     const sel = CAL.days.find((d) => d.date === _calSel);
     const list = sel ? evByDay[sel.date].filter((e) => e.k !== 'bg') : [];
     box.innerHTML = `<div class="cal-month">${['月','火','水','木','金','土','日'].map((w) => `<div class="cal-m-wd">${w}</div>`).join('')}${CAL.days.map(cell).join('')}</div>
-      <div class="cal-tt-lg">${['cont', 'res', 'job', 'fail'].map((k) => `<span class="k-${k}">${_CAL_KIND_JA[k]}</span>`).join('')}</div>
       ${sel ? `<section class="cal-mday"><div class="cal-mday-hd"><b>${_calLabel(sel.date)}</b><button class="act-btn" onclick="calSelectDay('${sel.date}')">週で見る</button></div>
         ${list.length ? `<div class="cal-mday-list">${list.map((e) => _calCard(e)).join('')}</div>` : '<div class="cal-empty">予定はありません</div>'}</section>` : ''}`;
     return;
@@ -1897,12 +1894,12 @@ function calOpenEvent(i) {
     const sent = e.cards.some((c) => c.released);
     const open = e.items.some((it) => it.state === 'wait');
     const catId = e.cards[0].categoryId;
-    const STATE = { wait: sent ? 'Discordで回答待ち' : '届く前', no: '× 見送り', expired: '× 期限切れ（回答なし）' };
+    const STATE = { wait: sent ? 'Discordで回答待ち' : '', no: '× 見送り', expired: '× 期限切れ（回答なし）' };
     return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, '記事案')}
       <div class="cal-ideas">${e.items.map((it) => `<div class="cal-idea st-${it.state}" id="cal-idea-${esc(it.card.id)}">
         <div><b>${esc(it.title)}</b>${it.card.description && it.state === 'wait' ? `<small>${esc(it.card.description)}</small>` : ''}
           <small class="cal-idea-st">${it.state === 'yes' ? `${_calMark(it)} 承認 · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
-        ${it.state === 'wait' && !sent ? `<button class="act-btn" onclick="calRegen('${esc(it.card.id)}',this)">作り直す</button>` : ''}</div>`).join('')}</div>
+        ${it.state === 'wait' && !sent ? `<button class="cal-regen" onclick="calRegen('${esc(it.card.id)}',this)" aria-label="この案を作り直す" title="作り直す">↻</button>` : ''}</div>`).join('')}</div>
       ${open && !sent ? `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
       ${catId ? _calMagSched(catId) : ''}`);
   }
@@ -1976,7 +1973,7 @@ async function calEditJob(type) {
   const j = CAL_JOBS.find((x) => x.type === type);
   if (!j) return;
   const s = j.schedule || {};
-  _calJob = { type, posts: j.posts, enabled: s.enabled !== false, freq: s.external ? 'daily' : s.freq, weekday: s.weekday ?? 1,
+  _calJob = { type, posts: j.posts, defaultKey: j.defaultChannelKey || '', enabled: s.enabled !== false, freq: s.external ? 'daily' : s.freq, weekday: s.weekday ?? 1,
     dayOfMonth: s.dayOfMonth ?? 1, hour: s.hour ?? 9, destination: j.destination || {} };
   _calSheet(`${_calSheetHd('job', _calJobName(j), _CAL_DESC[type] || j.note || '', 'ジョブ')}<div id="cal-job-edit">${_calJobForm()}</div>`);
 }
@@ -1984,12 +1981,12 @@ function _calJobForm() {
   const j = _calJob;
   const keys = Object.keys(CAL_CHANNELS || {}).sort();
   const destVal = j.destination.channelId ? '__id__' : (j.destination.channelKey || '');
-  return `<label class="cal-switch"><span>動かす</span><input type="checkbox" role="switch"${j.enabled ? ' checked' : ''} onchange="_calJob.enabled=this.checked;calSaveJobSheet()"></label>
+  return `<label class="cal-switch"><span>動かす</span><input type="checkbox" role="switch" class="cal-toggle"${j.enabled ? ' checked' : ''} onchange="_calJob.enabled=this.checked;calSaveJobSheet()"></label>
     ${j.freq === 'weekly' ? `<div class="cal-field">曜日<div class="cal-wd-pick">${[1, 2, 3, 4, 5, 6, 0].map((w) => `<button class="cal-wd${w === j.weekday ? ' on' : ''}" onclick="_calJob.weekday=${w};calSaveJobSheet()">${_CAL_WD[w]}</button>`).join('')}</div></div>` : ''}
     ${j.freq === 'monthly' ? `<label class="cal-field">日にち<select onchange="_calJob.dayOfMonth=Number(this.value);calSaveJobSheet()">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}"${i + 1 === j.dayOfMonth ? ' selected' : ''}>毎月${i + 1}日</option>`).join('')}</select></label>` : ''}
     <label class="cal-field">時刻<select onchange="_calJob.hour=Number(this.value);calSaveJobSheet()">${_calHours(j.hour)}</select></label>
     ${j.posts ? `<label class="cal-field">投稿先<select onchange="_calJob.destination=this.value?{channelKey:this.value}:{};calSaveJobSheet()">
-      <option value=""${destVal === '' ? ' selected' : ''}>いつもの場所</option>
+      <option value=""${destVal === '' ? ' selected' : ''}>${j.defaultKey ? `#${esc(j.defaultKey)}（既定）` : '既定の場所'}</option>
       ${keys.map((k) => `<option value="${esc(k)}"${destVal === k ? ' selected' : ''}>#${esc(k)}</option>`).join('')}
       ${destVal === '__id__' ? '<option value="__id__" selected disabled>指定のチャンネル</option>' : ''}</select></label>` : ''}`;
 }
