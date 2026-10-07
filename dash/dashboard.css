@@ -3610,3 +3610,21 @@ body.sheet-open{overflow:hidden}
 .cal-idea.st-no,.cal-idea.st-expired{opacity:.6}
 .cal-idea-st{font-size:11.5px;color:var(--m)}
 .cal-idea.st-yes .cal-idea-st{color:var(--txt);font-weight:600}
+/* Ideas: a small mark column (✓ written · ✓ blue while being written · ! failed · × declined/expired), no bands. */
+.cal-ev-items{gap:2px}
+.cal-ev-items i,.cal-ev-items i.st-yes{display:grid;grid-template-columns:9px 1fr;column-gap:2px;padding:0;background:none;font-weight:400;text-decoration:none;opacity:1}
+.cal-ev-items i::before,.cal-ev-items em{display:none}
+.cal-ev-items u{text-decoration:none;font-size:9px;font-weight:800;line-height:1.35;text-align:center;color:var(--m2)}
+.cal-ev-items i.st-wait u::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;background:color-mix(in srgb,var(--m) 55%,transparent);vertical-align:2px}
+.cal-ev-items i.st-yes{color:var(--txt);font-weight:600}
+.cal-ev-items i.st-yes u{color:var(--grn)}
+.cal-ev-items i.w-writing u,.cal-ev-items i.w-queued u{color:var(--blue)}
+.cal-ev-items i.w-failed u{color:var(--red)}
+.cal-ev-items i.st-no,.cal-ev-items i.st-expired{color:var(--m2);opacity:.75}
+.cal-mday-list .cal-ev-items i{grid-template-columns:12px 1fr}
+.cal-mday-list .cal-ev-items u{font-size:11.5px}
+/* The mark lines up with the first line of the name. */
+.cal-ev-hd{align-items:flex-start}
+.cal-ev-hd .cal-note{margin-top:1.5px}
+.cal-ev-hd .cal-emo{margin-top:1px}
+.cal-mday-list .cal-ev-hd .cal-note{margin-top:1px}

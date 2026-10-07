@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '136';
+const DASH_BUILD = '137';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1715,6 +1715,10 @@ function _calBuildSlates() {
       name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind, date: day });
   }
 }
+// The common failure reasons, said in Japanese; anything else is shown as it came.
+const _calErr = (e) => { const m = String(e || '');
+  return /Timed out after (\d+) min/.test(m) ? `${m.match(/(\d+) min/)[1]}分で時間切れ` : /returned no body\/title/.test(m) ? '本文が返ってこなかった'
+    : /no usable ideas/.test(m) ? '使える案が返ってこなかった' : m; };
 function _calEvents(d) {
   const out = [];
   const add = (e) => { e.i = _calEv.length; _calEv.push(e); out.push(e); };
@@ -1725,7 +1729,7 @@ function _calEvents(d) {
     const tag = t.status === 'failed' ? '失敗' : cont ? (t.type === 'article_generate' ? '記事' : '案') : _CAL_TAG_JA[k] || '調査';
     // what it produced or does: an article's title, a job's purpose, a failure's reason
     const art = t.type === 'article_generate' ? d.articles.find((a) => a.categoryName === subj) : null;
-    const lines = t.status === 'failed' ? [t.error || ''] : art ? [art.title] : _CAL_DESC[t.type] ? [_CAL_DESC[t.type]] : [];
+    const lines = t.status === 'failed' ? [_calErr(t.error)] : art ? [art.title] : _CAL_DESC[t.type] ? [_CAL_DESC[t.type]] : [];
     add({ type: 'task', at: t.at, k, name: cont && subj ? subj : (TASK_TYPE_LABELS[t.type] || taskTitle(t)), tag, lines, art, task: t, date: d.date });
   }
   for (const sl of _calSlateByDay[d.date] || []) add({ ...sl });
@@ -1763,8 +1767,10 @@ function _calIcon(e) {
 const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
     <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time><b>${esc(e.name)}</b></span></span>
     ${e.items ? _calItems(e.items) : (e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
-const _CAL_WRITE = { done: '書けた', writing: '執筆中', failed: '失敗', queued: '執筆待ち' };
-const _calItems = (items) => `<span class="cal-ev-items">${items.map((it) => `<i class="st-${it.state}${it.write ? ` w-${it.write}` : ''}">${it.state === 'yes' ? `<em>${_CAL_WRITE[it.write]}</em>` : ''}${esc(it.title)}</i>`).join('')}</span>`;
+// A mark in front of each idea says what became of it; the words are in the sheet.
+const _CAL_WRITE = { done: '記事化済み', writing: '執筆中', failed: '執筆に失敗', queued: '執筆待ち' };
+const _calMark = (it) => it.state === 'yes' ? (it.write === 'failed' ? '!' : '✓') : it.state === 'no' || it.state === 'expired' ? '×' : '';
+const _calItems = (items) => `<span class="cal-ev-items">${items.map((it) => `<i class="st-${it.state}${it.write ? ` w-${it.write}` : ''}"><u>${_calMark(it)}</u>${esc(it.title)}</i>`).join('')}</span>`;
 
 // ── The week on one time axis ──────────────────────────────────────────────
 /* Seven day columns on one time axis; three fit, the rest scroll sideways (snapping per day).
@@ -1891,11 +1897,11 @@ function calOpenEvent(i) {
     const sent = e.cards.some((c) => c.released);
     const open = e.items.some((it) => it.state === 'wait');
     const catId = e.cards[0].categoryId;
-    const STATE = { wait: sent ? 'Discordで回答待ち' : '届く前', no: '見送り', expired: '期限切れ（回答なし）' };
+    const STATE = { wait: sent ? 'Discordで回答待ち' : '届く前', no: '× 見送り', expired: '× 期限切れ（回答なし）' };
     return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, '記事案')}
       <div class="cal-ideas">${e.items.map((it) => `<div class="cal-idea st-${it.state}" id="cal-idea-${esc(it.card.id)}">
         <div><b>${esc(it.title)}</b>${it.card.description && it.state === 'wait' ? `<small>${esc(it.card.description)}</small>` : ''}
-          <small class="cal-idea-st">${it.state === 'yes' ? `承認 · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
+          <small class="cal-idea-st">${it.state === 'yes' ? `${_calMark(it)} 承認 · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
         ${it.state === 'wait' && !sent ? `<button class="act-btn" onclick="calRegen('${esc(it.card.id)}',this)">作り直す</button>` : ''}</div>`).join('')}</div>
       ${open && !sent ? `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
       ${catId ? _calMagSched(catId) : ''}`);
