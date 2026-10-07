@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '139';
+const DASH_BUILD = '140';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6766,6 +6766,17 @@ function _openRecipeEditor(id = null) {
   $('negative').value = (r?.negative || []).join('\n');
   $('keywords').value = (r?.keywords || []).join('、');
   $('centered').checked = r?.centeredSubject === true;
+  // Variation: the server's defaults when the recipe has none yet.
+  const v = { chaos: 60, stylize: 50, weird: 10, people: 'auto', styleRef: 'low', raw: false, ...(r?.variation || {}) };
+  for (const k of ['chaos', 'stylize', 'weird']) {
+    const el = document.getElementById(`ip-var-${k}`);
+    el.value = v[k];
+    el.nextElementSibling.textContent = v[k];
+    el.oninput = () => { el.nextElementSibling.textContent = el.value; };
+  }
+  document.getElementById('ip-var-people').value = v.people;
+  document.getElementById('ip-var-styleRef').value = v.styleRef;
+  document.getElementById('ip-var-raw').checked = v.raw === true;
   $('error').style.display = 'none';
   document.getElementById('ip-edit-modal').classList.add('open');
   (r ? $('name') : $('id')).focus();
@@ -6793,6 +6804,11 @@ async function _saveRecipe() {
     negative: $('negative').value.split('\n').map((x) => x.trim()).filter(Boolean),
     keywords: $('keywords').value.split(/[、,，]/).map((x) => x.trim()).filter(Boolean),
     centeredSubject: $('centered').checked,
+    variation: {
+      chaos: Number(document.getElementById('ip-var-chaos').value), stylize: Number(document.getElementById('ip-var-stylize').value),
+      weird: Number(document.getElementById('ip-var-weird').value), people: document.getElementById('ip-var-people').value,
+      styleRef: document.getElementById('ip-var-styleRef').value, raw: document.getElementById('ip-var-raw').checked,
+    },
     ...(_ipEditingId ? {} : { kind: 'hero', sourceMode: 'ai', enabled: true }),
   };
   const btn = $('save');

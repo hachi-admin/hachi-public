@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=139">
-<link rel="stylesheet" href="dashboard.css?v=139">
+<link rel="stylesheet" href="../shared/neu.css?v=140">
+<link rel="stylesheet" href="dashboard.css?v=140">
 </head>
 <body>
 
@@ -267,6 +267,16 @@
           <input type="checkbox" id="ip-edit-centered">
           <span>主役を中央に置く絵（文字を全面に重ねる型では使われなくなります）</span>
         </label>
+      </div>
+      <!-- How much changes from one article's picture to the next (like an image tool's chaos/stylize). -->
+      <div class="ip-var" id="ip-edit-var">
+        <div class="ip-var-hd">記事ごとのばらつき</div>
+        <label class="ip-var-row"><span>構図の幅<small>低いほどレシピの構図のまま、高いほど毎回ちがう構図</small></span><input type="range" min="0" max="100" step="10" id="ip-var-chaos"><output></output></label>
+        <label class="ip-var-row"><span>表現の強さ<small>低いほど写真に近く、高いほど大胆な表現</small></span><input type="range" min="0" max="100" step="10" id="ip-var-stylize"><output></output></label>
+        <label class="ip-var-row"><span>意外さ<small>ちょっと不思議な要素を入れる割合</small></span><input type="range" min="0" max="100" step="10" id="ip-var-weird"><output></output></label>
+        <label class="ip-var-row"><span>人物</span><select id="ip-var-people" class="cat-in"><option value="auto">おまかせ</option><option value="always">いつも入れる</option><option value="never">入れない</option></select></label>
+        <label class="ip-var-row"><span>見本の画風を参照</span><select id="ip-var-styleRef" class="cat-in"><option value="off">使わない</option><option value="low">弱く</option><option value="mid">ふつう</option><option value="high">強く</option></select></label>
+        <label class="ip-var-row ip-var-check"><input type="checkbox" id="ip-var-raw"><span>書いたとおりに描く（見栄えの補正をしない）</span></label>
       </div>
       <div id="ip-edit-error" style="display:none;color:var(--error);font-size:11px;margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:14px">
@@ -1079,9 +1089,9 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=139"></script>
-<script src="x-affiliate.js?v=139"></script>
-<script src="app.js?v=139"></script>
-<script src="office.js?v=139"></script>
+<script src="../shared/ui.js?v=140"></script>
+<script src="x-affiliate.js?v=140"></script>
+<script src="app.js?v=140"></script>
+<script src="office.js?v=140"></script>
 </body>
 </html>
