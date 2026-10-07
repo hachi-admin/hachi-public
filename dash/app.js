@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '135';
+const DASH_BUILD = '136';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1668,11 +1668,58 @@ let _calEv = [];  // events of the drawn days, indexed for the tap handlers
    "AIのなぜ？ / 案 · 14:00" rather than "記事案を出す：AIのなぜ？". */
 const _CAL_TAG_JA = { res: '調査', job: 'ジョブ', fail: '失敗', bg: '裏方' };
 const _calSubject = (t) => { const m = String(t.goal || '').match(/[:：]\s*([^:：]*[\u3040-\u30ff\u4e00-\u9fff][^:：]*)$/); return m ? m[1].trim() : ''; };
+/* ── One card per round of ideas ──────────────────────────────────────────
+   A magazine's slate is one card at the time it reaches Discord, whichever day its ideas are
+   answered on. Its ideas are listed in the card with what became of each: waiting, approved (and
+   then being written, written, or failed), declined, expired. The writing runs of approved ideas
+   belong to that card rather than appearing as cards of their own. */
+const _calIdeaKey = (t) => String(t || '').replace(/^Write:\s*/, '').replace(/^\d+\.\s*/, '').replace(/\s+/g, '').slice(0, 28);
+let _calSlateByDay = {}, _calUsedTasks = new Set();
+function _calBuildSlates() {
+  _calSlateByDay = {}; _calUsedTasks = new Set();
+  const groups = new Map();
+  for (const d of CAL.days) for (const a of d.approvals) {
+    if (a.kind !== 'article_idea' && a.status !== 'pending') continue;
+    if (a.status === 'replaced') continue;
+    const key = a.slotGroup || a.id;
+    if (!groups.has(key)) groups.set(key, []);
+    if (!groups.get(key).some((x) => x.id === a.id)) groups.get(key).push(a);
+  }
+  const writes = {}, arts = {};
+  for (const d of CAL.days) {
+    for (const t of _calTasks(d)) if (t.type === 'article_generate' && /^Write:\s/.test(t.goal || '')) (writes[_calIdeaKey(t.goal)] ??= []).push(t);
+    for (const a of d.articles) arts[_calIdeaKey(a.title)] = a;
+  }
+  const days = new Set(CAL.days.map((d) => d.date));
+  for (const cards of groups.values()) {
+    cards.sort((a, b) => String(a.title).localeCompare(String(b.title), 'ja', { numeric: true }));
+    const first = cards[0];
+    const at = first.releaseAt || cards.find((c) => c.releasedAt)?.releasedAt
+      || (first.slotDate ? `${first.slotDate}T00:00:00.000Z` : first.createdAt);
+    const day = _calDayOf(at);
+    if (!days.has(day)) continue;
+    const items = cards.map((c) => {
+      const title = String(c.title || '').replace(/^\d+\.\s*/, '');
+      if (c.status === 'pending') return { title, state: 'wait', card: c };
+      if (c.status === 'expired') return { title, state: 'expired', card: c };
+      const no = c.decision === '__cancel__' || /キャンセル|却下/.test(c.decisionLabel || '');
+      if (no) return { title, state: 'no', card: c };
+      const runs = (writes[_calIdeaKey(title)] || []).sort((x, y) => String(x.at).localeCompare(String(y.at)));
+      runs.forEach((t) => _calUsedTasks.add(t.id));
+      const last = runs[runs.length - 1], art = arts[_calIdeaKey(title)];
+      const write = art ? 'done' : last?.status === 'failed' ? 'failed' : last ? 'writing' : 'queued';
+      return { title, state: 'yes', write, card: c, art, runs };
+    });
+    const ideas = first.kind === 'article_idea';
+    (_calSlateByDay[day] ??= []).push({ type: 'appr', at, k: ideas ? 'cont' : 'res', icon: ideas ? null : first.kind, cards, items,
+      name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind, date: day });
+  }
+}
 function _calEvents(d) {
   const out = [];
   const add = (e) => { e.i = _calEv.length; _calEv.push(e); out.push(e); };
   for (const t of _calTasks(d)) {
-    if (!t.at) continue;
+    if (!t.at || _calUsedTasks.has(t.id)) continue;
     const k = _calKind(t), subj = _calSubject(t);
     const cont = _CAL_CONT.has(t.type);
     const tag = t.status === 'failed' ? '失敗' : cont ? (t.type === 'article_generate' ? '記事' : '案') : _CAL_TAG_JA[k] || '調査';
@@ -1681,23 +1728,7 @@ function _calEvents(d) {
     const lines = t.status === 'failed' ? [t.error || ''] : art ? [art.title] : _CAL_DESC[t.type] ? [_CAL_DESC[t.type]] : [];
     add({ type: 'task', at: t.at, k, name: cont && subj ? subj : (TASK_TYPE_LABELS[t.type] || taskTitle(t)), tag, lines, art, task: t, date: d.date });
   }
-  /* A slate of ideas is shown where it reaches Discord (one slate every 15 minutes from the
-     release hour), with its ideas on the card: approving them is the article's next step, so it
-     is an article event, not a separate kind. An older service sends no time; the spacing is
-     drawn here then. */
-  const slates = new Map();
-  for (const a of d.approvals.filter((x) => x.status === 'pending')) {
-    const key = a.slotGroup || a.id;
-    if (!slates.has(key)) slates.set(key, []);
-    slates.get(key).push(a);
-  }
-  [...slates.values()].forEach((cards, n) => {
-    const first = cards[0];
-    const at = first.releaseAt || new Date(Date.parse(`${d.date}T00:00:00Z`) + ((CAL.releaseHour ?? 9) - 9) * 3600e3 + n * 15 * 60e3).toISOString();
-    const ideas = first.kind === 'article_idea';
-    add({ type: 'appr', at, k: 'cont', name: first.categoryName || _PROP_KIND_LABEL[first.kind] || first.kind,
-      tag: ideas ? `案 ${cards.length}件` : `承認 ${cards.length}件`, lines: cards.map((c) => String(c.title || '').replace(/^\d+\.\s*/, '')), cards, date: d.date });
-  });
+  for (const sl of _calSlateByDay[d.date] || []) add({ ...sl });
   for (const p of d.planned || []) {
     const at = p.at < new Date().toISOString() ? new Date().toISOString() : p.at;
     add({ type: 'plan', at, k: 'cont', name: p.name, tag: p.mode === 'auto' ? '記事を書く' : '案を作る',
@@ -1726,12 +1757,14 @@ const _CAL_NOTE_MARK = '<img class="cal-note" alt="note" src="data:image/png;bas
 function _calIcon(e) {
   if (e.k === 'fail') return '<span class="cal-emo">⚠️</span>';
   if (e.k === 'cont') return _CAL_NOTE_MARK;
-  const type = e.job?.type || e.task?.type;
+  const type = e.job?.type || e.task?.type || e.icon;
   return `<span class="cal-emo">${_CAL_ICON[type] || (e.k === 'job' ? '⚙️' : '🔍')}</span>`;
 }
 const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
     <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time><b>${esc(e.name)}</b></span></span>
-    ${(e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
+    ${e.items ? _calItems(e.items) : (e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
+const _CAL_WRITE = { done: '書けた', writing: '執筆中', failed: '失敗', queued: '執筆待ち' };
+const _calItems = (items) => `<span class="cal-ev-items">${items.map((it) => `<i class="st-${it.state}${it.write ? ` w-${it.write}` : ''}">${it.state === 'yes' ? `<em>${_CAL_WRITE[it.write]}</em>` : ''}${esc(it.title)}</i>`).join('')}</span>`;
 
 // ── The week on one time axis ──────────────────────────────────────────────
 /* Seven day columns on one time axis; three fit, the rest scroll sideways (snapping per day).
@@ -1807,6 +1840,7 @@ function _renderCalendar() {
   const range = document.getElementById('cal-range');
   if (range) range.textContent = _calRangeText();
   _calEv = [];
+  _calBuildSlates();
   const evByDay = Object.fromEntries(CAL.days.map((d) => [d.date, _calEvents(d)]));
   if (month) {
     // Same events and colours as the week: one dot per thing on the day (up to six, then +n).
@@ -1855,13 +1889,15 @@ function calOpenEvent(i) {
   if (e.type === 'job') return calEditJob(e.job.type);
   if (e.type === 'appr') {
     const sent = e.cards.some((c) => c.released);
-    const ideas = e.cards[0].kind === 'article_idea';
+    const open = e.items.some((it) => it.state === 'wait');
     const catId = e.cards[0].categoryId;
-    return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, e.tag)}
-      <div class="cal-ideas">${e.cards.map((c) => `<div class="cal-idea" id="cal-idea-${esc(c.id)}">
-        <div><b>${esc(String(c.title || '').replace(/^\d+\.\s*/, ''))}</b>${c.description ? `<small>${esc(c.description)}</small>` : ''}</div>
-        ${ideas && !sent ? `<button class="act-btn" onclick="calRegen('${esc(c.id)}',this)">作り直す</button>` : ''}</div>`).join('')}</div>
-      ${sent ? '<p class="cal-job-note">届いた案はDiscordで承認・却下します。</p>' : `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>`}
+    const STATE = { wait: sent ? 'Discordで回答待ち' : '届く前', no: '見送り', expired: '期限切れ（回答なし）' };
+    return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, '記事案')}
+      <div class="cal-ideas">${e.items.map((it) => `<div class="cal-idea st-${it.state}" id="cal-idea-${esc(it.card.id)}">
+        <div><b>${esc(it.title)}</b>${it.card.description && it.state === 'wait' ? `<small>${esc(it.card.description)}</small>` : ''}
+          <small class="cal-idea-st">${it.state === 'yes' ? `承認 · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
+        ${it.state === 'wait' && !sent ? `<button class="act-btn" onclick="calRegen('${esc(it.card.id)}',this)">作り直す</button>` : ''}</div>`).join('')}</div>
+      ${open && !sent ? `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
       ${catId ? _calMagSched(catId) : ''}`);
   }
   // a task
