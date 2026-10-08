@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '144';
+const DASH_BUILD = '145';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -4931,6 +4931,11 @@ const _SCROLL_INDEX = [
   // Capture phase: the page scrolls inside .page-area, not the window, and scroll does not bubble.
   document.addEventListener('scroll', (e) => {
     if (e.target?.closest?.('.seg,.pick-strip,.cat-gal-grid,.tab-bar,#detail-panel,#hero-preset-editor')) return;
+    // A modal or sheet on top: the list behind it is not what is being scrolled.
+    if (document.querySelector('.lightbox-ov.open,.overlay.open,.mob-more-sheet.open,.act-sheet.open')) {
+      document.getElementById('scroll-label')?.classList.remove('show');
+      return;
+    }
     cancelAnimationFrame(raf); raf = requestAnimationFrame(() => show(e.target));
   }, { passive: true, capture: true });
 })();
