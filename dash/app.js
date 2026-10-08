@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '142';
+const DASH_BUILD = '143';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1981,7 +1981,7 @@ function _calJobForm() {
   const j = _calJob;
   const keys = Object.keys(CAL_CHANNELS || {}).sort();
   const destVal = j.destination.channelId ? '__id__' : (j.destination.channelKey || '');
-  return `<label class="cal-switch"><span>動かす</span><input type="checkbox" role="switch" class="cal-toggle"${j.enabled ? ' checked' : ''} onchange="_calJob.enabled=this.checked;calSaveJobSheet()"></label>
+  return `<label class="cal-switch"><span>動かす</span><span class="cat-switch"><input type="checkbox" role="switch"${j.enabled ? ' checked' : ''} onchange="_calJob.enabled=this.checked;calSaveJobSheet()"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
     ${j.freq === 'weekly' ? `<div class="cal-field">曜日<div class="cal-wd-pick">${[1, 2, 3, 4, 5, 6, 0].map((w) => `<button class="cal-wd${w === j.weekday ? ' on' : ''}" onclick="_calJob.weekday=${w};calSaveJobSheet()">${_CAL_WD[w]}</button>`).join('')}</div></div>` : ''}
     ${j.freq === 'monthly' ? `<label class="cal-field">日にち<select onchange="_calJob.dayOfMonth=Number(this.value);calSaveJobSheet()">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}"${i + 1 === j.dayOfMonth ? ' selected' : ''}>毎月${i + 1}日</option>`).join('')}</select></label>` : ''}
     <label class="cal-field">時刻<select onchange="_calJob.hour=Number(this.value);calSaveJobSheet()">${_calHours(j.hour)}</select></label>
@@ -2025,7 +2025,7 @@ function _calSystemJob(j) {
   return `<label class="cal-sys-row">
     <span class="cal-item-title">${esc(_calJobName(j))}</span>
     <span class="cal-item-meta">${esc(_calScheduleText(j.schedule))}</span>
-    <input type="checkbox" role="switch"${on ? ' checked' : ''} onchange="calToggleSystemJob('${esc(j.type)}',this)" aria-label="${esc(j.label)}">
+    <span class="cat-switch"><input type="checkbox" role="switch"${on ? ' checked' : ''} onchange="calToggleSystemJob('${esc(j.type)}',this)" aria-label="${esc(j.label)}"><span class="cat-switch-track" aria-hidden="true"></span></span>
   </label>`;
 }
 

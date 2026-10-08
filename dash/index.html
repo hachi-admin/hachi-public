@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=142">
-<link rel="stylesheet" href="dashboard.css?v=142">
+<link rel="stylesheet" href="../shared/neu.css?v=143">
+<link rel="stylesheet" href="dashboard.css?v=143">
 </head>
 <body>
 
@@ -263,7 +263,7 @@
           <div class="ip-tags" id="ip-tags-keywords" data-ph="例: 映画、夜（Enterで追加）"></div>
         </div>
         <label class="ip-toggle-row cat-wide"><span>主役を真ん中に置く絵<small>オンにすると、文字を画面いっぱいに重ねる型では使いません</small></span>
-          <input type="checkbox" role="switch" class="cal-toggle" id="ip-edit-centered"></label>
+          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-edit-centered"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
       </div>
       <!-- How much changes from one article's picture to the next (an image tool's chaos/stylize/weird),
            chosen on a five-step scale between two plain-language ends. -->
@@ -277,7 +277,7 @@
         <div class="ip-seg-q">見本の画風に寄せる</div>
         <div class="ip-seg" data-k="styleRef"><button data-v="off">寄せない</button><button data-v="low">少し</button><button data-v="mid">ふつう</button><button data-v="high">強く</button></div>
         <label class="ip-toggle-row"><span>AIの美化<small>オフにすると、つや・ドラマチックな光・整った顔などを足さず、書いた指示どおり素直に描きます</small></span>
-          <input type="checkbox" role="switch" class="cal-toggle" id="ip-var-beautify"></label>
+          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-var-beautify"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
       </div>
       <div id="ip-edit-error" style="display:none;color:var(--error);font-size:11px;margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:14px">
@@ -1090,9 +1090,9 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=142"></script>
-<script src="x-affiliate.js?v=142"></script>
-<script src="app.js?v=142"></script>
-<script src="office.js?v=142"></script>
+<script src="../shared/ui.js?v=143"></script>
+<script src="x-affiliate.js?v=143"></script>
+<script src="app.js?v=143"></script>
+<script src="office.js?v=143"></script>
 </body>
 </html>

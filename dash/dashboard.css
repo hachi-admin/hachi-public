@@ -3703,3 +3703,11 @@ body.sheet-open{overflow:hidden}
 .ip-scale-row .ip-dots{grid-column:1 / -1;grid-row:1;padding:0 6px}
 .ip-scale-row>span{grid-row:2}
 .cal-toggle:checked{box-shadow:none}.ip-seg-q{margin-bottom:-4px}
+/* Same material as everything else: the five steps are raised discs; the chosen one is pressed in
+   with an accent core (the nav's "selection is the press"). Switches use the shared .cat-switch. */
+.ip-dot{border:0;background:var(--bg);box-shadow:var(--sh-sm);position:relative}
+.ip-dot.s2{border:0}
+.ip-dot.on{background:var(--bg);box-shadow:var(--sh-press)}
+.ip-dot.on::after{content:"";position:absolute;inset:28%;border-radius:50%;background:var(--acc)}
+.ip-toggle-row .cat-switch,.cal-switch .cat-switch{flex:none}
+.cal-sys-row .cat-switch{grid-column:2;grid-row:1 / span 2}
