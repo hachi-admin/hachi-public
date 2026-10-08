@@ -3675,3 +3675,31 @@ body.sheet-open{overflow:hidden}
 .ip-var-row output{font-size:12px;color:var(--m);text-align:right;font-variant-numeric:tabular-nums}
 .ip-var-row input[type=range]{width:100%;accent-color:var(--acc)}
 .ip-var-check{grid-template-columns:auto 1fr}
+/* ── Recipe editor, 2026-10-08: tags, switches, five-step scales, segmented choices ── */
+.ip-sub{display:block;font-size:11px;color:var(--m);font-weight:400;margin-top:2px}
+.ip-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:44px;padding:6px 8px;border-radius:12px;box-shadow:var(--sh-in);cursor:text}
+.ip-tag{display:inline-flex;align-items:center;gap:2px;font-size:12.5px;padding:4px 4px 4px 10px;border-radius:999px;background:var(--bg);box-shadow:var(--sh-sm)}
+.ip-tag button{border:0;background:none;color:var(--m);font-size:14px;line-height:1;width:22px;height:22px;border-radius:50%;cursor:pointer}
+.ip-tag-in{flex:1;min-width:120px;border:0;background:none;font:inherit;font-size:16px;padding:6px 4px;outline:none;color:var(--txt)}
+.ip-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;font-weight:600;padding:4px 0}
+.ip-toggle-row small{display:block;font-size:11px;font-weight:400;color:var(--m);line-height:1.5;margin-top:2px}
+.ip-var{gap:12px;padding:14px}
+.ip-var-hd{font-size:14px}
+.ip-scale-q,.ip-seg-q{font-size:12.5px;font-weight:700;color:var(--txt);margin-bottom:6px}
+.ip-scale-row{display:grid;grid-template-columns:4.5em 1fr 4.5em;align-items:center;gap:6px}
+.ip-scale-row>span{font-size:11px;color:var(--m);line-height:1.3}
+.ip-scale-row>span:last-child{text-align:right}
+.ip-dots{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.ip-dot{border-radius:50%;border:2px solid color-mix(in srgb,var(--acc) 55%,transparent);background:transparent;padding:0;cursor:pointer;flex:none;transition:transform .12s}
+.ip-dot.s0,.ip-dot.s4{width:30px;height:30px}
+.ip-dot.s1,.ip-dot.s3{width:23px;height:23px}
+.ip-dot.s2{width:17px;height:17px;border-color:color-mix(in srgb,var(--m) 45%,transparent)}
+.ip-dot.on{background:var(--acc);border-color:var(--acc);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 18%,transparent)}
+.ip-seg{display:flex;gap:4px;padding:3px;border-radius:12px;box-shadow:var(--sh-in)}
+.ip-seg button{flex:1;border:0;background:none;font:inherit;font-size:12.5px;min-height:36px;border-radius:9px;color:var(--m);cursor:pointer}
+.ip-seg button.on{background:var(--bg);box-shadow:var(--sh-sm);color:var(--acc);font-weight:700}
+/* the five circles take the full width; the two ends are named underneath */
+.ip-scale-row{grid-template-columns:1fr 1fr;row-gap:4px}
+.ip-scale-row .ip-dots{grid-column:1 / -1;grid-row:1;padding:0 6px}
+.ip-scale-row>span{grid-row:2}
+.cal-toggle:checked{box-shadow:none}.ip-seg-q{margin-bottom:-4px}

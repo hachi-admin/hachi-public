@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=140">
-<link rel="stylesheet" href="dashboard.css?v=140">
+<link rel="stylesheet" href="../shared/neu.css?v=142">
+<link rel="stylesheet" href="dashboard.css?v=142">
 </head>
 <body>
 
@@ -254,29 +254,30 @@
       <div class="cat-label" style="margin:14px 0 6px">画づくり（画像モデルへの指示）</div>
       <div class="cat-grid" id="ip-edit-spec"></div>
       <div class="cat-grid" style="margin-top:12px">
-        <label class="cat-field cat-wide">
-          <span class="cat-label">避けるもの（1行に1つ）</span>
-          <textarea id="ip-edit-negative" class="cat-in" rows="3" placeholder="text&#10;watermark&#10;extra fingers"></textarea>
-        </label>
-        <label class="cat-field cat-wide">
-          <span class="cat-label">キーワード（「、」区切り）</span>
-          <input type="text" id="ip-edit-keywords" class="cat-in" placeholder="映画、夜、ネオン" >
-          <span class="cat-hint">記事に合うレシピを自動で選ぶときの手がかりになります</span>
-        </label>
-        <label class="cat-field cat-wide" style="flex-direction:row;align-items:center;gap:8px">
-          <input type="checkbox" id="ip-edit-centered">
-          <span>主役を中央に置く絵（文字を全面に重ねる型では使われなくなります）</span>
-        </label>
+        <div class="cat-field cat-wide">
+          <span class="cat-label">描かないもの</span>
+          <div class="ip-tags" id="ip-tags-negative" data-ph="例: 文字、透かし（Enterで追加）"></div>
+        </div>
+        <div class="cat-field cat-wide">
+          <span class="cat-label">合う記事のキーワード<small class="ip-sub">記事に合うレシピを自動で選ぶときの手がかり</small></span>
+          <div class="ip-tags" id="ip-tags-keywords" data-ph="例: 映画、夜（Enterで追加）"></div>
+        </div>
+        <label class="ip-toggle-row cat-wide"><span>主役を真ん中に置く絵<small>オンにすると、文字を画面いっぱいに重ねる型では使いません</small></span>
+          <input type="checkbox" role="switch" class="cal-toggle" id="ip-edit-centered"></label>
       </div>
-      <!-- How much changes from one article's picture to the next (like an image tool's chaos/stylize). -->
+      <!-- How much changes from one article's picture to the next (an image tool's chaos/stylize/weird),
+           chosen on a five-step scale between two plain-language ends. -->
       <div class="ip-var" id="ip-edit-var">
-        <div class="ip-var-hd">記事ごとのばらつき</div>
-        <label class="ip-var-row"><span>構図の幅<small>低いほどレシピの構図のまま、高いほど毎回ちがう構図</small></span><input type="range" min="0" max="100" step="10" id="ip-var-chaos"><output></output></label>
-        <label class="ip-var-row"><span>表現の強さ<small>低いほど写真に近く、高いほど大胆な表現</small></span><input type="range" min="0" max="100" step="10" id="ip-var-stylize"><output></output></label>
-        <label class="ip-var-row"><span>意外さ<small>ちょっと不思議な要素を入れる割合</small></span><input type="range" min="0" max="100" step="10" id="ip-var-weird"><output></output></label>
-        <label class="ip-var-row"><span>人物</span><select id="ip-var-people" class="cat-in"><option value="auto">おまかせ</option><option value="always">いつも入れる</option><option value="never">入れない</option></select></label>
-        <label class="ip-var-row"><span>見本の画風を参照</span><select id="ip-var-styleRef" class="cat-in"><option value="off">使わない</option><option value="low">弱く</option><option value="mid">ふつう</option><option value="high">強く</option></select></label>
-        <label class="ip-var-row ip-var-check"><input type="checkbox" id="ip-var-raw"><span>書いたとおりに描く（見栄えの補正をしない）</span></label>
+        <div class="ip-var-hd">記事ごとの変化</div>
+        <div class="ip-scale" data-k="chaos"><div class="ip-scale-q">構図</div><div class="ip-scale-row"><span>いつも同じ</span><div class="ip-dots"></div><span>毎回ちがう</span></div></div>
+        <div class="ip-scale" data-k="stylize"><div class="ip-scale-q">表現</div><div class="ip-scale-row"><span>写真のよう</span><div class="ip-dots"></div><span>大胆な絵</span></div></div>
+        <div class="ip-scale" data-k="weird"><div class="ip-scale-q">意外さ</div><div class="ip-scale-row"><span>ふつう</span><div class="ip-dots"></div><span>不思議</span></div></div>
+        <div class="ip-seg-q">人物</div>
+        <div class="ip-seg" data-k="people"><button data-v="auto">おまかせ</button><button data-v="always">いつも入れる</button><button data-v="never">入れない</button></div>
+        <div class="ip-seg-q">見本の画風に寄せる</div>
+        <div class="ip-seg" data-k="styleRef"><button data-v="off">寄せない</button><button data-v="low">少し</button><button data-v="mid">ふつう</button><button data-v="high">強く</button></div>
+        <label class="ip-toggle-row"><span>AIの美化<small>オフにすると、つや・ドラマチックな光・整った顔などを足さず、書いた指示どおり素直に描きます</small></span>
+          <input type="checkbox" role="switch" class="cal-toggle" id="ip-var-beautify"></label>
       </div>
       <div id="ip-edit-error" style="display:none;color:var(--error);font-size:11px;margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:14px">
@@ -1089,9 +1090,9 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=140"></script>
-<script src="x-affiliate.js?v=140"></script>
-<script src="app.js?v=140"></script>
-<script src="office.js?v=140"></script>
+<script src="../shared/ui.js?v=142"></script>
+<script src="x-affiliate.js?v=142"></script>
+<script src="app.js?v=142"></script>
+<script src="office.js?v=142"></script>
 </body>
 </html>

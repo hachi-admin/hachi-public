@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '140';
+const DASH_BUILD = '142';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6763,23 +6763,60 @@ function _openRecipeEditor(id = null) {
       <span class="cat-label">${label}<code style="margin-left:6px;font-size:9px;color:var(--m2)">${k}</code></span>
       <textarea id="ip-edit-spec-${k}" class="cat-in" rows="${Math.min(7, Math.max(2, Math.ceil((r?.spec?.[k] || '').length / 90)))}" placeholder="${esc(ph)}">${esc(r?.spec?.[k] || '')}</textarea>
     </label>`).join('');
-  $('negative').value = (r?.negative || []).join('\n');
-  $('keywords').value = (r?.keywords || []).join('、');
+  _ipTags('negative', r?.negative || []);
+  _ipTags('keywords', r?.keywords || []);
   $('centered').checked = r?.centeredSubject === true;
   // Variation: the server's defaults when the recipe has none yet.
-  const v = { chaos: 60, stylize: 50, weird: 10, people: 'auto', styleRef: 'low', raw: false, ...(r?.variation || {}) };
-  for (const k of ['chaos', 'stylize', 'weird']) {
-    const el = document.getElementById(`ip-var-${k}`);
-    el.value = v[k];
-    el.nextElementSibling.textContent = v[k];
-    el.oninput = () => { el.nextElementSibling.textContent = el.value; };
-  }
-  document.getElementById('ip-var-people').value = v.people;
-  document.getElementById('ip-var-styleRef').value = v.styleRef;
-  document.getElementById('ip-var-raw').checked = v.raw === true;
+  _ipVar = { chaos: 60, stylize: 50, weird: 10, people: 'auto', styleRef: 'low', raw: false, ...(r?.variation || {}) };
+  _ipVarDraw();
+  document.getElementById('ip-var-beautify').checked = _ipVar.raw !== true;
   $('error').style.display = 'none';
   document.getElementById('ip-edit-modal').classList.add('open');
   (r ? $('name') : $('id')).focus();
+}
+
+/* Tags: type, Enter (or 、/,) adds; × removes; Backspace on an empty field takes the last one. */
+function _ipTags(k, values) {
+  const box = document.getElementById(`ip-tags-${k}`);
+  box._vals = [...values];
+  const draw = () => {
+    box.innerHTML = box._vals.map((v, i) => `<span class="ip-tag">${esc(v)}<button type="button" aria-label="${esc(v)}を外す" onclick="_ipTagDel('${k}',${i})">×</button></span>`).join('')
+      + `<input type="text" class="ip-tag-in" placeholder="${box._vals.length ? '' : esc(box.dataset.ph)}" enterkeyhint="done">`;
+    const inp = box.querySelector('input');
+    inp.onkeydown = (ev) => {
+      if ((ev.key === 'Enter' || ev.key === '、' || ev.key === ',') && !ev.isComposing) {
+        ev.preventDefault();
+        const v = inp.value.replace(/[、,]/g, '').trim();
+        if (v && !box._vals.includes(v)) { box._vals.push(v); draw(); box.querySelector('input').focus(); }
+        else inp.value = '';
+      } else if (ev.key === 'Backspace' && !inp.value && box._vals.length) { box._vals.pop(); draw(); box.querySelector('input').focus(); }
+    };
+    inp.onblur = () => { const v = inp.value.trim(); if (v && !box._vals.includes(v)) { box._vals.push(v); draw(); } };
+  };
+  box._draw = draw;
+  draw();
+}
+function _ipTagDel(k, i) { const box = document.getElementById(`ip-tags-${k}`); box._vals.splice(i, 1); box._draw(); }
+function _ipTagVals(k) {
+  const box = document.getElementById(`ip-tags-${k}`);
+  const pending = box.querySelector('input')?.value.trim();
+  return [...box._vals, ...(pending && !box._vals.includes(pending) ? [pending] : [])];
+}
+/* Five steps between two plain ends, like a personality test: bigger circles at the ends. */
+let _ipVar = null;
+const _IP_STEPS = [0, 25, 50, 75, 100];
+function _ipVarDraw() {
+  document.querySelectorAll('#ip-edit-var .ip-scale').forEach((el) => {
+    const k = el.dataset.k, cur = _IP_STEPS.reduce((a, b) => (Math.abs(b - _ipVar[k]) < Math.abs(a - _ipVar[k]) ? b : a));
+    el.querySelector('.ip-dots').innerHTML = _IP_STEPS.map((v, i) => `<button type="button" class="ip-dot s${i}${v === cur ? ' on' : ''}" aria-pressed="${v === cur}" aria-label="${i + 1}/5" onclick="_ipVar.${k}=${v};_ipVarDraw()"></button>`).join('');
+  });
+  document.querySelectorAll('#ip-edit-var .ip-seg').forEach((el) => {
+    el.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.v === _ipVar[el.dataset.k]);
+      b.type = 'button';
+      b.onclick = () => { _ipVar[el.dataset.k] = b.dataset.v; _ipVarDraw(); };
+    });
+  });
 }
 
 function _closeRecipeEditor() {
@@ -6801,14 +6838,10 @@ async function _saveRecipe() {
   if (!spec.style) { fail('「作風」は必須です（これが無いと画像モデルに何も伝わりません）'); return; }
   const body = {
     name, description: $('description').value.trim(), spec,
-    negative: $('negative').value.split('\n').map((x) => x.trim()).filter(Boolean),
-    keywords: $('keywords').value.split(/[、,，]/).map((x) => x.trim()).filter(Boolean),
+    negative: _ipTagVals('negative'),
+    keywords: _ipTagVals('keywords'),
     centeredSubject: $('centered').checked,
-    variation: {
-      chaos: Number(document.getElementById('ip-var-chaos').value), stylize: Number(document.getElementById('ip-var-stylize').value),
-      weird: Number(document.getElementById('ip-var-weird').value), people: document.getElementById('ip-var-people').value,
-      styleRef: document.getElementById('ip-var-styleRef').value, raw: document.getElementById('ip-var-raw').checked,
-    },
+    variation: { ..._ipVar, raw: !document.getElementById('ip-var-beautify').checked },
     ...(_ipEditingId ? {} : { kind: 'hero', sourceMode: 'ai', enabled: true }),
   };
   const btn = $('save');
