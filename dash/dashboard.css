@@ -3711,3 +3711,23 @@ body.sheet-open{overflow:hidden}
 .ip-dot.on::after{content:"";position:absolute;inset:28%;border-radius:50%;background:var(--acc)}
 .ip-toggle-row .cat-switch,.cal-switch .cat-switch{flex:none}
 .cal-sys-row .cat-switch{grid-column:2;grid-row:1 / span 2}
+
+/* ── Recipe editor: read first, edit on tap, saves itself ── */
+body:has(.lightbox-ov.open) .mob-tab-bar{display:none}
+.ip-edit{background:var(--surf);max-width:640px;width:100%;max-height:90vh;max-height:90dvh;overflow-y:auto;overscroll-behavior:contain;padding:0 18px 18px;border-radius:16px}
+.ip-edit-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:16px 0 8px;background:var(--surf)}
+#ip-edit-title{flex:1;min-width:0;font-weight:700;font-size:15px;color:var(--txt);line-height:1.4}
+.ip-edit-state{font-size:11px;color:var(--m);white-space:nowrap}
+.ip-edit-state.err{color:var(--red);white-space:normal;text-align:right}
+.ip-edit-x{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:var(--surf);box-shadow:var(--sh-sm);color:var(--m);font-size:18px;line-height:1;cursor:pointer}
+.ip-edit-x:active{box-shadow:var(--sh-press)}
+#ip-edit-idrow{margin-bottom:8px}
+.ip-sec{padding:8px 0 10px;border-bottom:1px solid color-mix(in srgb,var(--m2) 22%,transparent);cursor:text}
+.ip-sec .cat-label{margin-bottom:4px}
+.ip-sec-v{font-size:13px;line-height:1.65;color:var(--txt);white-space:pre-wrap;word-break:break-word;border-radius:8px}
+.ip-sec:not(.editing):active .ip-sec-v{background:color-mix(in srgb,var(--acc) 7%,transparent)}
+.ip-sec-ph{color:var(--m2);font-size:12px}
+.ip-sec textarea.cat-in{width:100%;resize:none;overflow:hidden;font-size:16px;line-height:1.6;min-height:3.4em}
+.ip-sec input.cat-in{width:100%;font-size:16px}
+.ip-tags:not(.editing){box-shadow:none;padding:2px 0;min-height:0}
+.ip-tags:not(.editing) .ip-tag{padding:4px 10px;font-size:12px}

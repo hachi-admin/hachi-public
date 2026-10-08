@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '143';
+const DASH_BUILD = '144';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -6736,33 +6736,85 @@ async function _genImagePromptSamplesNow(id) {
 
 
 /* The recipe editor. What the reference-image flow drafts, corrected by hand — or a recipe
-   written from nothing. Spec fields are the prompt fragments themselves, so they are shown as
-   such; the Japanese name and description are what the list and the category picker show. */
+   written from nothing. Read first, edit on tap: recipes are rarely edited, so each section shows
+   its text and becomes a field only when tapped, and every change saves itself (no save button).
+   Spec fields are the prompt fragments themselves; name and description are what the list and
+   the category picker show. */
 const _IP_SPEC = [
-  ['style', '作風', 'e.g. Cinematic film still, 35mm, shallow depth of field'],
-  ['composition', '構図', 'e.g. Subject on the right third, open negative space on the left for a headline'],
-  ['lighting', '光', 'e.g. Wet neon reflections, magenta and cyan rim light'],
-  ['camera', 'カメラ', 'e.g. 50mm, eye level'],
-  ['color_restriction', '色の制約', 'e.g. Teal and orange only, no pure black'],
-  ['texture', '質感', 'e.g. Fine film grain'],
-  ['mood', '雰囲気', 'e.g. Lonely, late night, quiet'],
+  ['style', '作風', '例: 35mmフィルムの映画の一場面。浅い被写界深度'],
+  ['composition', '構図', '例: 主役は右の三分の一。左に見出し用の余白を大きく空ける'],
+  ['lighting', '光', '例: 濡れた路面に映るネオン。マゼンタとシアンの輪郭光'],
+  ['camera', 'カメラ', '例: 50mm、目線の高さ'],
+  ['color_restriction', '色の制約', '例: ティールとオレンジだけ。真っ黒は使わない'],
+  ['texture', '質感', '例: 細かいフィルムの粒子'],
+  ['mood', '雰囲気', '例: 孤独、深夜、静か'],
 ];
 let _ipEditingId = null;
+let _ipDraft = null;       // { name, description, spec } — the text sections
+let _ipSaveTimer = null;
+let _ipSaved = false;      // anything written while open → reload the list on close
+
+function _ipSecHtml(k, label, value, ph, sub = '') {
+  return `<div class="ip-sec" data-k="${k}" onclick="_ipSecEdit(this)">
+      <div class="cat-label">${label}${sub ? `<small class="ip-sub">${sub}</small>` : ''}</div>
+      <div class="ip-sec-v" data-ph="${esc(ph)}">${value ? esc(value) : `<span class="ip-sec-ph">${esc(ph)}</span>`}</div>
+    </div>`;
+}
+const _ipGet = (k) => (k.startsWith('spec.') ? _ipDraft.spec[k.slice(5)] : _ipDraft[k]) || '';
+function _ipSet(k, v) { if (k.startsWith('spec.')) _ipDraft.spec[k.slice(5)] = v; else _ipDraft[k] = v; }
+
+function _ipSecEdit(el) {
+  if (el.classList.contains('editing')) return;
+  const k = el.dataset.k, view = el.querySelector('.ip-sec-v');
+  el.classList.add('editing');
+  const single = k === 'name';
+  const f = document.createElement(single ? 'input' : 'textarea');
+  f.className = 'cat-in';
+  f.value = _ipGet(k);
+  f.placeholder = view.dataset.ph;
+  if (single) f.maxLength = 60; else if (k === 'description') f.maxLength = 300;
+  const fit = () => { if (!single) { f.style.height = 'auto'; f.style.height = `${f.scrollHeight + 2}px`; } };
+  f.oninput = fit;
+  f.onblur = () => {
+    const v = f.value.trim();
+    el.classList.remove('editing');
+    if (k === 'name' && !v && _ipEditingId) { f.replaceWith(view); return; }  // a name can't be blanked
+    const changed = v !== _ipGet(k);
+    _ipSet(k, v);
+    view.innerHTML = v ? esc(v) : `<span class="ip-sec-ph">${esc(view.dataset.ph)}</span>`;
+    f.replaceWith(view);
+    if (k === 'name') _ipTitle();
+    if (changed) _ipQueueSave();
+  };
+  if (single) f.onkeydown = (ev) => { if (ev.key === 'Enter' && !ev.isComposing) f.blur(); };
+  view.replaceWith(f);
+  fit();
+  f.focus();
+}
+function _ipTitle() {
+  document.getElementById('ip-edit-title').textContent = _ipEditingId ? (_ipDraft.name || _ipEditingId) : '画風を空から書く';
+}
+function _ipState(text, err = false) {
+  const el = document.getElementById('ip-edit-state');
+  el.textContent = text;
+  el.classList.toggle('err', err);
+}
 
 function _openRecipeEditor(id = null) {
   const r = id ? (_imagePrompts || []).find((x) => x.id === id) : null;
   if (id && !r) return;
   _ipEditingId = id;
+  _ipSaved = false;
+  clearTimeout(_ipSaveTimer);
+  _ipDraft = { name: r?.name || '', description: r?.description || '', spec: { ...(r?.spec || {}) } };
   const $ = (k) => document.getElementById(`ip-edit-${k}`);
-  $('title').textContent = r ? `「${r.name || r.id}」を編集` : '画風を空から書く';
+  _ipTitle();
+  _ipState('');
+  $('idrow').style.display = r ? 'none' : '';
   $('id').value = r?.id || '';
-  $('id').disabled = !!r;
-  $('name').value = r?.name || '';
-  $('description').value = r?.description || '';
-  $('spec').innerHTML = _IP_SPEC.map(([k, label, ph]) => `<label class="cat-field cat-wide">
-      <span class="cat-label">${label}<code style="margin-left:6px;font-size:9px;color:var(--m2)">${k}</code></span>
-      <textarea id="ip-edit-spec-${k}" class="cat-in" rows="${Math.min(7, Math.max(2, Math.ceil((r?.spec?.[k] || '').length / 90)))}" placeholder="${esc(ph)}">${esc(r?.spec?.[k] || '')}</textarea>
-    </label>`).join('');
+  $('head').innerHTML = _ipSecHtml('name', '名前', _ipDraft.name, '例: シネマ：ネオン香港')
+    + _ipSecHtml('description', '説明', _ipDraft.description, 'どんな絵になるか、どの記事に向くか');
+  $('spec').innerHTML = _IP_SPEC.map(([k, label, ph]) => _ipSecHtml(`spec.${k}`, label, _ipDraft.spec[k], ph)).join('');
   _ipTags('negative', r?.negative || []);
   _ipTags('keywords', r?.keywords || []);
   $('centered').checked = r?.centeredSubject === true;
@@ -6770,18 +6822,27 @@ function _openRecipeEditor(id = null) {
   _ipVar = { chaos: 60, stylize: 50, weird: 10, people: 'auto', styleRef: 'low', raw: false, ...(r?.variation || {}) };
   _ipVarDraw();
   document.getElementById('ip-var-beautify').checked = _ipVar.raw !== true;
-  $('error').style.display = 'none';
   document.getElementById('ip-edit-modal').classList.add('open');
-  (r ? $('name') : $('id')).focus();
+  document.querySelector('#ip-edit-modal .ip-edit').scrollTop = 0;
+  if (!r) $('id').focus();
 }
 
-/* Tags: type, Enter (or 、/,) adds; × removes; Backspace on an empty field takes the last one. */
+/* Tags: shown as plain chips; tap the box to edit — type, Enter (or 、/,) adds, × removes,
+   Backspace on an empty field takes the last one. Leaving the box saves. */
 function _ipTags(k, values) {
   const box = document.getElementById(`ip-tags-${k}`);
   box._vals = [...values];
+  box._editing = false;
   const draw = () => {
-    box.innerHTML = box._vals.map((v, i) => `<span class="ip-tag">${esc(v)}<button type="button" aria-label="${esc(v)}を外す" onclick="_ipTagDel('${k}',${i})">×</button></span>`).join('')
-      + `<input type="text" class="ip-tag-in" placeholder="${box._vals.length ? '' : esc(box.dataset.ph)}" enterkeyhint="done">`;
+    box.classList.toggle('editing', box._editing);
+    if (!box._editing) {
+      box.innerHTML = box._vals.length
+        ? box._vals.map((v) => `<span class="ip-tag">${esc(v)}</span>`).join('')
+        : `<span class="ip-sec-ph">${esc(box.dataset.ph)}</span>`;
+      return;
+    }
+    box.innerHTML = box._vals.map((v, i) => `<span class="ip-tag">${esc(v)}<button type="button" aria-label="${esc(v)}を外す" onmousedown="event.preventDefault()" onclick="event.stopPropagation();_ipTagDel('${k}',${i})">×</button></span>`).join('')
+      + `<input type="text" class="ip-tag-in" placeholder="${box._vals.length ? '追加' : esc(box.dataset.ph)}" enterkeyhint="done">`;
     const inp = box.querySelector('input');
     inp.onkeydown = (ev) => {
       if ((ev.key === 'Enter' || ev.key === '、' || ev.key === ',') && !ev.isComposing) {
@@ -6791,73 +6852,103 @@ function _ipTags(k, values) {
         else inp.value = '';
       } else if (ev.key === 'Backspace' && !inp.value && box._vals.length) { box._vals.pop(); draw(); box.querySelector('input').focus(); }
     };
-    inp.onblur = () => { const v = inp.value.trim(); if (v && !box._vals.includes(v)) { box._vals.push(v); draw(); } };
+    inp.onblur = () => {
+      const v = inp.value.trim();
+      if (v && !box._vals.includes(v)) box._vals.push(v);
+      box._editing = false;
+      draw();
+      if (box._vals.join('\n') !== box._was) _ipQueueSave();
+    };
+  };
+  box.onclick = () => {
+    if (box._editing) { box.querySelector('input')?.focus(); return; }
+    box._editing = true;
+    box._was = box._vals.join('\n');
+    draw();
+    box.querySelector('input').focus();
   };
   box._draw = draw;
   draw();
 }
-function _ipTagDel(k, i) { const box = document.getElementById(`ip-tags-${k}`); box._vals.splice(i, 1); box._draw(); }
-function _ipTagVals(k) {
+function _ipTagDel(k, i) {
   const box = document.getElementById(`ip-tags-${k}`);
-  const pending = box.querySelector('input')?.value.trim();
-  return [...box._vals, ...(pending && !box._vals.includes(pending) ? [pending] : [])];
+  box._vals.splice(i, 1);
+  box._draw();
+  box.querySelector('input')?.focus();
 }
+function _ipTagVals(k) { return [...document.getElementById(`ip-tags-${k}`)._vals]; }
 /* Five steps between two plain ends, like a personality test: bigger circles at the ends. */
 let _ipVar = null;
 const _IP_STEPS = [0, 25, 50, 75, 100];
 function _ipVarDraw() {
   document.querySelectorAll('#ip-edit-var .ip-scale').forEach((el) => {
     const k = el.dataset.k, cur = _IP_STEPS.reduce((a, b) => (Math.abs(b - _ipVar[k]) < Math.abs(a - _ipVar[k]) ? b : a));
-    el.querySelector('.ip-dots').innerHTML = _IP_STEPS.map((v, i) => `<button type="button" class="ip-dot s${i}${v === cur ? ' on' : ''}" aria-pressed="${v === cur}" aria-label="${i + 1}/5" onclick="_ipVar.${k}=${v};_ipVarDraw()"></button>`).join('');
+    el.querySelector('.ip-dots').innerHTML = _IP_STEPS.map((v, i) => `<button type="button" class="ip-dot s${i}${v === cur ? ' on' : ''}" aria-pressed="${v === cur}" aria-label="${i + 1}/5" onclick="_ipVar.${k}=${v};_ipVarDraw();_ipQueueSave()"></button>`).join('');
   });
   document.querySelectorAll('#ip-edit-var .ip-seg').forEach((el) => {
     el.querySelectorAll('button').forEach((b) => {
       b.classList.toggle('on', b.dataset.v === _ipVar[el.dataset.k]);
       b.type = 'button';
-      b.onclick = () => { _ipVar[el.dataset.k] = b.dataset.v; _ipVarDraw(); };
+      b.onclick = () => { _ipVar[el.dataset.k] = b.dataset.v; _ipVarDraw(); _ipQueueSave(); };
     });
   });
 }
 
 function _closeRecipeEditor() {
+  // Whatever field is still open commits (its blur queues a save), then the queue flushes.
+  document.activeElement?.blur?.();
+  if (_ipSaveTimer) { clearTimeout(_ipSaveTimer); _ipSaveTimer = null; _saveRecipe(); }
   document.getElementById('ip-edit-modal')?.classList.remove('open');
-  _ipEditingId = null;
+  if (_ipSaved) _loadImagePrompts();
 }
 
+function _ipQueueSave() {
+  clearTimeout(_ipSaveTimer);
+  _ipSaveTimer = setTimeout(() => { _ipSaveTimer = null; _saveRecipe(); }, 400);
+}
+
+/* Writes the whole recipe. A new one is created the first time it has an ID, a name and a 作風;
+   until then nothing is sent and the header says what is missing. */
 async function _saveRecipe() {
-  const $ = (k) => document.getElementById(`ip-edit-${k}`);
-  const fail = (msg) => { $('error').textContent = msg; $('error').style.display = ''; };
-  const id = ($('id').value || '').trim();
-  if (!/^[a-z0-9][a-z0-9-]{1,58}$/.test(id)) { fail('IDは英小文字・数字・ハイフンで2文字以上にしてください'); return; }
-  if (!_ipEditingId && (_imagePrompts || []).some((x) => x.id === id)) { fail('そのIDはすでに使われています'); return; }
-  const name = $('name').value.trim();
-  if (!name) { fail('名前を入れてください'); return; }
+  const id = _ipEditingId || (document.getElementById('ip-edit-id').value || '').trim();
+  const isNew = !_ipEditingId;
+  if (isNew) {
+    if (!/^[a-z0-9][a-z0-9-]{1,58}$/.test(id)) { _ipState('IDを英小文字・数字・ハイフンで入れると保存されます'); return; }
+    if ((_imagePrompts || []).some((x) => x.id === id)) { _ipState('そのIDはすでに使われています', true); return; }
+    if (!_ipDraft.name || !_ipDraft.spec.style) { _ipState('名前と作風を書くと保存されます'); return; }
+  } else if (!_ipDraft.spec.style) { _ipState('作風が空のままでは保存できません', true); return; }
   /* Every field, blanks included: the server merges nested fields, so a field left out would keep
      its old text rather than be cleared. renderPrompt skips empty ones. */
-  const spec = Object.fromEntries(_IP_SPEC.map(([k]) => [k, (document.getElementById(`ip-edit-spec-${k}`)?.value || '').trim()]));
-  if (!spec.style) { fail('「作風」は必須です（これが無いと画像モデルに何も伝わりません）'); return; }
+  const spec = Object.fromEntries(_IP_SPEC.map(([k]) => [k, (_ipDraft.spec[k] || '').trim()]));
   const body = {
-    name, description: $('description').value.trim(), spec,
+    name: _ipDraft.name, description: _ipDraft.description, spec,
     negative: _ipTagVals('negative'),
     keywords: _ipTagVals('keywords'),
-    centeredSubject: $('centered').checked,
+    centeredSubject: document.getElementById('ip-edit-centered').checked,
     variation: { ..._ipVar, raw: !document.getElementById('ip-var-beautify').checked },
-    ...(_ipEditingId ? {} : { kind: 'hero', sourceMode: 'ai', enabled: true }),
+    ...(isNew ? { kind: 'hero', sourceMode: 'ai', enabled: true } : {}),
   };
-  const btn = $('save');
-  btn.disabled = true;
+  _ipState('保存中…');
   const res = await fetch(apiUrl(`/api/image-prompts/${encodeURIComponent(id)}`), {
     method: 'PUT', headers: { ..._authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }).catch(() => null);
-  btn.disabled = false;
   if (!res?.ok) {
     const err = await res?.json().catch(() => ({}));
-    fail(err?.error || `保存できませんでした（${res?.status ?? '通信エラー'}）`);
+    _ipState(err?.error || `保存できませんでした（${res?.status ?? '通信エラー'}）`, true);
     return;
   }
-  _closeRecipeEditor();
-  showToast(_ipEditingId ? 'レシピを保存しました' : 'レシピを作りました。「見本を作る」で見た目を確かめられます', 'success');
-  _loadImagePrompts();
+  _ipSaved = true;
+  // Keep the open list's copy current, so reopening shows what was just written.
+  const local = (_imagePrompts || []).find((x) => x.id === id);
+  if (local) Object.assign(local, body);
+  if (isNew) {
+    _ipEditingId = id;
+    document.getElementById('ip-edit-idrow').style.display = 'none';
+    (_imagePrompts || []).push({ id, ...body });
+    _ipTitle();
+    showToast('レシピを作りました。「見本を作る」で見た目を確かめられます', 'success');
+  }
+  _ipState('保存しました');
 }
 
 async function _toggleImagePrompt(id, currentlyOff) {

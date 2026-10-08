@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/neu.css?v=143">
-<link rel="stylesheet" href="dashboard.css?v=143">
+<link rel="stylesheet" href="../shared/neu.css?v=144">
+<link rel="stylesheet" href="dashboard.css?v=144">
 </head>
 <body>
 
@@ -234,36 +234,33 @@
        draft; this is where it is corrected, or a recipe is written from scratch. The spec fields are
        sent to the image model verbatim, which is why they are labelled as prompt text. -->
   <div class="lightbox-ov" id="ip-edit-modal" onclick="_closeRecipeEditor()">
-    <div class="neu-well" style="background:var(--surf);max-width:640px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;border-radius:16px" onclick="event.stopPropagation()" role="dialog" aria-labelledby="ip-edit-title">
-      <div id="ip-edit-title" style="font-weight:700;font-size:14px;color:var(--txt);margin-bottom:4px">画風を編集</div>
-      <div class="cat-hint" style="margin-bottom:12px">名前と説明は一覧用。「画づくり」の各欄はそのまま画像モデルに渡る指示文です（英語のほうが安定します）。保存しても見本は作り直されません。</div>
-      <div class="cat-grid">
-        <label class="cat-field">
-          <span class="cat-label">ID（英小文字・数字・ハイフン）</span>
-          <input type="text" id="ip-edit-id" class="cat-in" maxlength="60" placeholder="例: soft-editorial-portrait" spellcheck="false">
-        </label>
-        <label class="cat-field cat-wide">
-          <span class="cat-label">名前</span>
-          <input type="text" id="ip-edit-name" class="cat-in" maxlength="60" placeholder="例: シネマ：ネオン香港">
-        </label>
-        <label class="cat-field cat-wide">
-          <span class="cat-label">説明</span>
-          <textarea id="ip-edit-description" class="cat-in" rows="2" maxlength="300" placeholder="どんな絵になるか、どの記事に向くか"></textarea>
-        </label>
+    <!-- Read first, edit on tap: each section shows its text and turns into a field only when
+         tapped. Every change saves itself; there is no save button. -->
+    <div class="neu-well ip-edit" onclick="event.stopPropagation()" role="dialog" aria-labelledby="ip-edit-title">
+      <div class="ip-edit-hd">
+        <div id="ip-edit-title">画風を編集</div>
+        <span class="ip-edit-state" id="ip-edit-state" aria-live="polite"></span>
+        <button type="button" class="ip-edit-x" onclick="_closeRecipeEditor()" aria-label="閉じる">×</button>
       </div>
-      <div class="cat-label" style="margin:14px 0 6px">画づくり（画像モデルへの指示）</div>
-      <div class="cat-grid" id="ip-edit-spec"></div>
+      <div class="cat-hint" style="margin-bottom:10px">欄をタップすると書きかえられ、自動で保存されます。「画づくり」の各欄は、そのまま画像モデルへの指示になります。見本は作り直されません。</div>
+      <label class="cat-field" id="ip-edit-idrow">
+        <span class="cat-label">ID（英小文字・数字・ハイフン）</span>
+        <input type="text" id="ip-edit-id" class="cat-in" maxlength="60" placeholder="例: soft-editorial-portrait" spellcheck="false" onchange="_ipQueueSave()">
+      </label>
+      <div id="ip-edit-head"></div>
+      <div class="cat-label" style="margin:12px 0 6px">画づくり（画像モデルへの指示）</div>
+      <div id="ip-edit-spec"></div>
       <div class="cat-grid" style="margin-top:12px">
         <div class="cat-field cat-wide">
           <span class="cat-label">描かないもの</span>
-          <div class="ip-tags" id="ip-tags-negative" data-ph="例: 文字、透かし（Enterで追加）"></div>
+          <div class="ip-tags" id="ip-tags-negative" data-ph="例: 文字、透かし"></div>
         </div>
         <div class="cat-field cat-wide">
           <span class="cat-label">合う記事のキーワード<small class="ip-sub">記事に合うレシピを自動で選ぶときの手がかり</small></span>
-          <div class="ip-tags" id="ip-tags-keywords" data-ph="例: 映画、夜（Enterで追加）"></div>
+          <div class="ip-tags" id="ip-tags-keywords" data-ph="例: 映画、夜"></div>
         </div>
         <label class="ip-toggle-row cat-wide"><span>主役を真ん中に置く絵<small>オンにすると、文字を画面いっぱいに重ねる型では使いません</small></span>
-          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-edit-centered"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
+          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-edit-centered" onchange="_ipQueueSave()"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
       </div>
       <!-- How much changes from one article's picture to the next (an image tool's chaos/stylize/weird),
            chosen on a five-step scale between two plain-language ends. -->
@@ -277,12 +274,7 @@
         <div class="ip-seg-q">見本の画風に寄せる</div>
         <div class="ip-seg" data-k="styleRef"><button data-v="off">寄せない</button><button data-v="low">少し</button><button data-v="mid">ふつう</button><button data-v="high">強く</button></div>
         <label class="ip-toggle-row"><span>AIの美化<small>オフにすると、つや・ドラマチックな光・整った顔などを足さず、書いた指示どおり素直に描きます</small></span>
-          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-var-beautify"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
-      </div>
-      <div id="ip-edit-error" style="display:none;color:var(--error);font-size:11px;margin-top:8px"></div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="act-btn" onclick="_closeRecipeEditor()" style="flex:1;justify-content:center">キャンセル</button>
-        <button class="act-btn resume" id="ip-edit-save" onclick="_saveRecipe()" style="flex:1;justify-content:center">保存</button>
+          <span class="cat-switch"><input type="checkbox" role="switch" id="ip-var-beautify" onchange="_ipQueueSave()"><span class="cat-switch-track" aria-hidden="true"></span></span></label>
       </div>
     </div>
   </div>
@@ -1090,9 +1082,9 @@
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
 })();
 </script>
-<script src="../shared/ui.js?v=143"></script>
-<script src="x-affiliate.js?v=143"></script>
-<script src="app.js?v=143"></script>
-<script src="office.js?v=143"></script>
+<script src="../shared/ui.js?v=144"></script>
+<script src="x-affiliate.js?v=144"></script>
+<script src="app.js?v=144"></script>
+<script src="office.js?v=144"></script>
 </body>
 </html>
