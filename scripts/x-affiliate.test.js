@@ -286,20 +286,20 @@ test('authenticated X entry groups management cards into X-only category tabs', 
   await flush();
   const root = dom.window.document.getElementById('page-x-affiliate');
   const tabs = [...root.querySelectorAll('.x-section-tab')];
-  assert.deepEqual(tabs.map(tab => tab.textContent), ['商品登録', 'テンプレート', '投稿・レビュー', '運用状況', 'アカウント設定']);
+  assert.deepEqual(tabs.map(tab => tab.textContent), ['商品ワークスペース', 'テンプレート', '運用状況', 'アカウント設定']);
   assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
   assert.equal(root.querySelector('#x-panel-products').hidden, false);
   assert.equal(root.querySelector('#x-panel-account').hidden, true);
   assert.ok(root.querySelector('#x-panel-account #x-accounts'));
   assert.ok(root.querySelector('#x-panel-products #x-products'));
   assert.ok(root.querySelector('#x-panel-templates #x-skills'));
-  assert.ok(root.querySelector('#x-panel-review #x-drafts'));
+  assert.ok(root.querySelector('#x-panel-products #x-drafts'));
   assert.ok(root.querySelector('#x-panel-operations #x-budget'));
   assert.ok(root.querySelector('#x-panel-operations #x-notifications'));
-  tabs[4].click();
+  tabs[3].click();
   assert.equal(root.querySelector('#x-panel-products').hidden, true);
   assert.equal(root.querySelector('#x-panel-account').hidden, false);
-  assert.equal(tabs[4].getAttribute('aria-selected'), 'true');
+  assert.equal(tabs[3].getAttribute('aria-selected'), 'true');
 });
 
 test('X category tabs are not rendered outside an authenticated X BOT view', async () => {
@@ -636,7 +636,7 @@ test('tag 409 keeps all inline inputs for correction', async () => {
   assert.equal(form.querySelector('[name="name"]').value, 'corrected');
   assert.equal(form.querySelector('[name="value"]').value, 'keep-secret');
   assert.equal(form.querySelector('[name="enabled"]').checked, false);
-  assert.match(form.textContent, /最新状態を再確認/);
+  assert.match(form.textContent, /入力は保持しています/);
 });
 
 test('tag retry reuses key for same failed payload and changes it after editing', async () => {
@@ -1176,7 +1176,7 @@ test('product cards link to the canonical URL and product picker explains IDs', 
     if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'admin' } });
     if (path.endsWith('/members')) return json({ members: [] });
     if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
-    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 1, enabled: true, scheduleEnabled: false, operatorNote: '' }, readiness: { missing: [] } }] });
+    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 1, enabled: true, scheduleEnabled: false, operatorNote: '' }, readiness: { ready: true, missing: [] } }] });
     if (path.includes('/tags')) return json({ tags: [] });
     if (path.includes('/skills')) return json({ skills: [], candidates: [] });
     if (path.includes('/drafts?')) return json({ drafts: [] });
@@ -1195,7 +1195,7 @@ test('product cards link to the canonical URL and product picker explains IDs', 
   assert.match(picker.options[0].textContent, /JP-B012345678/);
   picker.options[0].selected = true;
   picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  assert.equal(dom.window.document.querySelector('#x-drafts [name="productIds"]').value, 'JP-B012345678');
+  assert.deepEqual([...picker.selectedOptions].map(option => option.value), ['JP-B012345678']);
 });
 
 test('CSV product import accepts ASIN, manual facts, source and product tags', async () => {
@@ -1244,11 +1244,10 @@ test('product editor binds both revisions, sends only changed manual fields, and
   };
   const dom = page('#x_code=products-edit', true, router, { verifier: 'products-edit-v' });
   await flush(); await selectFirstAccount(dom);
-  const form = dom.window.document.querySelector('#x-products .x-product form');
-  form.querySelector('[name="name"]').value = '手修正名';
-  form.querySelector('[name="features"]').value = '特徴A\n特徴B';
-  form.querySelector('[name="operatorNote"]').value = '新メモ';
-  form.querySelector('[name="sourceNote"]').value = '独自資料で確認';
+  const form = dom.window.document.querySelector('#x-product-detail .x-product-editor');
+  for (const [name, value] of Object.entries({ name: '手修正名', features: '特徴A\n特徴B', operatorNote: '新メモ', sourceNote: '独自資料で確認' })) {
+    const input = form.querySelector(`[name="${name}"]`); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  }
   form.querySelector('button').click(); await flush();
   const patch = requests.find(request => request.path.includes('/products/JP-B012345678') && request.options.method === 'PATCH');
   const body = JSON.parse(patch.options.body);
@@ -1258,8 +1257,104 @@ test('product editor binds both revisions, sends only changed manual fields, and
   assert.equal(body.fields.name, '手修正名');
   assert.equal(body.sourceNote, '独自資料で確認');
   assert.equal(form.querySelector('[name="name"]').value, '手修正名');
-  assert.match(form.textContent, /最新状態を再確認/);
+  assert.match(form.textContent, /入力は保持しています/);
   assert.equal([...dom.window.document.querySelectorAll('#x-products button')].some(button => button.textContent === 'アーカイブ'), false);
+});
+
+test('product-specific unsaved information survives switching to another product and back', async () => {
+  const products = [workspaceProductFixture('p1', 'A'), workspaceProductFixture('p2', 'A')];
+  const router = (url) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products });
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=product-buffer', true, router, { verifier: 'product-buffer-v' }); await flush(); await selectFirstAccount(dom);
+  const input = dom.window.document.querySelector('#x-product-detail [name="features"]'); input.value = '編集中のp1特徴'; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const rows = dom.window.document.querySelectorAll('#x-products .x-workspace-product'); rows[1].click();
+  dom.window.document.querySelectorAll('#x-products .x-workspace-product')[0].click();
+  assert.equal(dom.window.document.querySelector('#x-product-detail [name="features"]').value, '編集中のp1特徴');
+});
+
+test('filter selection note clears when selection returns to a visible product', async () => {
+  const products = [workspaceProductFixture('p1', 'A'), workspaceProductFixture('p2', 'A')];
+  const router = (url, options = {}) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products });
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=filter-selection-note', true, router, { verifier: 'filter-selection-note-v' }); await flush(); await selectFirstAccount(dom);
+  const filter = dom.window.document.querySelector('#x-products .x-product-filter');
+  filter.querySelector('[name="q"]').value = '商品 p2'; filter.querySelector('button').click();
+  assert.ok(dom.window.document.querySelector('#x-products .x-filter-selection-note'));
+  dom.window.document.querySelector('#x-products .x-workspace-product').click();
+  assert.equal(dom.window.document.querySelector('#x-products .x-filter-selection-note'), null);
+  const refresh = [...dom.window.document.querySelectorAll('#x-product-detail button')].find(button => button.textContent === '商品情報を取得し直す'); refresh.click(); await flush();
+  assert.equal(dom.window.document.querySelector('#x-products .x-filter-selection-note'), null, 'the existing-items redraw must not leave a stale out-of-filter note');
+});
+
+test('validation failure after save never reviews and keeps the saved revision through product switching', async () => {
+  const requests = []; const products = [workspaceProductFixture('p1', 'a1'), workspaceProductFixture('p2', 'a1')];
+  const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: '元本文', validation: { ok: true } };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products });
+    if (path.includes('/drafts?')) return json({ drafts: [draft] });
+    if (path.endsWith('/drafts/d1') && options.method === 'PATCH') return json({ publicDraft: { ...draft, revision: 2, body: '保存済みだが検証NG', validation: { ok: false, errors: ['fact_ref_invalid'] } } });
+    if (path.endsWith('/drafts/d1/review')) return json({ publicDraft: { ...draft, state: 'approved', revision: 3 } });
+    return json({});
+  };
+  const dom = page('#x_code=save-validation', true, router, { verifier: 'save-validation-v' }); await flush(); await selectFirstAccount(dom);
+  const textarea = dom.window.document.querySelector('#x-drafts textarea'); textarea.value = '保存済みだが検証NG'; textarea.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const approve = [...dom.window.document.querySelectorAll('#x-drafts button')].find(button => button.textContent === '保存して採用'); approve.click(); await flush();
+  const patches = requests.filter(item => item.path.endsWith('/drafts/d1') && item.options.method === 'PATCH');
+  assert.equal(patches.length, 1);
+  assert.equal(requests.filter(item => item.path.endsWith('/drafts/d1/review')).length, 0);
+  assert.equal(approve.textContent, '採用'); assert.equal(approve.disabled, true);
+  approve.disabled = false; approve.click(); await flush();
+  assert.equal(requests.filter(item => item.path.endsWith('/drafts/d1/review')).length, 0, 'a forced second click must still respect saved validation');
+  dom.window.document.querySelectorAll('#x-products .x-workspace-product')[1].click();
+  dom.window.document.querySelectorAll('#x-products .x-workspace-product')[0].click();
+  assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '保存済みだが検証NG', 'old GET revision must not overwrite the newer PATCH snapshot');
+});
+
+test('save success followed by review failure retries review at saved revision without another PATCH', async () => {
+  const requests = []; let reviewAttempts = 0;
+  const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: '元本文', validation: { ok: true } };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] });
+    if (path.includes('/drafts?')) return json({ drafts: [draft] });
+    if (path.endsWith('/drafts/d1') && options.method === 'PATCH') return json({ publicDraft: { ...draft, revision: 2, body: '保存済み本文', validation: { ok: true } } });
+    if (path.endsWith('/drafts/d1/review')) {
+      reviewAttempts += 1;
+      if (reviewAttempts === 1) return json({ error: { code: 'temporary_review_failure', message: 'review unavailable' } }, 503);
+      return json({ publicDraft: { ...draft, revision: 3, body: '保存済み本文', state: 'approved', validation: { ok: true } } });
+    }
+    return json({});
+  };
+  const dom = page('#x_code=partial-review', true, router, { verifier: 'partial-review-v' }); await flush(); await selectFirstAccount(dom);
+  const textarea = dom.window.document.querySelector('#x-drafts textarea'); textarea.value = '保存済み本文'; textarea.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  [...dom.window.document.querySelectorAll('#x-drafts button')].find(button => button.textContent === '保存して採用').click(); await flush();
+  assert.match(dom.window.document.querySelector('#x-drafts').textContent, /本文は保存済み、採用は未完了/);
+  const approve = [...dom.window.document.querySelectorAll('#x-drafts button')].find(button => button.textContent === '採用'); approve.click(); await flush();
+  assert.equal(requests.filter(item => item.path.endsWith('/drafts/d1') && item.options.method === 'PATCH').length, 1);
+  const reviews = requests.filter(item => item.path.endsWith('/drafts/d1/review')).map(item => JSON.parse(item.options.body));
+  assert.deepEqual(reviews.map(body => body.expectedRevision), [2, 2]);
+  assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '保存済み本文');
 });
 
 test('adapter-disabled refresh stays visibly unavailable and does not masquerade as success', async () => {
@@ -1277,9 +1372,9 @@ test('adapter-disabled refresh stays visibly unavailable and does not masquerade
   };
   const dom = page('#x_code=products-refresh', true, router, { verifier: 'products-refresh-v' });
   await flush(); await selectFirstAccount(dom);
-  const refresh = [...dom.window.document.querySelectorAll('#x-products button')].find(button => button.textContent === '取得を再試行');
+  const refresh = [...dom.window.document.querySelectorAll('#x-product-detail button')].find(button => button.textContent === '商品情報を取得し直す');
   assert.ok(refresh); refresh.click(); await flush();
-  assert.match(dom.window.document.querySelector('#x-products').textContent, /実商品取得adapterはまだ未接続/);
+  assert.match(dom.window.document.querySelector('#x-product-detail').textContent, /Request failed/);
 });
 
 test('full app history back from X redraws the same legacy page and reloads once', async () => {
@@ -1331,6 +1426,12 @@ const skillFixture = () => ({
     { kind: 'product_fact', text: '合成商品は整理に使える', factRefs: ['f1'] },
   ] },
   exampleValidation: { valid: true, errors: [] }, assignment: { enabled: false, priority: null, revision: 0 }, usage: { enabledAccountCount: 2 },
+});
+
+const workspaceProductFixture = (productId = 'p1', accountId = 'a1') => ({
+  product: { productId, asin: `B${String(productId).replace(/\D/g, '').padStart(9, '0').slice(-9)}`, name: `商品 ${productId}`, canonicalUrl: 'https://www.amazon.co.jp/dp/B012345678', catalogStatus: 'available', revision: 1, features: ['確認済みの特徴'], facts: [], tags: [] },
+  accountProduct: { accountId, productId, revision: 1, enabled: true, scheduleEnabled: false, operatorNote: '' },
+  readiness: { ready: true, missing: [], requiresRecheck: false },
 });
 
 test('Skill catalog shows all adoption decisions and imports only through an admin action', async () => {
@@ -1503,24 +1604,56 @@ test('allocation preview shows the exact Skill and does not call a generation en
 });
 
 test('L4 generation form keeps variant count separate and sends one grouped request', async () => {
-  const requests = [];
+  const requests = []; let generationAttempts = 0;
+  const generationSkill = { ...skillFixture(), angles: [...skillFixture().angles, { id: 'context', label: 'Use context', requiredFactTypes: [] }] };
   const router = (url, options = {}) => {
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
     if (path.endsWith('/context')) return json({ apiVersion: 'x-affiliate/v1', accounts: [{ accountId: 'a1', label: 'A', market: 'JP', enabled: true, revision: 0 }], member: { role: 'member', accountIds: ['a1'] } });
     if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
     if (path.includes('/tags')) return json({ accountId: 'a1', tags: [] });
-    if (path.includes('/products')) return json({ products: [] });
-    if (path.includes('/skills')) return json({ imported: false, skills: [], candidates: [] });
-    if (path.endsWith('/generations')) return json({ job: { status: 'completed' }, draftIds: ['d1', 'd2'] });
+    if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1'), workspaceProductFixture('p2', 'a1')] });
+    if (path.includes('/skills?')) return json({ imported: true, skills: [generationSkill], candidates: [] });
+    if (path.endsWith('/skill-allocation-previews')) {
+      const payload = JSON.parse(options.body);
+      if (!payload.requested?.length) return json({ diagnostics: [{ skillId: 'text-amazon-hook-fixed', eligible: true, angleIds: ['feature', 'context'] }] });
+      return json({ status: 'ready', allocations: payload.requested, productIds: payload.productIds, requestedVariantCount: payload.requestedVariantCount });
+    }
+    if (path.endsWith('/generations')) { generationAttempts += 1; return generationAttempts === 1 ? json({ error: { code: 'provider_response_unknown', message: 'timeout' } }, 503) : json({ job: { status: 'completed' }, draftIds: ['d1', 'd2'] }); }
     if (path.includes('/drafts?')) return json({ drafts: [] });
     return json({});
   };
   const dom = page('#x_code=l4', true, router, { verifier: 'l4-v' }); await flush(); await selectFirstAccount(dom);
-  const form = dom.window.document.querySelector('#x-drafts .x-generation-form'); assert.ok(form);
-  form.elements.productIds.value = 'p1,p2'; form.elements.requestedVariantCount.value = '2'; form.querySelector('button').click(); await flush();
-  const request = requests.find(item => item.path.endsWith('/api/x-affiliate/generations')); assert.ok(request); const body = JSON.parse(request.options.body);
-  assert.deepEqual(body.productIds, ['p1', 'p2']); assert.equal(body.requestedVariantCount, 2); assert.equal(typeof body.idempotencyKey, 'string');
+  let form = dom.window.document.querySelector('#x-drafts .x-generation-form'); assert.ok(form);
+  let button = form.querySelector('button');
+  assert.equal(form.querySelector('[name="productPicker"]').selectedOptions[0].value, 'p1');
+  assert.equal(form.querySelector('[name="requestedVariantCount"]').value, '1', 'candidate count starts at one even when multiple options are available');
+  let allocation = form.querySelector('[name="allocation-0"]'); allocation.value = 'text-amazon-hook-fixed::feature'; allocation.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  dom.window.document.querySelectorAll('#x-products .x-workspace-product')[1].click(); await flush();
+  dom.window.document.querySelectorAll('#x-products .x-workspace-product')[0].click(); await flush();
+  form = dom.window.document.querySelector('#x-drafts .x-generation-form');
+  assert.equal(form.querySelector('[name="allocation-0"]').value, 'text-amazon-hook-fixed::feature', 'template selection survives switching products and back');
+  button = form.querySelector('button');
+  const secondProduct = form.querySelector('.x-generation-product-option input[value="p2"]'); secondProduct.checked = true; secondProduct.dispatchEvent(new dom.window.Event('change', { bubbles: true })); await flush();
+  const count = form.querySelector('[name="requestedVariantCount"]'); count.value = '2'; count.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  const allocations = [...form.querySelectorAll('[name^="allocation-"]')]; allocations[0].value = 'text-amazon-hook-fixed::feature'; allocations[0].dispatchEvent(new dom.window.Event('change', { bubbles: true })); allocations[1].value = 'text-amazon-hook-fixed::context'; allocations[1].dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  button.click(); await flush();
+  assert.equal(requests.some(item => item.path.endsWith('/generations')), false, 'preflight confirmation must be a separate user action');
+  assert.equal(button.textContent, '確認した条件で候補を生成');
+  count.value = '1'; count.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.equal(button.textContent, '割当を確認', 'changing candidate count invalidates a prior preflight');
+  count.value = '2'; count.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.deepEqual([...form.querySelectorAll('[name^="allocation-"]')].map(select => select.value), ['text-amazon-hook-fixed::feature', 'text-amazon-hook-fixed::context']);
+  button.click(); await flush(); assert.equal(button.textContent, '確認した条件で候補を生成');
+  button.click(); await flush();
+  const request = requests.find(item => item.path.endsWith('/api/x-affiliate/generations')); assert.ok(request); const firstKey = JSON.parse(request.options.body).idempotencyKey;
+  assert.equal(button.textContent, '確認した条件で候補を生成', 'uncertain generation result keeps the confirmed payload and retry state');
+  button.click(); await flush();
+  const generationRequests = requests.filter(item => item.path.endsWith('/api/x-affiliate/generations'));
+  assert.equal(generationRequests.length, 2);
+  const body = JSON.parse(generationRequests[1].options.body);
+  assert.equal(JSON.parse(generationRequests[1].options.body).idempotencyKey, firstKey, 'an uncertain retry reuses the same billable-operation key');
+  assert.deepEqual(body.productIds, ['p1', 'p2']); assert.equal(body.requestedVariantCount, 2); assert.equal(body.requested.length, 2); assert.equal(typeof body.idempotencyKey, 'string');
 });
 
 test('generation result and job id remain visible after drafts reload', async () => {
@@ -1531,15 +1664,21 @@ test('generation result and job id remain visible after drafts reload', async ()
     if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP', enabled: true, revision: 0 }], member: { role: 'member', accountIds: ['a1'] } });
     if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
     if (path.includes('/tags')) return json({ accountId: 'a1', tags: [] });
-    if (path.includes('/products')) return json({ products: [] });
-    if (path.includes('/skills')) return json({ imported: false, skills: [], candidates: [] });
+    if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] });
+    if (path.includes('/skills?')) return json({ imported: true, skills: [skillFixture()], candidates: [] });
+    if (path.endsWith('/skill-allocation-previews')) {
+      const payload = JSON.parse(options.body);
+      if (!payload.requested?.length) return json({ diagnostics: [{ skillId: 'text-amazon-hook-fixed', eligible: true, angleIds: ['feature'] }] });
+      return json({ status: 'ready', allocations: payload.requested, productIds: payload.productIds, requestedVariantCount: payload.requestedVariantCount });
+    }
     if (path.endsWith('/generations')) return json({ job: { jobId: 'job-unknown-1', status: 'unknown', errorCode: 'PROVIDER_RESPONSE_UNKNOWN', createdDraftCount: 0 }, draftIds: [] });
     if (path.includes('/drafts?')) return json({ drafts: [] });
     return json({});
   };
   const dom = page('#x_code=generation-result', true, router, { verifier: 'generation-result-v' }); await flush(); await selectFirstAccount(dom);
   const form = dom.window.document.querySelector('#x-drafts .x-generation-form'); assert.ok(form);
-  form.elements.productIds.value = 'p1'; form.querySelector('button').click(); await flush();
+  const allocation = form.querySelector('[name="allocation-0"]'); allocation.value = 'text-amazon-hook-fixed::feature'; allocation.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  form.querySelector('button').click(); await flush(); form.querySelector('button').click(); await flush();
   const status = dom.window.document.querySelector('#x-drafts .x-status');
   assert.ok(status);
   assert.match(status.textContent, /生成結果を確認できません/);
@@ -1552,8 +1691,33 @@ test('generation result and job id remain visible after drafts reload', async ()
   assert.ok(requests.some(item => item.path.endsWith('/api/x-affiliate/generations')));
 });
 
+test('blocked final generation preflight keeps the reason and never calls generation', async () => {
+  const requests = [];
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] });
+    if (path.includes('/skills?')) return json({ imported: true, skills: [skillFixture()] });
+    if (path.endsWith('/skill-allocation-previews')) {
+      const payload = JSON.parse(options.body);
+      return payload.requested?.length
+        ? json({ status: 'blocked', allocations: [], blockingReasons: [{ code: 'fixture_block_reason' }] })
+        : json({ diagnostics: [{ skillId: 'text-amazon-hook-fixed', eligible: true, angleIds: ['feature'] }] });
+    }
+    return json({});
+  };
+  const dom = page('#x_code=preflight-blocked', true, router, { verifier: 'preflight-blocked-v' }); await flush(); await selectFirstAccount(dom);
+  const form = dom.window.document.querySelector('#x-drafts .x-generation-form');
+  const slot = form.querySelector('[name="allocation-0"]'); slot.value = 'text-amazon-hook-fixed::feature'; slot.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  form.querySelector('button').click(); await flush();
+  assert.match(form.textContent, /fixture_block_reason/);
+  assert.equal(requests.some(item => item.path.endsWith('/generations')), false);
+});
+
 test('L4 comparison shows grouped drafts and review uses the displayed revision', async () => {
-  const requests = []; const drafts = [{ draftId: 'd1', generationGroupId: 'g1', variantId: 'variant-1', state: 'needs_review', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文\nhttps://www.amazon.co.jp/dp/B012345678?tag=x-22\n#PR' }, { draftId: 'd2', generationGroupId: 'g1', variantId: 'variant-2', state: 'needs_review', skillId: 's2', skillVersion: '1.0.0', angleId: 'a2', productIds: ['p1'], revision: 7, validation: { ok: false, errors: ['fact_ref_invalid'] }, body: '作業版\n#PR' }];
+  const requests = []; const drafts = [{ draftId: 'd1', generationGroupId: 'g1', variantId: 'variant-1', state: 'needs_review', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文\nhttps://www.amazon.co.jp/dp/B012345678?tag=x-22\n#PR', regenerationComparison: { beforeBody: '再生成前の本文', beforeContentRevision: 2, afterContentRevision: 3 } }, { draftId: 'd2', generationGroupId: 'g1', variantId: 'variant-2', state: 'needs_review', skillId: 's2', skillVersion: '1.0.0', angleId: 'a2', productIds: ['p1'], revision: 7, validation: { ok: false, errors: ['fact_ref_invalid'] }, body: '作業版\n#PR' }];
   const router = (url, options = {}) => {
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
@@ -1567,7 +1731,15 @@ test('L4 comparison shows grouped drafts and review uses the displayed revision'
     return json({});
   };
   const dom = page('#x_code=l4-review', true, router, { verifier: 'l4-review-v' }); await flush(); await selectFirstAccount(dom);
-  const cards = dom.window.document.querySelectorAll('#x-drafts .x-draft'); assert.equal(cards.length, 2); assert.match(cards[1].textContent, /fact_ref_invalid/);
+  const cards = dom.window.document.querySelectorAll('#x-drafts .x-draft'); assert.equal(cards.length, 2); assert.match(cards[1].textContent, /登録済みの特徴に沿って書き直してください/);
+  assert.equal(cards[0].querySelector('.x-regeneration-before').textContent, '再生成前の本文');
+  assert.equal(cards[0].querySelector('textarea[name="body"]').value, drafts[0].body, 'the current text stays editable separately from the read-only prior text');
+  const groupAction = [...cards[0].querySelectorAll('button')].find(button => button.textContent === 'この案を採用し残りを見送り');
+  const firstBody = cards[0].querySelector('textarea'); firstBody.value += '\n未保存'; firstBody.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(groupAction.disabled, true);
+  groupAction.disabled = false; groupAction.click(); await flush();
+  assert.equal(requests.some(item => item.path.includes('/draft-groups/')), false, 'group adoption must be blocked while any member body is dirty');
+  firstBody.value = drafts[0].body; firstBody.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const approve = [...cards[0].querySelectorAll('button')].find(button => button.textContent === '採用'); approve.click(); await flush();
   const request = requests.find(item => item.path.includes('/drafts/d1/review')); assert.ok(request); const body = JSON.parse(request.options.body); assert.equal(body.expectedRevision, 4); assert.equal(body.entrypoint, 'public');
   const invalidApprove = [...cards[1].querySelectorAll('button')].find(button => button.textContent === '採用'); assert.equal(invalidApprove.disabled, true);
@@ -1646,7 +1818,7 @@ test('L5 regeneration preserves instruction on 409 and exposes archive/restore',
 
 test('L5 normal regeneration sends target revision instruction key and shows terminal job', async () => {
   const requests = []; let reads = 0;
-  const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j1')) return json({ job: { jobId: 'j1', status: 'completed' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'needs_review', skillId: 's', skillVersion: '1', angleId: 'a', revision: reads++ ? 5 : 4, body: reads ? '更新本文' : '元本文', validation: { ok: true } }] }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j1', status: 'queued', estimatedMaxMicroJPY: 10000000 } }); return json({}); };
+  const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j1')) return json({ job: { jobId: 'j1', status: 'completed' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', productIds: ['p1'], state: 'needs_review', skillId: 's', skillVersion: '1', angleId: 'a', revision: reads++ ? 5 : 4, body: reads ? '更新本文' : '元本文', validation: { ok: true } }] }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j1', status: 'queued', estimatedMaxMicroJPY: 10000000 } }); return json({}); };
   const dom = page('#x_code=normal-regen', true, router, { verifier: 'normal-regen-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = '説明を短くする'; form.querySelector('button').click(); await flush(); const req = requests.find(r => r.path.includes('/regenerate')); const body = JSON.parse(req.options.body); assert.equal(body.expectedRevision, 4); assert.equal(body.instruction, '説明を短くする'); assert.equal(typeof body.idempotencyKey, 'string'); assert.ok(requests.some(r => r.path.endsWith('/generation-jobs/j1'))); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '更新本文');
 });
 
@@ -1656,8 +1828,8 @@ test('L5 unknown notification remains visible without automatic POST', async () 
 });
 
 test('L5 archived restore preserves card on 429', async () => {
-  const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'archived', revision: 3, body: '保管本文', validation: { ok: true } }] }); if (path.includes('/review')) return json({ error: { message: 'full' } }, 429); return json({}); };
-  const dom = page('#x_code=restore-429', true, router, { verifier: 'restore-v' }); await flush(); await selectFirstAccount(dom); await flush(); const b = [...dom.window.document.querySelectorAll('#x-drafts button')].find(x => x.textContent === '保管から復元'); b.click(); await flush(); assert.ok(requests.some(r => r.path.includes('/review'))); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '保管本文'); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /archived/);
+  const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', productIds: ['p1'], state: 'archived', revision: 3, body: '保管本文', validation: { ok: true } }] }); if (path.includes('/review')) return json({ error: { message: 'full' } }, 429); return json({}); };
+  const dom = page('#x_code=restore-429', true, router, { verifier: 'restore-v' }); await flush(); await selectFirstAccount(dom); await flush(); const b = [...dom.window.document.querySelectorAll('#x-drafts button')].find(x => x.textContent === '保管から復元'); b.click(); await flush(); assert.ok(requests.some(r => r.path.includes('/review'))); assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '保管本文'); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /保管/);
 });
 
 test('L5 member has no schedule checkbox and admin failed save preserves checked input', async () => {
@@ -1667,31 +1839,31 @@ test('L5 member has no schedule checkbox and admin failed save preserves checked
 });
 
 test('L5 group lock disables review buttons', async () => {
-  const router = (url, options = {}) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 1, body: 'a', validation: { ok: true }, regeneration: { status: 'running', jobId: 'j' } }, { draftId: 'd2', generationGroupId: 'g', variantId: 'v2', state: 'needs_review', revision: 1, body: 'b', validation: { ok: true } }] }); return json({}); };
+  const router = (url, options = {}) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: 'a', validation: { ok: true }, regeneration: { status: 'running', jobId: 'j' } }, { draftId: 'd2', generationGroupId: 'g', variantId: 'v2', productIds: ['p1'], state: 'needs_review', revision: 1, body: 'b', validation: { ok: true } }] }); return json({}); };
   const dom = page('#x_code=group-lock', true, router, { verifier: 'group-lock-v' }); await flush(); await selectFirstAccount(dom); await flush(); assert.equal([...dom.window.document.querySelectorAll('#x-drafts button')].filter(b => b.textContent === '採用').every(b => b.disabled), true);
 });
 
 test('L5 regenerationLock unknown is refreshed from GET and remains visible', async () => {
-  const requests = []; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j-unknown')) return json({ job: { jobId: 'j-unknown', status: 'unknown', errorCode: 'provider_response_unknown' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 2, body: '本文', validation: { ok: true }, regenerationLock: { jobId: 'j-unknown', status: 'unknown' } }] }); return json({}); };
+  const requests = []; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/generation-jobs/j-unknown')) return json({ job: { jobId: 'j-unknown', status: 'unknown', errorCode: 'provider_response_unknown' } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 2, body: '本文', validation: { ok: true }, regenerationLock: { jobId: 'j-unknown', status: 'unknown' } }] }); return json({}); };
   const dom = page('#x_code=lock-unknown', true, router, { verifier: 'lock-unknown-v' }); await flush(); await selectFirstAccount(dom); await flush(); assert.match(dom.window.document.querySelector('#x-drafts').textContent, /unknown/); assert.ok(requests.some(path => path.includes('/generation-jobs/j-unknown')));
 });
 
 test('L5 delayed budget enables regeneration without losing edited instruction', async () => {
-  const delayed = deferred(); let budgetCalls = 0; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) { budgetCalls += 1; return delayed.promise; } if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); return json({}); };
-  const dom = page('#x_code=budget-late', true, router, { verifier: 'budget-late-v' }); await flush(); const account = dom.window.document.querySelector('#x-accounts .x-row button'); if (account.getAttribute('aria-pressed') !== 'true') account.click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); const instruction = form.elements.instruction; instruction.value = '修正意図を保持'; const action = form.querySelector('[data-regeneration-action]'); assert.equal(action.disabled, true); delayed.resolve(json({ operation: { limitMicroJPY: 10000000 } })); await flush(); assert.equal(instruction.value, '修正意図を保持'); assert.equal(action.disabled, false); assert.equal(budgetCalls, 1);
+  const delayed = deferred(); let budgetCalls = 0; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/budget')) { budgetCalls += 1; return delayed.promise; } if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); return json({}); };
+  const dom = page('#x_code=budget-late', true, router, { verifier: 'budget-late-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); assert.ok(form, `draft UI: ${dom.window.document.querySelector('#x-drafts').textContent}`); const instruction = form.elements.instruction; instruction.value = '修正意図を保持'; const action = form.querySelector('[data-regeneration-action]'); assert.equal(action.disabled, true); delayed.resolve(json({ operation: { limitMicroJPY: 10000000 } })); await flush(); assert.equal(instruction.value, '修正意図を保持'); assert.equal(action.disabled, false); assert.equal(budgetCalls, 1);
 });
 
 test('L5 account switch ignores delayed budget, job, and scheduled responses from old account', async () => {
-  const delayed = { A: { budget: deferred(), job: deferred(), schedule: deferred() }, B: { budget: deferred(), job: deferred(), schedule: deferred() } }; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); const account = new URL(path, 'https://x').searchParams.get('accountId') || (path.includes('/generation-jobs/') ? (path.includes('A') ? 'A' : 'B') : 'B'); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return delayed[account].budget.promise; if (path.includes('/scheduled-runs')) return delayed[account].schedule.promise; if (path.includes('/generation-jobs/')) return delayed[account].job.promise; if (path.includes('/drafts?')) return json({ drafts: [{ draftId: `${account}-d`, generationGroupId: 'g', variantId: 'v', state: 'needs_review', revision: 1, body: account, validation: { ok: true }, regenerationLock: { jobId: `${account}-job`, status: 'running' } }] }); return json({}); };
+  const delayed = { A: { budget: deferred(), job: deferred(), schedule: deferred() }, B: { budget: deferred(), job: deferred(), schedule: deferred() } }; const router = (url) => { const path = String(url); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); const account = new URL(path, 'https://x').searchParams.get('accountId') || (path.includes('/generation-jobs/') ? (path.includes('A') ? 'A' : 'B') : 'B'); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture(`p-${account}`, account)] }); if (path.includes('/budget')) return delayed[account].budget.promise; if (path.includes('/scheduled-runs')) return delayed[account].schedule.promise; if (path.includes('/generation-jobs/')) return delayed[account].job.promise; if (path.includes('/drafts?')) return json({ drafts: [{ draftId: `${account}-d`, generationGroupId: 'g', variantId: 'v', productIds: [`p-${account}`], state: 'needs_review', revision: 1, body: account, validation: { ok: true }, regenerationLock: { jobId: `${account}-job`, status: 'running' } }] }); return json({}); };
   const dom = page('#x_code=account-delay', true, router, { verifier: 'account-delay-v' }); await flush(); const buttons = dom.window.document.querySelectorAll('#x-accounts .x-row button'); buttons[0].click(); await flush(); buttons[1].click(); await flush(); delayed.A.budget.resolve(json({ operation: { limitMicroJPY: 111 }, marker: 'A' })); delayed.A.job.resolve(json({ job: { jobId: 'A-job', status: 'unknown' } })); delayed.A.schedule.resolve(json({ runs: [{ day: 'A', status: 'A-old' }] })); delayed.B.budget.resolve(json({ operation: { limitMicroJPY: 222 }, marker: 'B' })); delayed.B.job.resolve(json({ job: { jobId: 'B-job', status: 'running' } })); delayed.B.schedule.resolve(json({ runs: [{ day: 'B', status: 'B-current' }] })); await flush(); assert.doesNotMatch(dom.window.document.querySelector('#x-budget').textContent, /A-old|111/); assert.match(dom.window.document.querySelector('#x-budget').textContent, /B-current|222/);
 });
 
 test('L5 failed regeneration keeps the original body and exposes terminal status', async () => {
-  const requests = []; let draftReads = 0; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j-failed', status: 'queued' } }); if (path.includes('/generation-jobs/j-failed')) return json({ job: { jobId: 'j-failed', status: 'failed', errorCode: 'GENERATION_OUTPUT_INVALID', validationErrors: ['weighted_length_exceeded'], providerDiagnostic: { code: 'INVALID_ARGUMENT', message: 'Request contains an invalid argument.' } } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', state: 'needs_review', revision: draftReads++, body: '元本文', validation: { ok: true } }] }); return json({}); };
-  const dom = page('#x_code=regen-failed', true, router, { verifier: 'regen-failed-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = '短くする'; form.querySelector('[data-regeneration-action]').click(); await flush(); await flush(); await flush(); const text = dom.window.document.querySelector('#x-drafts').textContent; assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '元本文'); assert.match(text, /再生成ジョブ: failed/); assert.match(text, /j-failed/); assert.match(text, /GENERATION_OUTPUT_INVALID/); assert.match(text, /weighted_length_exceeded/); assert.match(text, /INVALID_ARGUMENT/); assert.match(text, /Request contains an invalid argument/); assert.ok(requests.some(path => path.includes('/generation-jobs/j-failed')));
+  const requests = []; let draftReads = 0; const router = (url) => { const path = String(url); requests.push(path); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) return json({ products: [workspaceProductFixture('p1', 'a1')] }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/regenerate')) return json({ job: { jobId: 'j-failed', status: 'queued' } }); if (path.includes('/generation-jobs/j-failed')) return json({ job: { jobId: 'j-failed', status: 'failed', errorCode: 'GENERATION_OUTPUT_INVALID', validationErrors: ['weighted_length_exceeded'], providerDiagnostic: { code: 'INVALID_ARGUMENT', message: 'Request contains an invalid argument.' } } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: draftReads++, body: '元本文', validation: { ok: true } }] }); return json({}); };
+  const dom = page('#x_code=regen-failed', true, router, { verifier: 'regen-failed-v' }); await flush(); await selectFirstAccount(dom); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = '短くする'; form.querySelector('[data-regeneration-action]').click(); await flush(); await flush(); await flush(); const text = dom.window.document.querySelector('#x-drafts').textContent; assert.equal(dom.window.document.querySelector('#x-drafts textarea').value, '元本文'); assert.match(text, /再生成: 失敗/); assert.match(text, /j-failed/); assert.match(text, /GENERATION_OUTPUT_INVALID/); assert.match(text, /投稿全体がXの文字数上限を超えています/); assert.match(text, /INVALID_ARGUMENT/); assert.match(text, /Request contains an invalid argument/); assert.ok(requests.some(path => path.includes('/generation-jobs/j-failed')));
 });
 
 test('L5 delayed regenerate response after account switch does not populate the new scope', async () => {
-  const delayed = deferred(); const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/drafts?')) return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); if (path.includes('/regenerate')) return delayed.promise; return json({}); };
+  const delayed = deferred(); const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ products: [workspaceProductFixture(`p-${accountId}`, accountId)] }); } if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/drafts?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', productIds: [`p-${accountId}`], state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); } if (path.includes('/regenerate')) return delayed.promise; return json({}); };
   const dom = page('#x_code=regen-scope', true, router, { verifier: 'regen-scope-v' }); await flush(); const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button'); accounts[0].click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = 'Aの修正'; form.querySelector('[data-regeneration-action]').click(); await flush(); accounts[1].click(); await flush(); delayed.resolve(json({ job: { jobId: 'A-job', status: 'failed' } })); await flush(); await flush(); assert.equal(requests.some(item => item.path.includes('/generation-jobs/A-job')), false); assert.doesNotMatch(dom.window.document.querySelector('#x-drafts').textContent, /A-job/);
 });
