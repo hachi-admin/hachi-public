@@ -1898,8 +1898,9 @@ function calOpenEvent(i) {
     return _calSheet(`${_calSheetHd('cont', e.name, `${_calLabel(e.date)} ${_calHm(e.at)} にDiscordの #approvals ${sent ? 'へ届きました' : 'へ届きます'}`, '記事案')}
       <div class="cal-ideas">${e.items.map((it) => `<div class="cal-idea st-${it.state}" id="cal-idea-${esc(it.card.id)}">
         <div><b>${esc(it.title)}</b>${it.card.description && it.state === 'wait' ? `<small>${esc(it.card.description)}</small>` : ''}
-          <small class="cal-idea-st">${it.state === 'yes' ? `${_calMark(it)} 承認 · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
+          <small class="cal-idea-st">${it.state === 'yes' ? `${_calMark(it)} ${/（自動）$/.test(it.card.decisionLabel || '') ? '自動で承認' : '承認'} · ${_CAL_WRITE[it.write]}${it.art?.wikiUrl ? ` · <a href="${esc(it.art.wikiUrl)}" target="_blank" rel="noopener">記事を開く</a>` : ''}` : STATE[it.state]}</small></div>
         ${it.state === 'wait' && !sent ? `<button class="cal-regen" onclick="calRegen('${esc(it.card.id)}',this)" aria-label="この案を作り直す" title="作り直す">↻</button>` : ''}</div>`).join('')}</div>
+      ${open ? '<div class="cal-item-meta">届いてから24時間返事がなければ、1案目を自動で書きます。</div>' : ''}
       ${open && !sent ? `<label class="cal-field">届く日<select onchange="calMove('${esc(e.cards[0].id)}',this.value,this)">${Array.from({ length: 7 }, (_, i) => _calAdd(_calTodayKey(), i)).map((k) => `<option value="${k}"${k === e.date ? ' selected' : ''}>${_calLabel(k)}</option>`).join('')}</select></label>` : ''}
       ${catId ? _calMagSched(catId) : ''}`);
   }
