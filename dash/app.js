@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '147';
+const DASH_BUILD = '148';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1511,7 +1511,7 @@ function _calApprovalGroups(items, date) {
   const decided = done.filter((a) => a.status === 'decided').length;
   const expired = done.filter((a) => a.status === 'expired').length;
   const tally = done.length
-    ? `<div class="cal-appr-tally">済み ${[decided ? `回答 ${decided}件` : '', expired ? `期限切れ ${expired}件（3日間回答がなく自動で閉じたもの）` : ''].filter(Boolean).join(' · ')}</div>`
+    ? `<div class="cal-appr-tally">済み ${[decided ? `回答 ${decided}件` : '', expired ? `期限切れ ${expired}件（2日間回答がなく自動で閉じたもの）` : ''].filter(Boolean).join(' · ')}</div>`
     : '';
   return rows + tally;
 }
