@@ -39,11 +39,28 @@ const lineOf = (text, idx) => text.slice(0, idx).split('\n').length;
 // A dark shadow with no light counterpart has no light source: the surface appears to dissolve
 // rather than to be lit, which is what reads as a fade.
 function shadowPairing(file, text) {
+  const customProperties = new Map();
+  for (const declaration of text.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)(?:;|(?=}))/g)) {
+    customProperties.set(declaration[1], declaration[2].trim());
+  }
+  const resolveAliases = (value, seen = new Set()) => value.replace(/var\(\s*(--[\w-]+)(?:\s*,\s*([^)]*))?\)/g,
+    (whole, name, fallback = '') => {
+      // --sh* names are design-system terminals. Keep the token intact instead of parsing its
+      // comma-separated internals as an arbitrary one-sided shadow.
+      if (/^--sh(?:-[\w-]+)?$/.test(name)) return whole;
+      if (seen.has(name)) return fallback || whole;
+      const alias = customProperties.get(name);
+      if (alias === undefined) return fallback || whole;
+      const nextSeen = new Set(seen);
+      nextSeen.add(name);
+      return resolveAliases(alias, nextSeen);
+    });
   const re = /box-shadow:\s*([^;}]+)[;}]/g;
   let m;
   while ((m = re.exec(text)) !== null) {
-    const v = m[1].trim();
-    if (/var\(--sh/.test(v) || v === 'none' || /inset/.test(v)) continue;
+    const v = m[1].trim().replace(/\s*!important\s*$/i, '').trim();
+    const resolved = resolveAliases(v);
+    if (/var\(--sh(?:-[\w-]+)?\)/.test(resolved) || resolved === 'none' || /\binset\b/.test(resolved)) continue;
     const layers = v.split(/,(?![^(]*\))/).length;
     if (layers < 2) {
       report('error', file, lineOf(text, m.index), 'shadow-pair',

@@ -3042,7 +3042,7 @@ button.cal-item { width: 100%; background: none; border-left: 0; border-right: 0
 .cat-range::-webkit-slider-runnable-track{height:8px;border-radius:4px;box-shadow:var(--sh-in)}
 .cat-range::-webkit-slider-thumb{margin-top:-9px}
 .seg-btn .pal-dots{display:inline-flex;gap:2px;margin-right:6px;vertical-align:-1px}
-.seg-btn .pal-dots i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.seg-btn .pal-dots i{width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--m) 20%,transparent)}
 
 /* ── One type size for every field, and every field a recessed well ───────────
    The viewport caps auto-zoom (maximum-scale=1), so fields no longer need 16px to stop iOS zooming
@@ -3233,8 +3233,7 @@ select.is-chip{width:auto;min-height:28px!important;padding:3px 24px 3px 11px!im
 .cat-gal-img img,.pick-img img{border-radius:8px}
 /* colours: a recessed tray, each colour a raised bead in it */
 .acard-pal,.pick-dots,.cat-pal{display:inline-flex;gap:6px;padding:5px 8px;border-radius:999px;box-shadow:var(--sh-press);background:var(--bg)}
-.acard-pal i,.pick-dots i,.cat-pal i{border:2px solid var(--bg);box-shadow:var(--sh-sm)!important}
-.pick-dots i.is-style{border:2px solid var(--bg)}
+.acard-pal i,.pick-dots i,.cat-pal i{border:0;box-shadow:var(--sh-sm),inset 0 0 0 2px var(--bg)!important}
 .hp-ground-lbl{flex:none;white-space:nowrap}
 select.is-chip{width:auto!important;flex:none;max-width:60%}
 
@@ -3290,7 +3289,7 @@ input.cat-in,input.form-input,textarea,select:not(.is-chip),.cat-switch-track,.c
   border-radius:22px 22px 0 0!important;padding:20px 16px calc(24px + env(safe-area-inset-bottom))!important;box-shadow:var(--sh-lg)!important;
   background:var(--bg)!important;-webkit-overflow-scrolling:touch}
 @media (min-width:900px){#hero-preset-editor.as-sheet{left:50%;transform:translateX(-50%);width:min(1100px,94vw);top:4vh}}
-#hp-sheet-backdrop{position:fixed;inset:0;z-index:9400;background:rgba(10,12,20,.3);display:none}
+#hp-sheet-backdrop{position:fixed;inset:0;z-index:9400;background:var(--scrim);display:none}
 #hp-sheet-backdrop.open{display:block}
 .hp-sheet-close{position:sticky;top:0;float:right;z-index:2}
 body.sheet-open{overflow:hidden}
@@ -3303,7 +3302,7 @@ body.sheet-open{overflow:hidden}
    A see-through black strip with white type: the previous item, the current one, and the next few,
    each step away from the current one smaller and fainter. */
 #scroll-label{position:fixed;right:12px;z-index:900;max-width:44vw;display:flex;flex-direction:column;align-items:flex-end;gap:0;
-  padding:4px 8px;border-radius:8px;background:rgba(0,0,0,.45);box-shadow:none;pointer-events:none;
+  padding:4px 8px;border-radius:8px;background:var(--scrim);box-shadow:none;pointer-events:none;
   opacity:0;transform:translateY(-14px);transition:opacity .25s}
 #scroll-label.show{opacity:1}
 #scroll-label span{color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.4}
@@ -3470,7 +3469,7 @@ body.sheet-open{overflow:hidden}
 .cal-row-h{width:36px;flex:none;text-align:right;font-size:11.5px;color:var(--m);padding-top:7px;font-variant-numeric:tabular-nums}
 .cal-row-ev{flex:1;min-width:0;display:grid;gap:5px}
 .cal-ev{display:block;width:100%;text-align:left;border:0;font:inherit;cursor:pointer;border-radius:10px;padding:7px 10px;font-size:13.5px;line-height:1.4;color:var(--txt);
-  background:color-mix(in srgb,var(--c) 13%,var(--surf));border-left:3px solid var(--c)}
+  background:linear-gradient(var(--c),var(--c)) left center/3px 100% no-repeat,color-mix(in srgb,var(--c) 13%,var(--surf))}
 .cal-ev b{font-weight:700;word-break:break-word}
 .cal-ev small{display:block;color:var(--m);font-size:11.5px;margin-top:1px;word-break:break-word}
 .cal-ev.plan{background:transparent;box-shadow:inset 0 0 0 1.2px color-mix(in srgb,var(--c) 70%,transparent);border-left-style:dashed}
@@ -3512,7 +3511,7 @@ body.sheet-open{overflow:hidden}
 .cal-wk-cell .cal-ev{padding:5px 7px;font-size:12px;line-height:1.35;border-radius:8px}
 .cal-wk-cell .cal-ev small{font-size:10.5px}
 .cal-wk-bg{font-size:10.5px;color:var(--m);text-align:center;padding:2px 0}
-.cal-wk-now{display:block;font-size:10.5px;font-weight:700;color:var(--red);border-top:2px solid var(--red);padding-top:1px;margin-top:2px}
+.cal-wk-now{display:block;font-size:10.5px;font-weight:700;color:var(--red);box-shadow:inset 0 2px 0 var(--red);padding-top:1px;margin-top:2px}
 /* 2026-10-06: one look for every event, done or to come; no 定期ジョブ button in the bar. */
 .cal-nav{grid-template-columns:auto 1fr}
 .cal-wk-cell.today{background-color:transparent}
@@ -3615,7 +3614,7 @@ body.sheet-open{overflow:hidden}
   .cal-wk-hds .cal-wk-row{animation:cal-wk-follow linear both;animation-timeline:--wkx;will-change:transform}
 }
 .cal-wk-hds .cal-wk-row{will-change:transform}
-.cal-note{border-radius:3px;box-shadow:0 0 0 .5px color-mix(in srgb,var(--m) 35%,transparent);background:#fff}
+.cal-note{border-radius:50%;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--m) 35%,transparent);background:#fff}
 /* Mark centred against the whole name; the time still floats right inside the name block. */
 .cal-ev-hd{display:flex;align-items:center;gap:4px}
 .cal-ev-t{flex:1;min-width:0;display:block}
@@ -3624,8 +3623,8 @@ body.sheet-open{overflow:hidden}
 /* ── Event cards, 2026-10-07 ──
    A light card with a colour edge; the name leads, the time sits right. A slate lists its ideas:
    waiting ones plain, the approved one picked out with what became of it, declined ones faded. */
-.cal-wk-cell .cal-ev,.cal-mday-list .cal-ev{background:color-mix(in srgb,var(--c) 7%,var(--surf));border-left:3px solid var(--c);
-  box-shadow:0 1px 0 color-mix(in srgb,var(--m) 14%,transparent)}
+.cal-wk-cell .cal-ev,.cal-mday-list .cal-ev{background:linear-gradient(var(--c),var(--c)) left center/3px 100% no-repeat,
+  color-mix(in srgb,var(--c) 7%,var(--surf));box-shadow:var(--sh-sm)}
 .cal-ev-hd b{font-weight:700;letter-spacing:.01em}
 .cal-ev-items{display:grid;gap:3px;margin-top:4px}
 .cal-ev-items i{font-style:normal;display:block;font-size:9.5px;line-height:1.35;color:var(--m);word-break:break-word;padding-left:7px;position:relative}
@@ -3694,7 +3693,7 @@ body.sheet-open{overflow:hidden}
 #detail-panel.panel-fit:focus{outline:none}
 /* job sheet: pill switch, one label style, filled selected weekday */
 .cal-toggle{appearance:none;-webkit-appearance:none;width:44px !important;height:26px !important;border-radius:999px;background:var(--bg);box-shadow:var(--sh-in);position:relative;cursor:pointer;transition:background .15s}
-.cal-toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.cal-toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:var(--sh-sm);transition:left .15s}
 .cal-toggle:checked{background:var(--acc)}
 .cal-toggle:checked::after{left:21px}
 .cal-sheet .cal-field,.cal-sheet .cal-switch>span{font-size:13px;font-weight:500;color:var(--m)}
