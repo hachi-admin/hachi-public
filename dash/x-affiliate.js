@@ -38,6 +38,7 @@
   const validationMessage = code => VALIDATION_GUIDANCE[code] || '投稿ルールに沿っていない箇所があります。本文と選択したテンプレートを確認してください。';
   const validationMessages = codes => [...new Set((codes || []).filter(code => typeof code === 'string').map(validationMessage))];
   const draftStateLabel = state => ({ needs_review: 'レビュー待ち', approved: '採用済み', rejected: '見送り', archived: '保管' })[state] || '状態確認中';
+  const productWorkspaceLabel = product => `${product?.name || '商品名未入力'}（ジャンル: ${product?.category || '未設定'}） · ASIN ${product?.asin || '不明'}`;
   const angleLabels = { feature: '確認済みの特徴', size: 'サイズ・省スペース', comparison: '比較', classification: '分類', placement: '配置場所', object: '片付け対象' };
   const ACTION_GUIDANCE = {
     generation_allocation_blocked: '選択した商品で使えるテンプレートがありません。商品の情報を補うか、別の商品を選んでください。',
@@ -77,7 +78,7 @@
     { id: 'operations', label: '運用状況' },
     { id: 'account', label: 'アカウント設定' },
   ];
-  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, productLoadGeneration: new Map(), draftLoadGeneration: new Map(), linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), generationNotice: null, productCatalog: [], productCatalogByAccount: new Map(), workspaceSelections: new Map(), productEditDrafts: new Map(), draftEditDrafts: new Map(), generationFormState: new Map(), productFilters: new Map(), reviewFilters: new Map(), draftSnapshots: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, productLoadGeneration: new Map(), draftLoadGeneration: new Map(), linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), generationNotice: null, productCatalog: [], productCatalogByAccount: new Map(), workspaceSelections: new Map(), workspaceViews: new Map(), productEditDrafts: new Map(), draftEditDrafts: new Map(), generationFormState: new Map(), productFilters: new Map(), reviewFilters: new Map(), draftSnapshots: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -138,7 +139,7 @@
     state.importResult = null;
     state.skillPreview = null;
     state.productCatalog = [];
-    state.productCatalogByAccount.clear(); state.workspaceSelections.clear(); state.productEditDrafts.clear(); state.draftEditDrafts.clear(); state.generationFormState.clear();
+    state.productCatalogByAccount.clear(); state.workspaceSelections.clear(); state.workspaceViews.clear(); state.productEditDrafts.clear(); state.draftEditDrafts.clear(); state.generationFormState.clear();
     state.draftSnapshots.clear(); state.productLoadGeneration.clear(); state.draftLoadGeneration.clear();
     state.skillDrafts.clear();
     state.generationJobs.clear(); state.draftJobs.clear();
@@ -634,6 +635,7 @@
       row.setAttribute('aria-pressed', String(selectedId === product.productId));
       row.removeAttribute('role');
       row.append(el('strong', { text: product.name || '商品名未入力' }),
+        el('span', { className: 'x-product-category', text: `ジャンル: ${product.category || '未設定'}` }),
         el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` }),
         el('span', { className: 'x-muted', text: `${info} · レビュー待ち ${waiting} · 採用済み ${approved}` }));
       items.append(row);
@@ -650,16 +652,17 @@
     const key = productEditKey(accountId, product.productId);
     const saved = state.productEditDrafts.get(key) || {};
     const initial = {
-      name: product.name || '', features: (product.features || []).join('\n'), tags: (product.tags || []).join(', '),
+      name: product.name || '', category: product.category || '', features: (product.features || []).join('\n'), tags: (product.tags || []).join(', '),
       facts: (product.facts || []).map(fact => `${fact.type} | ${fact.value}`).join('\n'),
       operatorNote: accountProduct.operatorNote || '', sourceNote: '', enabled: accountProduct.enabled !== false, scheduleEnabled: accountProduct.scheduleEnabled === true,
     };
     const values = { ...initial, ...(saved.values || {}) };
-    const missingLabels = { name: '商品名', features: '特徴', facts: '確認済み事実', source: '確認元' };
+    const missingLabels = { name: '商品名', category: '商品ジャンル', features: '特徴', facts: '確認済み事実', source: '確認元' };
     const missing = item.readiness?.missing || [];
     const form = el('form', { className: 'x-form x-product-editor' }, [
       el('p', { className: 'x-muted', text: `ASIN ${product.asin || '不明'} · ${{available:'利用中',input_pending:'情報入力待ち',paused:'停止中',archived:'アーカイブ',invalid:'要確認'}[product.catalogStatus] || '状態確認中'} · 不足: ${missing.map(value => missingLabels[value] || value).join('、') || 'なし'}` }),
       field('商品名', 'text', 'name', values.name),
+      field('商品ジャンル（投稿候補の分類）', 'text', 'category', values.category, '例: キッチン用品、PC周辺機器'),
       field('確認済み特徴（1行1件）', 'textarea', 'features', values.features),
       field('タグ（カンマ区切り）', 'text', 'tags', values.tags),
       field('確認済み事実（種類 | 内容、1行1件）', 'textarea', 'facts', values.facts),
@@ -673,6 +676,7 @@
         const draft = state.productEditDrafts.get(key) || { values, productRevision: product.revision, accountRevision: accountProduct.revision };
         const fields = {};
         if (draft.values.name !== initial.name) fields.name = draft.values.name || null;
+        if (draft.values.category !== initial.category) fields.category = draft.values.category || null;
         const features = String(draft.values.features || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
         if (JSON.stringify(features) !== JSON.stringify(product.features || [])) fields.features = features.length ? features : null;
         const tags = splitTagList(draft.values.tags);
@@ -690,6 +694,7 @@
         }
         if (JSON.stringify(facts.map(({ factId, ...fact }) => fact)) !== JSON.stringify((product.facts || []).map(({ factId, ...fact }) => fact))) fields.facts = facts;
         if (!Object.keys(fields).length) { endWrite(form); message(form, '変更はありません', ''); return; }
+        if (Object.hasOwn(fields, 'category') && !String(draft.values.sourceNote || '').trim()) { endWrite(form); message(form, '商品ジャンルを変更する場合は、手修正の確認元・理由を入力してください。', 'error'); return; }
         try {
           form.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = true; });
           await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: draft.productRevision ?? product.revision, expectedAccountRevision: draft.accountRevision ?? accountProduct.revision, fields, sourceNote: draft.values.sourceNote }) });
@@ -708,7 +713,7 @@
     const infoDetails = el('details', { className: 'x-product-info-details' });
     infoDetails.append(el('summary', { text: missing.length ? `不足項目を補う（${missing.map(value => missingLabels[value] || value).join('、')}）` : '商品情報を確認・編集' }));
     infoDetails.open = missing.length > 0;
-    const primaryNames = new Set(['name', 'features', 'facts', 'sourceNote']);
+    const primaryNames = new Set(['name', 'category', 'features', 'facts', 'sourceNote']);
     const fields = [...form.querySelectorAll('.x-field')];
     const saveButton = form.querySelector('button');
     fields.forEach(node => node.remove()); saveButton?.remove();
@@ -732,7 +737,7 @@
       catch (error) { if (actionRow.isConnected) message(actionRow, actionErrorMessage(error), 'error'); }
     }));
     optionalDetails.append(actionRow);
-    const title = el('div', { className: 'x-selected-product-title' }, [el('strong', { text: product.name || '商品名未入力' }), el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` })]);
+    const title = el('div', { className: 'x-selected-product-title' }, [el('strong', { text: product.name || '商品名未入力' }), el('span', { className: 'x-product-category', text: `ジャンル: ${product.category || '未設定'}` }), el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` })]);
     if (product.canonicalUrl) title.append(el('a', { className: 'x-product-link', href: product.canonicalUrl, target: '_blank', rel: 'noopener noreferrer', text: '商品ページを開く' }));
     box.replaceChildren(title, form);
     form.querySelectorAll('[name]').forEach(control => { control.dataset.workspaceFocusKey = `product:${product.productId}:${control.name}`; });
@@ -1158,7 +1163,7 @@
     if (choices) choices.replaceChildren();
     ready.forEach(item => {
       const product = item.product || {};
-      const label = `${product.name || '商品名未入力'} · ASIN ${product.asin || '不明'}`;
+      const label = productWorkspaceLabel(product);
       const option = el('option', { value: product.productId, text: `${label} · ID: ${product.productId}` });
       option.selected = selected.has(product.productId);
       select.append(option);
@@ -1195,10 +1200,60 @@
     box.replaceChildren();
     renderGenerationNotice(document.getElementById('x-generation-status'), accountId);
     renderGenerationNotice(box, accountId);
+    const approvedDrafts = [...new Map((data.drafts || []).filter(draft => draft.state === 'approved').map(draft => [draft.draftId, draft])).values()];
+    const candidateCount = (data.drafts || []).filter(draft => draft.state === 'needs_review').length;
+    const activeWorkspaceView = state.workspaceViews.get(accountId) || 'candidates';
+    const candidateWorkspace = el('section', { id: 'x-candidate-workspace', role: 'tabpanel', 'aria-label': '候補を確認' });
+    const approvedWorkspace = el('section', { id: 'x-approved-workspace', role: 'tabpanel', 'aria-label': '投稿待ち' });
+    const setWorkspaceView = view => {
+      state.workspaceViews.set(accountId, view);
+      candidateWorkspace.hidden = view !== 'candidates';
+      approvedWorkspace.hidden = view !== 'approved';
+      candidateTab.setAttribute('aria-selected', String(view === 'candidates'));
+      approvedTab.setAttribute('aria-selected', String(view === 'approved'));
+      candidateTab.classList.toggle('is-active', view === 'candidates');
+      approvedTab.classList.toggle('is-active', view === 'approved');
+    };
+    const candidateTab = button(`候補を確認（${candidateCount}件）`, () => setWorkspaceView('candidates'));
+    const approvedTab = button(`投稿待ち（${approvedDrafts.length}件）`, () => setWorkspaceView('approved'));
+    candidateTab.setAttribute('role', 'tab'); candidateTab.setAttribute('aria-controls', 'x-candidate-workspace');
+    approvedTab.setAttribute('role', 'tab'); approvedTab.setAttribute('aria-controls', 'x-approved-workspace');
+    const workspaceTabs = el('div', { className: 'x-workspace-tabs', role: 'tablist', 'aria-label': '作業内容' }, [candidateTab, approvedTab]);
+    const approvedHeading = el('div', { className: 'x-approved-queue-heading' }, [
+      el('strong', { text: `アカウント全体の投稿待ち · ${approvedDrafts.length}件` }),
+      el('p', { className: 'x-muted', text: '採用済みの本文を確認・コピーしてXの投稿作成画面へ渡せます。ここで閲覧・コピーしても採用状態は変わらず、投稿済みにはなりません。' }),
+    ]);
+    approvedWorkspace.append(approvedHeading);
+    approvedDrafts.forEach(draft => {
+      const catalog = state.productCatalogByAccount.get(accountId) || state.productCatalog;
+      const products = (draft.productIds || []).map(productId => catalog.find(item => item.product?.productId === productId)?.product).filter(Boolean);
+      const productRows = products.length
+        ? products.map(product => el('div', { className: 'x-product-review-post-head' }, [el('strong', { text: product.name || '商品名未入力' }), el('span', { className: 'x-product-category', text: `ジャンル: ${product.category || '未設定'}` }), el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` })]))
+        : [el('div', { className: 'x-product-review-post-head' }, [el('strong', { text: '商品情報を取得できません' }), el('span', { className: 'x-product-category', text: 'ジャンル: 未設定' }), el('span', { className: 'x-muted', text: 'ASIN 不明' })])];
+      const card = el('article', { className: 'x-product-review-post x-approved-post' }, [
+        el('div', { className: 'x-product-review-detail-head' }, [el('strong', { text: `${draft.variantId || '候補'} · 採用済み` }), el('span', { className: 'x-muted', text: `draft ${draft.draftId}` })]),
+        ...productRows,
+        el('div', { className: 'x-product-review-post-body', text: draft.body || '' }),
+      ]);
+      card.append(el('div', { className: 'x-inline-form' }, [
+        button('本文をコピー', async () => {
+          try {
+            if (!navigator.clipboard?.writeText) throw new Error('このブラウザーではクリップボードを利用できません');
+            await navigator.clipboard.writeText(draft.body || '');
+            message(card, '本文をコピーしました。採用状態はそのままです。', 'success');
+          } catch (error) { message(card, error.message, 'error'); }
+        }),
+        el('a', { className: 'act-btn x-compose-link', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(draft.body || '')}`, target: '_blank', rel: 'noopener noreferrer', text: 'Xの投稿作成画面を開く' }),
+      ]));
+      approvedWorkspace.append(card);
+    });
+    if (!approvedDrafts.length) approvedWorkspace.append(el('p', { className: 'x-muted', text: '採用済みの投稿待ちはありません。候補を確認して採用すると、ここに表示されます。' }));
+    box.append(workspaceTabs, candidateWorkspace, approvedWorkspace);
+    setWorkspaceView(activeWorkspaceView);
     const productPicker = el('select', { name: 'productPicker', className: 'x-generation-product-picker-source', multiple: 'multiple', hidden: 'true', 'aria-hidden': 'true', tabindex: '-1' });
     const productOptions = el('div', { className: 'x-generation-product-options', role: 'group', 'aria-label': '投稿生成に使う商品' });
     const currentWorkspaceProduct = state.productCatalog.find(item => item.product?.productId === state.workspaceSelections.get(accountId))?.product;
-    const productPickerField = el('div', { className: 'x-field x-generation-product-field' }, [el('span', { text: '投稿を作る商品' }), el('p', { className: 'x-muted x-primary-generation-product', text: currentWorkspaceProduct ? `${currentWorkspaceProduct.name || '商品名未入力'} · ASIN ${currentWorkspaceProduct.asin || '不明'} を生成対象にします。複数商品は追加操作から選べます。` : '商品を選択してください。' }), el('details', { className: 'x-generation-extra-products' }, [el('summary', { text: '複数商品をまとめて使う（最大3件）' }), productOptions]), el('span', { className: 'x-muted', text: '生成対象を追加する前に、商品名とASINを確認してください。' }), productPicker]);
+    const productPickerField = el('div', { className: 'x-field x-generation-product-field' }, [el('span', { text: '投稿を作る商品' }), el('p', { className: 'x-muted x-primary-generation-product', text: currentWorkspaceProduct ? `${productWorkspaceLabel(currentWorkspaceProduct)} を生成対象にします。複数商品は追加操作から選べます。` : '商品を選択してください。' }), el('details', { className: 'x-generation-extra-products' }, [el('summary', { text: '複数商品をまとめて使う（最大3件）' }), productOptions]), el('span', { className: 'x-muted', text: '生成対象を追加する前に、商品名・ジャンル・ASINを確認してください。' }), productPicker]);
     const allocationStatus = el('p', { className: 'x-muted', text: '投稿生成できる商品を選ぶと、利用可能なテンプレートだけが表示されます。' });
     const allocationSlots = el('div', { className: 'x-generation-slots' });
     const allocationSummary = el('div', { className: 'x-skill-preview' });
@@ -1461,14 +1516,20 @@
     if (!matchingGroupIds.size && selectedProductId) {
       (data.drafts || []).filter(draft => (draft.productIds || []).includes(selectedProductId)).forEach(draft => matchingGroupIds.add(draft.generationGroupId));
     }
-    const groups = new Map([...allDraftGroups].filter(([groupId]) => matchingGroupIds.has(groupId)));
-    if (groups.size) box.append(el('h4', { className: 'x-draft-list-title', text: '候補文' }));
+    const groups = new Map([...allDraftGroups]
+      .filter(([groupId]) => matchingGroupIds.has(groupId))
+      .map(([groupId, drafts]) => [groupId, drafts.filter(draft => draft.state !== 'approved')])
+      .filter(([, drafts]) => drafts.length));
+    if (groups.size) candidateWorkspace.append(el('h4', { className: 'x-draft-list-title', text: '選択商品の候補' }));
     for (const [groupId, drafts] of groups) {
       const groupBusy = drafts.some(draft => Boolean(draft.regenerationLock || draft.regeneration?.status === 'running' || draft.regeneration?.status === 'queued'));
-      const productNames = [...new Set(drafts.flatMap(draft => (draft.productIds || []).map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product?.name).filter(Boolean)))];
+      const productIds = [...new Set(drafts.flatMap(draft => draft.productIds || []))];
+      const productNames = productIds.map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product).filter(Boolean).map(productWorkspaceLabel);
       const group = el('details', { className: 'x-draft-group' });
       group.append(el('summary', { text: `${productNames.join('、') || `生成グループ ${groupId}`} · ${drafts.length}案${groupBusy ? ' · 再生成処理中' : ''}` }));
       const comparison = el('div', { className: 'x-form x-draft-grid' });
+      const allGroupDrafts = allDraftGroups.get(groupId) || [];
+      const groupCanBulkReview = drafts.length > 1 && drafts.length === allGroupDrafts.length && allGroupDrafts.every(item => item.state === 'needs_review');
       drafts.forEach(draft => {
         const draftKey = `${accountId}\u0000${draft.draftId}`;
         let savedDraftEdit = state.draftEditDrafts.get(draftKey);
@@ -1487,6 +1548,8 @@
         const jobId = regeneration.jobId || draft.regenerationJobId;
         const providerDiagnostic = regeneration.providerDiagnostic || {};
         const stateLabel = draftStateLabel(draft.state);
+        const draftProducts = (draft.productIds || []).map(productId => state.productCatalog.find(item => item.product?.productId === productId)?.product).filter(Boolean);
+        const draftProductLabels = draftProducts.map(productWorkspaceLabel).join('、') || '商品情報を取得できません · ASIN 不明';
         const regenerationSummary = regeneration.status ? [
           draftBusy ? `再生成${jobStatusLabel(regeneration.status)}です。本文編集・レビュー操作は一時停止しています。` : `再生成: ${jobStatusLabel(regeneration.status)}`,
           jobId ? `確認ID: ${jobId}` : '',
@@ -1512,7 +1575,7 @@
           ])
           : null;
         const article = el('article', { className: 'x-product x-draft' }, [
-          el('div', { className: 'x-product-head' }, [el('strong', { text: `${draft.variantId || '候補'} · ${stateLabel}` }), el('span', { className: 'x-muted', text: `${skillLabels[draft.skillId] || 'テンプレート'} · 切り口 ${angleLabels[draft.angleId] || '選択内容'}` })]),
+          el('div', { className: 'x-product-head' }, [el('strong', { text: draftProductLabels }), el('span', { className: 'x-muted', text: `${draft.variantId || '候補'} · ${stateLabel} · ${skillLabels[draft.skillId] || 'テンプレート'} · 切り口 ${angleLabels[draft.angleId] || '選択内容'}` })]),
           validationFeedback,
           ...(regenerationSummary ? [el('p', { className: 'x-status', text: regenerationSummary })] : []),
           ...(comparisonCard ? [comparisonCard] : []),
@@ -1569,7 +1632,7 @@
           });
           actions.append(approveButton);
           actions.append(button('見送り', async () => reviewDraft(draft, 'reject', 'not_this_time', article, accountId, generation), groupBusy || draftBusy));
-          if (drafts.length > 1) { groupReviewButton = button('この案を採用し残りを見送り', async () => {
+          if (groupCanBulkReview) { groupReviewButton = button('この案を採用し残りを見送り', async () => {
             if (drafts.some(item => state.draftEditDrafts.get(`${accountId}\u0000${item.draftId}`)?.dirty)) { message(article, '同じグループに未保存の本文があります。各本文を保存してからグループ操作してください。', 'error'); return; }
             if (draftBusy || !draft.validation?.ok || !window.confirm(`この案を採用し、同じグループの残り${drafts.length - 1}案を見送りますか？`)) return;
             if (!beginWrite(article)) return;
@@ -1635,11 +1698,11 @@
         article.append(el('details', { className: 'x-regeneration-details' }, [el('summary', { text: 'この候補を修正して再生成' }), regenerateForm]));
         article.append(actions); comparison.append(article);
       });
-      group.append(comparison); box.append(group);
+      group.append(comparison); candidateWorkspace.append(group);
       if (drafts.some(draft => draft.state === 'needs_review' || draft.state === 'approved' && (draft.productIds || []).includes(state.workspaceSelections.get(accountId)))) group.open = true;
     }
-    box.append(generationDetails);
-    if (!(data.drafts || []).length && !state.productCatalog.length) box.append(el('p', { className: 'x-muted', text: '商品と候補文はまだありません' }));
+    candidateWorkspace.append(generationDetails);
+    if (!(data.drafts || []).length && !state.productCatalog.length) candidateWorkspace.append(el('p', { className: 'x-muted', text: '商品と候補文はまだありません' }));
     restoreFocusedControl(box, savedFocus);
   }
   async function reviewDraft(draft, action, reason, root, accountId, generation) {
