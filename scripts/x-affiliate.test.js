@@ -1797,7 +1797,7 @@ test('L5 schedule setting is admin-only and starts disabled', async () => {
 });
 
 test('L5 regeneration preserves instruction on 409 and exposes archive/restore', async () => {
-  const requests = []; const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', state: 'approved', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文' };
+  const requests = []; const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', state: 'needs_review', skillId: 's1', skillVersion: '1.0.0', angleId: 'a1', productIds: ['p1'], revision: 4, validation: { ok: true, errors: [] }, body: '本文' };
   const router = (url, options = {}) => {
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
@@ -1866,4 +1866,57 @@ test('L5 failed regeneration keeps the original body and exposes terminal status
 test('L5 delayed regenerate response after account switch does not populate the new scope', async () => {
   const delayed = deferred(); const requests = []; const router = (url, options = {}) => { const path = String(url); requests.push({ path, options }); if (path.endsWith('/exchange')) return json({ token: jwt() }); if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } }); if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } }); if (path.includes('/products?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ products: [workspaceProductFixture(`p-${accountId}`, accountId)] }); } if (path.includes('/budget')) return json({ operation: { limitMicroJPY: 10000000 } }); if (path.includes('/drafts?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ drafts: [{ draftId: 'd1', generationGroupId: 'g', variantId: 'v', productIds: [`p-${accountId}`], state: 'needs_review', revision: 1, body: '本文', validation: { ok: true } }] }); } if (path.includes('/regenerate')) return delayed.promise; return json({}); };
   const dom = page('#x_code=regen-scope', true, router, { verifier: 'regen-scope-v' }); await flush(); const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button'); accounts[0].click(); await flush(); const form = dom.window.document.querySelector('.x-regeneration-form'); form.elements.instruction.value = 'Aの修正'; form.querySelector('[data-regeneration-action]').click(); await flush(); accounts[1].click(); await flush(); delayed.resolve(json({ job: { jobId: 'A-job', status: 'failed' } })); await flush(); await flush(); assert.equal(requests.some(item => item.path.includes('/generation-jobs/A-job')), false); assert.doesNotMatch(dom.window.document.querySelector('#x-drafts').textContent, /A-job/);
+});
+
+test('L5 product genre saves and approved account queue stays separate from candidate review', async () => {
+  const requests = [];
+  let category = '家電';
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products/') && options.method === 'PATCH') { category = JSON.parse(options.body).fields.category; return json({ ok: true }); }
+    if (path.includes('/products?')) {
+      const p1 = workspaceProductFixture('p1', 'a1'); p1.product.category = category;
+      const p2 = workspaceProductFixture('p2', 'a1'); p2.product.category = 'キッチン';
+      return json({ products: [p1, p2] });
+    }
+    if (path.includes('/drafts?')) return json({ drafts: [
+      { draftId: 'd-review', generationGroupId: 'g-review', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: '確認中の本文', validation: { ok: true } },
+      { draftId: 'd-approved', generationGroupId: 'g-approved', variantId: 'v2', productIds: ['p2'], state: 'approved', revision: 2, body: '採用済み\n本文 https://example.com?a=1&b=2', validation: { ok: true } },
+    ] });
+    return json({});
+  };
+  const dom = page('#x_code=genre-queue', true, router, { verifier: 'genre-queue-v' });
+  await flush(); await selectFirstAccount(dom); await flush();
+  const products = dom.window.document.querySelectorAll('#x-products .x-workspace-product');
+  assert.match(products[0].textContent, /ジャンル: 家電/);
+  products[0].click(); await flush();
+  const editor = dom.window.document.querySelector('#x-product-detail form');
+  assert.equal(editor.elements.category.value, '家電');
+  editor.elements.category.value = 'キッチン用品'; editor.elements.category.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  editor.elements.sourceNote.value = '商品ページのカテゴリを確認'; editor.elements.sourceNote.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  editor.querySelector('button').click(); await flush(); await flush();
+  const patchRequest = requests.find(item => item.path.endsWith('/api/x-affiliate/products/p1'));
+  assert.ok(patchRequest);
+  assert.equal(JSON.parse(patchRequest.options.body).fields.category, 'キッチン用品');
+  assert.equal(JSON.parse(patchRequest.options.body).sourceNote, '商品ページのカテゴリを確認');
+  assert.equal(dom.window.document.querySelector('#x-products .x-workspace-product').textContent.includes('ジャンル: キッチン用品'), true);
+
+  const draftsBox = dom.window.document.querySelector('#x-drafts');
+  assert.match(draftsBox.textContent, /候補を確認（1件）/);
+  assert.match(draftsBox.textContent, /投稿待ち（1件）/);
+  assert.match(draftsBox.textContent, /ジャンル: キッチン用品/);
+  assert.equal(draftsBox.querySelector('.x-draft textarea[name="body"]').value, '確認中の本文');
+  assert.doesNotMatch(draftsBox.querySelector('#x-candidate-workspace').textContent, /採用済み\n本文/);
+  [...draftsBox.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('投稿待ち')).click();
+  assert.match(draftsBox.textContent, /商品 p2/);
+  assert.match(draftsBox.textContent, /ジャンル: キッチン/);
+  assert.match(draftsBox.textContent, /採用済み\n本文 https:\/\/example.com\?a=1&b=2/);
+  const compose = draftsBox.querySelector('.x-compose-link');
+  const composeUrl = new URL(compose.href);
+  assert.equal(composeUrl.searchParams.get('text'), '採用済み\n本文 https://example.com?a=1&b=2');
+  assert.match(draftsBox.textContent, /投稿済みにはなりません/);
+  assert.equal(requests.some(item => item.path.includes('/review')), false);
 });

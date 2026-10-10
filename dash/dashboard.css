@@ -2285,7 +2285,18 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product-review-detail-head strong{font-size:14px;color:var(--txt);overflow-wrap:anywhere}
 .x-product-review-post{display:grid;gap:9px;padding:12px;border-radius:12px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-product-review-post-head strong{font-size:12px;color:var(--txt)}
+.x-product-review-post-head .x-product-category{font-size:11px}
 .x-product-review-post-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;color:var(--txt);font-size:13px}
+.x-product-category{font-size:12px;font-weight:700;color:var(--acc,#3567d4);overflow-wrap:anywhere}
+.x-workspace-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.x-workspace-tabs .act-btn{min-height:38px}
+.x-workspace-tabs .act-btn.is-active{border-color:var(--acc);color:var(--acc);font-weight:700}
+.x-approved-queue-heading{display:grid;gap:4px;margin:4px 0 10px}
+.x-approved-queue-heading strong{font-size:14px;color:var(--txt)}
+.x-approved-queue-heading p{margin:0}
+.x-approved-post{margin:8px 0}
+.x-approved-post .x-product-review-post-head{display:grid;grid-template-columns:minmax(0,2fr) minmax(110px,1fr) auto;justify-content:initial;align-items:center}
+.x-compose-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 .x-product-review-state.is-waiting{font-weight:700}
 .x-draft-group{margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--bg);box-shadow:var(--sh-press)}
 .x-draft-group>summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
@@ -2348,6 +2359,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-generation-details[open] .x-generation-form{margin-top:10px}
 @media(max-width:900px){.x-workspace-layout{grid-template-columns:minmax(190px,220px) minmax(0,1fr)}}
 @media(max-width:680px){.x-workspace-layout{grid-template-columns:minmax(0,1fr)}.x-workspace-layout>.x-card:first-child{order:0}.x-workspace-main{order:1}.x-product-list{max-height:34vh}.x-workspace-main>.x-card{margin-top:8px}.x-product-browse-details:not([open]) .x-product-filter,.x-product-browse-details:not([open]) .x-product-list{display:none}}
+@media(max-width:680px){.x-approved-post .x-product-review-post-head{grid-template-columns:1fr;gap:3px}}
 @media(max-width:600px){.x-section-tabs{margin-inline:-4px}.x-section-tab{padding:9px 12px}.x-form{grid-template-columns:1fr}.x-row{align-items:flex-start;flex-direction:column;gap:4px}.x-inline-form{width:100%;align-items:stretch}.x-inline-form .x-field{min-width:100%}.x-product-review-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* ── Hero preset editor ──────────────────────────────────────────────────────
  *
