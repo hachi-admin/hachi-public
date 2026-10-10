@@ -1413,7 +1413,9 @@ async function _loadCalendar() {
     from = _calAdd(first, -((_calWd(first) + 6) % 7));
     days = 42;
   } else {
-    from = _calFrom || _calTodayKey();
+    // Monday to Sunday, like the month grid; the view opens on today's column (_calWeekWire).
+    const anchor = _calFrom || _calTodayKey();
+    from = _calAdd(anchor, -((_calWd(anchor) + 6) % 7));
     days = 7;
   }
   if (!CAL) box.innerHTML = '<div class="cal-empty">読み込み中…</div>';
@@ -1457,7 +1459,8 @@ function calShift(n) {
     _calMonth = n === 0 ? null : _calShiftMonth(_calMonthKey(), n);
     _calSel = null;
   } else {
-    _calFrom = n === 0 ? null : _calAdd(_calFrom || _calTodayKey(), n * 7);
+    _calFrom = n === 0 ? null : _calAdd(CAL?.days?.[0]?.date || _calFrom || _calTodayKey(), n * 7);
+    if (n !== 0) _calSel = _calFrom;
   }
   _loadCalendar();
 }
@@ -1770,7 +1773,22 @@ const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" 
 // A mark in front of each idea says what became of it; the words are in the sheet.
 const _CAL_WRITE = { done: '記事化済み', writing: '執筆中', failed: '執筆に失敗', queued: '執筆待ち' };
 const _calMark = (it) => it.state === 'yes' ? (it.write === 'failed' ? '!' : '✓') : it.state === 'no' || it.state === 'expired' ? '×' : '';
-const _calItems = (items) => `<span class="cal-ev-items">${items.map((it) => `<i class="st-${it.state}${it.write ? ` w-${it.write}` : ''}"><u>${_calMark(it)}</u>${esc(it.title)}</i>`).join('')}</span>`;
+/* The ideas of one slate usually open the same way (every 「AIのなぜ？」 idea is 「なぜAIは、…」), and
+   that shared opening is what made the card tall. It is dropped on the card — the magazine name says
+   it — and only up to a natural break, so no idea is cut mid-word. The sheet keeps the full titles. */
+function _calSharedOpening(titles) {
+  if (titles.length < 2) return '';
+  let p = titles[0];
+  for (const t of titles.slice(1)) { let i = 0; while (i < p.length && i < t.length && p[i] === t[i]) i++; p = p.slice(0, i); }
+  const cut = Math.max(p.lastIndexOf('、'), p.lastIndexOf('は'), p.lastIndexOf('：'), p.lastIndexOf(' '));
+  const lead = cut >= 1 ? p.slice(0, cut + 1) : '';
+  // Worth it only when something substantial is left of every title.
+  return lead.length >= 3 && titles.every((t) => t.length - lead.length >= 8) ? lead : '';
+}
+const _calItems = (items) => {
+  const lead = _calSharedOpening(items.map((it) => it.title || ''));
+  return `<span class="cal-ev-items">${items.map((it) => `<i class="st-${it.state}${it.write ? ` w-${it.write}` : ''}"><u>${_calMark(it)}</u>${esc(lead ? it.title.slice(lead.length).replace(/^[、\s]+/, '') : it.title)}</i>`).join('')}</span>`;
+};
 
 // ── The week on one time axis ──────────────────────────────────────────────
 /* Seven day columns on one time axis; three fit, the rest scroll sideways (snapping per day).
@@ -1801,7 +1819,7 @@ function _calWeekAxis(days, evByDay, today) {
     return `<div class="cal-wk-cell">${main(d).filter((e) => _calHour(e.at) >= s.a && _calHour(e.at) < s.b).map((e) => _calCard(e)).join('')}${nowMark}</div>`;
   };
   const head = days.map((d) => `<div class="cal-wk-hd${d.date === today ? ' today' : ''}${d.date < today ? ' past' : ''}${[' sun', '', '', '', '', '', ' sat'][_calWd(d.date)]}">
-      <span>${_CAL_WD[_calWd(d.date)]}</span><b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b></div>`).join('');
+      <b>${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}</b><span>${_CAL_WD[_calWd(d.date)]}</span></div>`).join('');
   const style = `style="--n:${days.length}"`;
   return `<div class="cal-wk"><div class="cal-wk-v" id="cal-wk-v">
       <div class="cal-wk-top"><div class="cal-wk-corner"></div><div class="cal-wk-hds" id="cal-wk-hds"><div class="cal-wk-row" ${style}>${head}</div></div></div>
@@ -1828,9 +1846,27 @@ function _calWeekWire() {
   }
   const i = CAL.days.findIndex((d) => d.date === _calSel);
   if (i > 0) { sc.scrollLeft = (sc.querySelector('.cal-wk-cell')?.offsetWidth || 0) * i; if (!CSS.supports?.('animation-timeline: --wkx')) row.style.transform = `translate3d(${-sc.scrollLeft}px,0,0)`; }
+  _calFit();
   const now = sc.querySelector('.cal-wk-now');
   if (now) v.scrollTop = Math.max(0, now.closest('.cal-wk-cell').offsetTop - 140);
 }
+
+/* The week grid fills the screen down to the tab bar. A fixed `100dvh - 300px` left a blank band
+   on phones whose header and browser bars are a different height from the guess. */
+function _calFit() {
+  const v = document.getElementById('cal-wk-v');
+  if (!v || !v.offsetParent) return;
+  const area = v.closest('.page-area');
+  const top = v.getBoundingClientRect().top + (area?.scrollTop || 0);
+  const bar = document.querySelector('.mob-tab-bar');
+  // A fixed bar has no offsetParent; whether it is shown is whether it has a box.
+  const barBox = bar?.getClientRects().length ? bar.getBoundingClientRect() : null;
+  const barTop = barBox && barBox.height ? barBox.top : innerHeight;
+  const bottom = Math.min(innerHeight, barTop) - 10;
+  v.style.maxHeight = 'none';
+  v.style.height = `${Math.max(320, Math.round(bottom - top))}px`;  // as if the page were at its top
+}
+window.addEventListener('resize', () => { if (_calMode === 'week') _calFit(); }, { passive: true });
 
 function _renderCalendar() {
   const box = document.getElementById('cal-body');

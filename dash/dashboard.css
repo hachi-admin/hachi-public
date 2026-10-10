@@ -3775,3 +3775,33 @@ body.sheet-open{overflow:hidden}
 .ip-sec input.cat-in{width:100%;font-size:16px}
 .ip-tags:not(.editing){box-shadow:none;padding:2px 0;min-height:0}
 .ip-tags:not(.editing) .ip-tag{padding:4px 10px;font-size:12px}
+
+/* ── Calendar, 2026-10-10: less chrome, lifted events, no blank band ──
+   The week grid is sized to the space down to the tab bar in JS (_calFit), so the page itself does
+   not scroll in week view. The date strip is one line. Events sit off the grid lines with room for
+   a raised, softly curved neumorphic card that presses in when tapped. */
+#page-calendar:has(.cal-wk){padding-bottom:0}
+.cal-nav{margin-bottom:6px}
+.cal-nav .act-btn,.cal-nav .cal-seg-btn{min-height:34px}
+.cal-range{font-size:14px}
+.cal-wk-hd{display:flex;align-items:baseline;justify-content:center;gap:4px;padding:5px 2px 6px}
+.cal-wk-hd b{display:inline-block;font-size:14px}
+.cal-wk-hd span{display:inline;font-size:10.5px}
+.cal-wk-hd.today b{display:inline-block;margin-top:0;padding:1px 7px}
+.cal-wk-cell{padding:7px 6px 8px}
+.cal-wk-cell .cal-ev,.cal-mday-list .cal-ev{
+  border-radius:12px;
+  background:linear-gradient(var(--c),var(--c)) left center/3px 100% no-repeat,
+    linear-gradient(160deg,color-mix(in srgb,#fff 45%,color-mix(in srgb,var(--c) 6%,var(--surf))) 0%,color-mix(in srgb,var(--c) 7%,var(--surf)) 55%);
+  box-shadow:5px 6px 12px var(--d-sh),-4px -4px 10px var(--l-sh),inset 0 1px 0 color-mix(in srgb,#fff 70%,transparent);
+  transition:box-shadow .15s ease,transform .15s ease}
+.cal-wk-cell .cal-ev:active,.cal-mday-list .cal-ev:active{box-shadow:var(--sh-press);transform:scale(.985)}
+.cal-wk-cell .cal-ev+.cal-ev{margin-top:4px}
+[data-theme="dark"] .cal-wk-cell .cal-ev,[data-theme="dark"] .cal-mday-list .cal-ev{
+  background:linear-gradient(var(--c),var(--c)) left center/3px 100% no-repeat,
+    linear-gradient(160deg,color-mix(in srgb,#fff 6%,var(--surf)) 0%,color-mix(in srgb,var(--c) 8%,var(--surf)) 60%);
+  box-shadow:5px 6px 12px var(--d-sh),-3px -3px 9px var(--l-sh)}
+/* A quarter column of room at the end: with 3¼ columns on screen the last scroll stop otherwise
+   leaves a sliver of a day at the left edge, and the date strip's follow animation (which assumes
+   the scroll ends at (n−3) columns) drifts on the last day. */
+.cal-wk .cal-wk-grid,.cal-wk-hds .cal-wk-row{padding-right:calc(var(--cw) * .25)}
