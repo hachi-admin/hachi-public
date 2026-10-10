@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '151';
+const DASH_BUILD = '152';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1768,7 +1768,7 @@ function _calIcon(e) {
   return `<span class="cal-emo">${_CAL_ICON[type] || (e.k === 'job' ? '⚙️' : '🔍')}</span>`;
 }
 const _calCard = (e, { date = false } = {}) => `<button class="cal-ev k-${e.k}" onclick="calOpenEvent(${e.i})">
-    <span class="cal-ev-hd">${_calIcon(e)}<span class="cal-ev-t"><b>${esc(e.name)}</b><time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time></span></span>
+    <span class="cal-ev-hd">${_calIcon(e)}<time>${date ? `${_calLabel(e.date)} ` : ''}${_calHm(e.at)}</time></span><b class="cal-ev-name">${esc(e.name)}</b>
     ${e.items ? _calItems(e.items) : (e.lines || []).filter(Boolean).length ? `<span class="cal-ev-lines">${e.lines.filter(Boolean).map((l) => `<i>${esc(l)}</i>`).join('')}</span>` : ''}</button>`;
 // A mark in front of each idea says what became of it; the words are in the sheet.
 const _CAL_WRITE = { done: '記事化済み', writing: '執筆中', failed: '執筆に失敗', queued: '執筆待ち' };
