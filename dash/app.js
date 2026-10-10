@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '153';
+const DASH_BUILD = '154';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -541,54 +541,16 @@ function showToast(msg, type = 'info', duration = 3500) {
   }, duration);
 }
 
-// Replaces confirm() — inserts an inline banner next to a target element.
-// onConfirm fires when user clicks Confirm; banner auto-removes on dismiss.
-// Returns a cleanup fn in case you need to remove it early.
-function showConfirm(msg, onConfirm, targetEl) {
-  /* Scoped to this anchor, not to its whole parent.
-     A tile's parent is the grid holding every other tile, so `parentElement.querySelector` found a
-     banner belonging to a different card — and pressing 却下 on card B while card A had one open
-     dismissed A's and returned, doing nothing to B. */
-  const existing = targetEl?.parentElement
-    ? [...targetEl.parentElement.querySelectorAll('.confirm-banner')]
-      .find((el) => el.previousElementSibling === targetEl || el.nextElementSibling === targetEl
-        || el.parentElement === targetEl)
-    : document.body.querySelector(':scope > .confirm-banner');
-  if (existing) { existing.remove(); return () => {}; }
-  const banner = document.createElement('div');
-  banner.className = 'confirm-banner';
-  banner.innerHTML = `<span style="flex:1">${esc(msg)}</span>
-    <button class="act-btn cancel" data-dismiss>Cancel</button>
-    <button class="act-btn resume" data-confirm>Confirm</button>`;
-  banner.querySelector('[data-confirm]').addEventListener('click', () => { banner.remove(); onConfirm(); });
-  banner.querySelector('[data-dismiss]').addEventListener('click', () => banner.remove());
-  /* Where the banner goes depends on whether the anchor is pinned.
-   *
-   * 却下 lives only in the detail panel's `.p-actions`, which is `position:sticky; bottom:-22px` —
-   * an action bar that stays over the foot of the scroll area. Inserting `afterend` of it put the
-   * banner *underneath* the thing pinned over that exact spot: created, attached, never visible.
-   * The button appeared to do nothing, every time, which is precisely what was reported.
-   *
-   * The comment on `_catConfirmAnchor` already warned that a misplaced banner is indistinguishable
-   * from a dead button, and the previous fix there corrected the selector without noticing that the
-   * element it now correctly finds is one you cannot place anything after. So the rule is stated as
-   * the general one it is: you cannot put something after an element that is pinned over that spot —
-   * put it before instead.
-   *
-   * An anchorless banner has the same defect wearing different clothes. Appending a plain block to
-   * `document.body` puts it after the whole dashboard — the bottom of a long scrolling document,
-   * which is nowhere the operator is looking. It cost a second report ("2回押したけど特に変更なし"):
-   * the first press creates it offscreen, the second hits the duplicate check and removes it, so a
-   * pair of presses is create-unseen then delete-unseen and the task is never started. Anchorless
-   * means pinned to the viewport, not appended to the end of the page. */
-  if (targetEl) {
-    const pinned = ['sticky', 'fixed'].includes(getComputedStyle(targetEl).position);
-    targetEl.insertAdjacentElement(pinned ? 'beforebegin' : 'afterend', banner);
-  } else {
-    banner.classList.add('floating');
-    document.body.appendChild(banner);
-  }
-  return () => banner.remove();
+/* A confirmation is the OS's own dialog (iOS/Android/desktop alert), not an inline banner.
+ *
+ * The banner was placed next to the button that asked, which kept breaking in ways that looked
+ * like a dead button — behind the detail overlay, under the sticky action bar, at the foot of the
+ * page — and it looked like nothing else on the phone. The operator asked for the native one
+ * (2026-10-11). `targetEl` is kept in the signature for the 18 callers; it is no longer needed.
+ * Deferred a tick so the tap that opened it finishes (and its press styling clears) first. */
+function showConfirm(msg, onConfirm, _targetEl) {
+  setTimeout(() => { if (window.confirm(msg)) onConfirm(); }, 0);
+  return () => {};
 }
 
 /* ═══════════════════════════════════════════════════════════
