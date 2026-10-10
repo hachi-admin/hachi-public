@@ -3805,3 +3805,8 @@ body.sheet-open{overflow:hidden}
    leaves a sliver of a day at the left edge, and the date strip's follow animation (which assumes
    the scroll ends at (n−3) columns) drifts on the last day. */
 .cal-wk .cal-wk-grid,.cal-wk-hds .cal-wk-row{padding-right:calc(var(--cw) * .25)}
+/* No colour stripe on the left (operator, 2026-10-10): the card's own tint and its icon carry the kind. */
+.cal-wk-cell .cal-ev,.cal-mday-list .cal-ev{
+  background:linear-gradient(160deg,color-mix(in srgb,#fff 45%,color-mix(in srgb,var(--c) 9%,var(--surf))) 0%,color-mix(in srgb,var(--c) 10%,var(--surf)) 55%)}
+[data-theme="dark"] .cal-wk-cell .cal-ev,[data-theme="dark"] .cal-mday-list .cal-ev{
+  background:linear-gradient(160deg,color-mix(in srgb,#fff 6%,var(--surf)) 0%,color-mix(in srgb,var(--c) 11%,var(--surf)) 60%)}
