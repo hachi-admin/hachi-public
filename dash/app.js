@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '152';
+const DASH_BUILD = '153';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -2926,8 +2926,13 @@ function _catAutosave(id) {
   const lbl = document.getElementById(`cat-saved-${id}`); if (lbl) lbl.textContent = '保存中…';
   _catSaveT = setTimeout(async () => {
     const c = CATEGORIES.find((x) => x.id === id);
-    const recipeChanged = (_catVal(`cat-imgprompt-${id}`) || '') !== (c?.visual?.imagePrompt || '');
+    /* Against what this panel last saved, not CATEGORIES — other paths update that copy first, which
+       made a recipe change look like no change and sent it as lettering-only (no new picture). */
+    const sel = document.getElementById(`cat-imgprompt-${id}`);
+    const savedRecipe = sel?.dataset.saved ?? sel?.dataset.selected ?? (c?.visual?.imagePrompt || '');
+    const recipeChanged = (_catVal(`cat-imgprompt-${id}`) || '') !== savedRecipe;
     await saveCategory(id, { silent: true, reletterOnly: !recipeChanged });
+    if (sel) sel.dataset.saved = _catVal(`cat-imgprompt-${id}`) || '';
     const res = await fetch(apiUrl(`/api/article-categories/${id}`), { headers: _authHeaders() }).catch(() => null);
     const fresh = res?.ok ? (await res.json().catch(() => null))?.category : null;
     if (fresh) { const i = CATEGORIES.findIndex((x) => x.id === id); if (i >= 0) CATEGORIES[i] = fresh; }
