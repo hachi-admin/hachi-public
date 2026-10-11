@@ -2288,6 +2288,7 @@ body:has(.mob-more-sheet.open) .page-area{
 .x-product-review-post-head .x-product-category{font-size:11px}
 .x-product-review-post-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;color:var(--txt);font-size:13px}
 .x-product-category{font-size:12px;font-weight:700;color:var(--acc,#3567d4);overflow-wrap:anywhere}
+.x-product-review-progress{display:inline-flex;align-self:flex-start;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--acc,#3567d4) 12%,var(--surf));color:var(--acc,#3567d4);font-size:11px;font-weight:700;overflow-wrap:anywhere}
 .x-workspace-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
 .x-workspace-tabs .act-btn{min-height:38px}
 .x-workspace-tabs .act-btn.is-active{border-color:var(--acc);color:var(--acc);font-weight:700}

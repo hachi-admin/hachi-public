@@ -614,6 +614,23 @@
   }
   const productEditKey = (accountId, productId) => `${accountId}\u0000${productId}`;
   const generationFormKey = (accountId, productId = state.workspaceSelections.get(accountId) || '') => `${accountId}\u0000${productId}`;
+  function matchesProductReviewFilter(drafts, filter, loaded = true) {
+    if (!filter || !loaded) return true;
+    if (filter === 'not_created') return drafts.length === 0;
+    if (filter === 'needs_review') return drafts.some(draft => draft.state === 'needs_review');
+    if (filter === 'reviewed') return drafts.some(draft => draft.state === 'approved' || draft.state === 'rejected');
+    return drafts.some(draft => draft.state === filter);
+  }
+  function productReviewProgress(drafts, loaded = true) {
+    if (!loaded) return '候補状況を確認中';
+    if (!drafts.length) return '候補未作成';
+    const counts = drafts.reduce((result, draft) => {
+      result[draft.state] = (result[draft.state] || 0) + 1;
+      return result;
+    }, {});
+    const labels = [['needs_review', 'レビュー待ち'], ['approved', '採用済み'], ['rejected', '見送り'], ['archived', '保管']];
+    return labels.filter(([status]) => counts[status]).map(([status, label]) => `${label} ${counts[status]}案`).join(' · ') || '候補あり';
+  }
   function renderProductItems(products, accountId, generation, drafts = []) {
     const items = el('div', { className: 'x-product-list', 'aria-label': '商品一覧' });
     items.dataset.accountId = accountId;
@@ -643,6 +660,7 @@
       row.append(el('strong', { text: product.name || '商品名未入力' }),
         el('span', { className: 'x-product-category', text: `ジャンル: ${product.category || '未設定'}` }),
         el('span', { className: 'x-muted', text: `ASIN ${product.asin || '不明'}` }),
+        el('span', { className: 'x-product-review-progress', text: productReviewProgress(related, state.draftSnapshots.has(accountId)) }),
         el('span', { className: 'x-muted', text: `${info} · レビュー待ち ${waiting} · 採用済み ${approved}` }));
       items.append(row);
     });
@@ -790,7 +808,7 @@
           && (!saved.status || (product.catalogStatus || '') === saved.status)
           && (!saved.readiness || (saved.readiness === 'ready' ? item.readiness?.ready : !item.readiness?.ready))
           && (!saved.tag || (product.tags || []).includes(saved.tag))
-          && (!saved.review || (saved.review === 'needs_review' ? drafts.some(draft => draft.state === 'needs_review') : saved.review === 'approved' ? drafts.some(draft => draft.state === 'approved') : true));
+          && matchesProductReviewFilter(drafts, saved.review, state.draftSnapshots.has(accountId));
       });
       const selected = (data.products || []).find(item => item.product?.productId === state.workspaceSelections.get(accountId))
         || (data.products || []).find(item => snapshots.some(draft => draft.state === 'needs_review' && (draft.productIds || []).includes(item.product?.productId)))
@@ -926,7 +944,7 @@
       field('商品名・ASIN検索', 'search', 'q'),
       selectField('状態', 'status', '', ['', 'available', 'input_pending', 'paused', 'archived', 'invalid']),
       selectField('情報', 'readiness', savedFilter.readiness || '', ['', 'ready', 'missing']),
-      selectField('レビュー', 'review', savedFilter.review || '', ['', 'needs_review', 'approved']),
+      selectField('レビュー状況', 'review', savedFilter.review || '', ['', 'not_created', 'needs_review', 'reviewed', 'approved', 'rejected', 'archived']),
       selectField('タグ', 'tag', '', tagOptions),
       button('絞り込む', async event => {
         event.preventDefault();
@@ -940,7 +958,7 @@
     const optionLabels = {
       status: { '': 'すべての状態', available: '利用中', input_pending: '情報入力待ち', paused: '停止中', archived: 'アーカイブ', invalid: '要確認' },
       readiness: { '': 'すべて', ready: '情報入力済み', missing: '要入力' },
-      review: { '': 'すべて', needs_review: 'レビュー待ち', approved: '採用済み' },
+      review: { '': 'すべて', not_created: '候補未作成', needs_review: 'レビュー待ち', reviewed: 'レビュー済み', approved: '採用済み', rejected: '見送り', archived: '保管' },
       tag: { '': 'すべてのタグ' },
     };
     Object.entries(optionLabels).forEach(([name, labels]) => filter.querySelectorAll(`[name="${name}"] option`).forEach(option => { if (labels[option.value]) option.textContent = labels[option.value]; }));
@@ -964,7 +982,7 @@
         && (!filterState.status || (product.catalogStatus || '') === filterState.status)
         && (!filterState.readiness || filterState.readiness === 'ready' && item.readiness?.ready || filterState.readiness === 'missing' && !item.readiness?.ready)
         && (!filterState.tag || (product.tags || []).includes(filterState.tag))
-        && (!filterState.review || filterState.review === 'needs_review' && drafts.some(draft => draft.state === 'needs_review') || filterState.review === 'approved' && drafts.some(draft => draft.state === 'approved'));
+        && matchesProductReviewFilter(drafts, filterState.review, state.draftSnapshots.has(accountId));
     });
     const items = renderProductItems(visible, accountId, generation, snapshots);
     const browseDetails = el('details', { className: 'x-product-browse-details' }, [el('summary', { text: '検索・絞り込み・商品一覧' }), filter, items]);
