@@ -62,13 +62,14 @@ const sandbox = {
   _setText:(id,v)=>{ store[id] = v; },
   INTENSITY_MODE:'balanced', FORCE_FLASH:false, ACTIVE_PROVIDER:'gemini',
   _loadConnections:async()=>{},
+  _CARD_ACTS:new Map(),
   _hpRemoveKey:()=>{}, _hpSetKey:()=>{}, _hpAddKey:()=>{}, _hpVocab:null,
   _hpSetLine:()=>{}, _hpOpenLineRow:()=>{}, _hpAddLine:()=>{}, _hpRemoveLine:()=>{}, _hpMoveLine:()=>{}, _hpOpenLine:null,
   _hpTapRegion:()=>{}, _hpRegions:null, _hpSetGlow:()=>{}, _hpSetSample:()=>{}, _hpSampleIdx:1,
   /* Mutable editor state. These are `let` bindings in app.js, so the const extractor cannot take
      them; supplied here as parameters, which is also what lets a check pick the variant or the
      selected run it wants to exercise. */
-  _hpRunSel:null, _hpVariant:'standard', _hpVariants:{ short:[], standard:[], long:[] },
+  _hpRunSel:null, _hpVariant:'standard', _hpVariants:{ short:[], standard:[], long:[] }, _ipInUse:new Set(),
   _hpSetGlowSpec:()=>{}, _hpClearGround:()=>{}, _hpSetPath:()=>{}, _hpRemovePath:()=>{},
   _hpSetHighlight:()=>{}, _hpTuneHighlight:()=>{},
   _hpAddObjField:()=>{}, _hpAddArrayItem:()=>{}, _hpAddStop:()=>{}, _hpSwitchVariant:()=>{},
@@ -82,17 +83,17 @@ const sandbox = {
    evaluating to undefined — so the check fails for a reason unrelated to what it guards. That is
    how this suite went quietly red: the editor grew helpers, these lists did not, and thirteen
    checks reported a missing name instead of the behaviour they were written to catch. */
-const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB',
-  '_hpNum','_hpIsStopList','_IP_KIND','_IP_SOURCE',
+const need = ['TASK_TYPE_LABELS','ROUTINE_TYPES','isRoutine','SRC_CHIP','srcChip','hostOf','TAG_VOCAB','_SRC_USE','_WIKI_CAT_JA','_STORAGE_FAMILY_JA','_eyeWords','_jaWrap','_nickname','_tagHue','_ipShots','_IP_SUBJECTS',
+  '_hpNum','_hpIsStopList','_IP_KIND','_IP_SOURCE','_ALIGN_H','_ALIGN_V',
   'HP_CORE_KEYS','HP_GROUND_KEYS','HP_QUICK_KEYS','HP_DEAD_WITH_LINES','HP_VARIANT_LABEL',
   'HP_ROLE_LABELS','HP_SPLIT_LABELS','HP_SPLIT_SWATCH','HP_LINE_BLANK_ENUMS',
   'HP_VARIANT_KEYS','HP_VARIANT_LABELS'];
-const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs',
+const fns  = ['_taskSummary','_routineGrid','_renderFactChecks','_buildSourceRows','_buildArticleRows','_wikiCard','_renderUsageKpis','_fmtBytes','_renderSettingsOverview','_tagSuggestions','_tagVocabFor','_markdownToHtml','_inline','_visualSection','_syncHpSummaries','_hpSpec','_hpControl','_renderStyleForm','_hpLines','_hpLineControl','_renderLineForm','_renderPreviewHits','_renderSampleTabs','_eyeTagChips','_storageFamily',
   // Helpers the editor renderers call, listed for the same reason as the consts above.
   '_hpTypeOf','_hpStrokesCoreCtl','_hpGlowCoreCtl','_hpGroundNotice','_hpHighlightCtl','_hpPathAttr','_hpUnionCtl','_hpVariantMatches',
   '_hpObjectFields','_hpObjectAddRow','_hpArrayCtl','_hpStopListCtl',
   '_hpRunEditor','_hpRunFlatText','_hpRunExistingRange',
-  '_presetApproval','_imagePromptCard'];
+  '_presetApproval','_imagePromptCard','_seg','_actCard'];
 
 let code = '';
 let missing = 0;
@@ -104,8 +105,25 @@ for (const n of fns) {
   const i = src.indexOf(`function ${n}(`);
   // A renamed or deleted function must fail the build, not silently drop out of the test.
   if (i < 0) { console.log(`\u2717 ${n}: not found in app.js`); missing++; continue; }
-  // Brace-match to the end of the function.
-  let d = 0, j = src.indexOf('{', i);
+  // Find the function body after its parameter list (which can contain destructured objects).
+  let parens = 0, quote = '', escaped = false, close = -1;
+  const open = src.indexOf('(', i);
+  for (let k = open; k < src.length; k++) {
+    const ch = src[k];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
+    if (ch === '(') parens++;
+    else if (ch === ')' && --parens === 0) { close = k; break; }
+  }
+  let j = close + 1;
+  while (/\s/.test(src[j] || '')) j++;
+  // Brace-match to the end of the function body.
+  let d = 0;
   const start = i;
   for (let k = j; k < src.length; k++) {
     if (src[k] === '{') d++;
@@ -204,7 +222,7 @@ run('_visualSection unset',    () => {
 run('_visualSection chosen',   () => {
   const out = api._visualSection({ id: 'c1', visual: { template: 'dark_flat', accent: '#8A2846' } }, _section);
   if (!/#8A2846/.test(out)) throw new Error('the chosen colour is missing');
-  if (!/指定あり/.test(out)) throw new Error('a styled magazine should say so in the summary');
+  if (!/id="cat-accenthex-c1" value="#8A2846"/.test(out)) throw new Error('the chosen colour is not preserved for save');
   return 'ok';
 });
 run('_visualSection full',     () => {
@@ -212,7 +230,7 @@ run('_visualSection full',     () => {
   // most identifying thing about it, and more useful there than the word 指定あり.
   const out = api._visualSection({ id: 'c1', visual: { template: 'dark_flat', accent: '#8A2846', align: 'left', eyebrow: 'AI夜間ラボ' } }, _section);
   if (!/AI夜間ラボ/.test(out)) throw new Error('the magazine name is missing');
-  if (!/selected>左揃え/.test(out.replace(/"/g, ''))) throw new Error('the chosen alignment is not selected');
+  if (!/class="seg-btn on"[^>]*data-v="left"/.test(out)) throw new Error('the chosen alignment is not selected');
   return 'ok';
 });
 run('_visualSection no meta',  () => {
