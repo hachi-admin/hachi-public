@@ -1205,6 +1205,7 @@ test('CSV product import accepts ASIN, manual facts, source and product tags', a
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
     if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
     if (path.includes('/settings')) return json({ settings: { accountId: 'a1', revision: 0, profile: {}, templateRefs: [] } });
     if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 0, enabled: true, scheduleEnabled: false, operatorNote: '' }, readiness: { missing: ['name', 'features', 'source'] } }] });
     if (path.endsWith('/imports') && options.method === 'POST') return json({ importId: 'i1', status: 'needs_completion', revision: 0, rows: [{ row: 1, status: 'needs_completion', productId: product.productId }] });
@@ -1226,7 +1227,223 @@ test('CSV product import accepts ASIN, manual facts, source and product tags', a
   const body = JSON.parse(patch.options.body);
   assert.deepEqual(body.fields.tags, ['デスク', '照明']);
   assert.deepEqual(body.fields.features, ['角度調整可能', '高さ調整']);
+  assert.equal(Object.hasOwn(body.fields, 'category'), false, 'omitting the optional genre column leaves the category unchanged');
   assert.equal(body.sourceNote, '商品ページで確認');
+});
+
+test('CSV category is optional, valid values are patched, and invalid values stop before URL registration', async () => {
+  const validRequests = [];
+  const product = { productId: 'JP-B012345678', asin: 'B012345678', name: '', canonicalUrl: 'https://www.amazon.co.jp/dp/B012345678', catalogStatus: 'input_pending', revision: 0, features: [], tags: [] };
+  const validRouter = (url, options = {}) => {
+    const path = String(url); validRequests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 0, enabled: true }, readiness: { missing: [] } }] });
+    if (path.endsWith('/imports') && options.method === 'POST') return json({ importId: 'i1', rows: [{ row: 1, productId: product.productId }] });
+    if (path.endsWith('/products/JP-B012345678') && options.method === 'PATCH') return json({ product: { ...product, revision: 1 } });
+    return json({});
+  };
+  const valid = page('#x_code=csv-valid-genre', true, validRouter, { verifier: 'csv-valid-genre-v' });
+  await flush(); await selectFirstAccount(valid); await flush();
+  const validInput = valid.window.document.querySelector('.x-product-csv-import input[type="file"]');
+  Object.defineProperty(validInput, 'files', { configurable: true, value: [{ text: async () => 'asin,商品ジャンル,source\nB012345678,家電,商品ページで分類を確認' }] });
+  valid.window.document.querySelector('.x-product-csv-import button').click(); await flush(); await flush();
+  const validPatch = validRequests.find(request => request.path.endsWith('/products/JP-B012345678') && request.options.method === 'PATCH');
+  assert.ok(validPatch);
+  assert.equal(JSON.parse(validPatch.options.body).fields.category, '家電');
+
+  const invalidRequests = [];
+  const invalidRouter = (url, options = {}) => {
+    const path = String(url); invalidRequests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [] });
+    return json({});
+  };
+  const invalid = page('#x_code=csv-invalid-genre', true, invalidRouter, { verifier: 'csv-invalid-genre-v' });
+  await flush(); await selectFirstAccount(invalid); await flush();
+  const invalidInput = invalid.window.document.querySelector('.x-product-csv-import input[type="file"]');
+  Object.defineProperty(invalidInput, 'files', { configurable: true, value: [{ text: async () => 'asin,category,source\nB012345678,PC周辺機器,商品ページで確認' }] });
+  invalid.window.document.querySelector('.x-product-csv-import button').click(); await flush();
+  assert.match(invalid.window.document.querySelector('.x-product-csv-import').textContent, /2行目: 商品ジャンル「PC周辺機器」/);
+  assert.equal(invalidRequests.some(request => request.path.endsWith('/imports') && request.options.method === 'POST'), false, 'invalid genres are rejected before any URL import');
+});
+
+test('CSV category validation waits for an in-flight genre master request', async () => {
+  const requests = [];
+  let resolveGenres;
+  const genreMaster = new Promise(resolve => { resolveGenres = resolve; });
+  const product = { productId: 'JP-B012345678', asin: 'B012345678', name: '', canonicalUrl: 'https://www.amazon.co.jp/dp/B012345678', catalogStatus: 'input_pending', revision: 0, features: [], tags: [] };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return genreMaster;
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [{ product, accountProduct: { accountId: 'a1', productId: product.productId, revision: 0, enabled: true }, readiness: { missing: [] } }] });
+    if (path.endsWith('/imports') && options.method === 'POST') return json({ importId: 'i1', rows: [{ row: 1, productId: product.productId }] });
+    if (path.endsWith('/products/JP-B012345678') && options.method === 'PATCH') return json({ product: { ...product, revision: 1 } });
+    return json({});
+  };
+  const dom = page('#x_code=csv-genre-master-race', true, router, { verifier: 'csv-genre-master-race-v' });
+  await flush(); await selectFirstAccount(dom); await flush();
+  assert.ok(requests.some(request => request.path.endsWith('/product-genres')));
+  const input = dom.window.document.querySelector('.x-product-csv-import input[type="file"]');
+  Object.defineProperty(input, 'files', { configurable: true, value: [{ text: async () => 'asin,category,source\nB012345678,家電,商品ページで分類を確認' }] });
+  dom.window.document.querySelector('.x-product-csv-import button').click();
+  await flush();
+  assert.equal(requests.some(request => request.path.endsWith('/imports') && request.options.method === 'POST'), false, 'CSV waits instead of validating against an empty, still-loading master');
+  resolveGenres(json(productGenreFixture()));
+  await flush(); await flush(); await flush();
+  const imported = requests.find(request => request.path.endsWith('/imports') && request.options.method === 'POST');
+  assert.ok(imported, 'the valid category is imported after the master finishes loading');
+  const patch = requests.find(request => request.path.endsWith('/products/JP-B012345678') && request.options.method === 'PATCH');
+  assert.ok(patch);
+  assert.equal(JSON.parse(patch.options.body).fields.category, '家電');
+});
+
+test('shared genre master completion rerenders the current account editor after switching accounts', async () => {
+  const requests = [];
+  const pendingGenres = deferred();
+  const products = { A: workspaceProductFixture('product-A', 'A'), B: workspaceProductFixture('product-B', 'B') };
+  products.A.product.category = '食品'; products.B.product.category = '文具';
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return pendingGenres.promise;
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ products: [products[accountId]] }); }
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=genre-switch-race', true, router, { verifier: 'genre-switch-race-v' });
+  await flush();
+  const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button');
+  accounts[0].click(); await flush();
+  assert.equal(dom.window.document.querySelector('#x-product-detail [name="category"]').disabled, true);
+  accounts[1].click(); await flush();
+  const before = dom.window.document.querySelector('#x-product-detail [name="category"]');
+  assert.equal(before.value, '文具');
+  assert.equal(before.disabled, true);
+  pendingGenres.resolve(json(productGenreFixture()));
+  await flush(); await flush();
+  const after = dom.window.document.querySelector('#x-product-detail [name="category"]');
+  assert.equal(after.value, '文具');
+  assert.equal(after.disabled, false, 'the B-scope waiter rerenders its editor after the shared request completes');
+  assert.equal(requests.filter(request => request.path.endsWith('/product-genres')).length, 1);
+});
+
+test('CSV category wait abandoned after account switch sends no old-scope writes', async () => {
+  const requests = [];
+  const pendingGenres = deferred();
+  const products = { A: workspaceProductFixture('product-A', 'A'), B: workspaceProductFixture('product-B', 'B') };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return pendingGenres.promise;
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) { const accountId = new URL(path, 'https://x').searchParams.get('accountId'); return json({ products: [products[accountId]] }); }
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    if (path.endsWith('/imports') && options.method === 'POST') return json({ importId: 'i1', rows: [{ row: 1, productId: products.A.product.productId }] });
+    return json({});
+  };
+  const dom = page('#x_code=csv-account-race', true, router, { verifier: 'csv-account-race-v' });
+  await flush();
+  const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button');
+  accounts[0].click(); await flush();
+  const form = dom.window.document.querySelector('.x-product-csv-import');
+  const input = form.querySelector('input[type="file"]');
+  Object.defineProperty(input, 'files', { configurable: true, value: [{ text: async () => 'asin,category,source\nB012345678,家電,商品ページで確認' }] });
+  form.querySelector('button').click(); await flush();
+  assert.equal(requests.some(request => request.path.endsWith('/imports') && request.options.method === 'POST'), false);
+  accounts[1].click(); await flush();
+  pendingGenres.resolve(json(productGenreFixture()));
+  await flush(); await flush();
+  assert.equal(requests.some(request => request.path.endsWith('/imports') && request.options.method === 'POST'), false, 'A import is stopped after the CSV form leaves the active account scope');
+  assert.equal(requests.some(request => request.path.includes('/products/') && request.options.method === 'PATCH'), false, 'no product patch is sent for the detached A form');
+});
+
+test('product genre master failure preserves legacy value and allows other product edits', async () => {
+  const requests = [];
+  const item = { product: { productId: 'JP-B012345678', asin: 'B012345678', name: '取得名', category: '旧ジャンル', features: ['特徴'], catalogStatus: 'available', revision: 2 }, accountProduct: { accountId: 'a1', productId: 'JP-B012345678', revision: 3, enabled: true }, readiness: { ready: true, missing: [] } };
+  const router = (url, options = {}) => {
+    const path = String(url); requests.push({ path, options });
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json({ error: { message: 'unavailable' } }, 503);
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [item] });
+    if (path.endsWith('/products/JP-B012345678') && options.method === 'PATCH') return json({ ok: true });
+    return json({});
+  };
+  const dom = page('#x_code=genre-master-failed', true, router, { verifier: 'genre-master-failed-v' });
+  await flush(); await selectFirstAccount(dom); await flush();
+  const form = dom.window.document.querySelector('#x-product-detail form');
+  assert.equal(form.elements.category.value, '旧ジャンル');
+  assert.equal(form.elements.category.disabled, true);
+  assert.match(form.textContent, /現在の値と他の入力は保持されます/);
+  form.elements.name.value = '手修正名'; form.elements.name.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  form.elements.sourceNote.value = '確認元'; form.elements.sourceNote.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  form.querySelector('button').click(); await flush();
+  const patch = requests.find(request => request.path.endsWith('/products/JP-B012345678') && request.options.method === 'PATCH');
+  assert.ok(patch);
+  assert.deepEqual(JSON.parse(patch.options.body).fields, { name: '手修正名' });
+});
+
+test('disabled genre select stays disabled after another product field receives a 409', async () => {
+  const item = { product: { productId: 'JP-B012345678', asin: 'B012345678', name: '取得名', category: '旧ジャンル', features: ['特徴'], catalogStatus: 'available', revision: 2 }, accountProduct: { accountId: 'a1', productId: 'JP-B012345678', revision: 3, enabled: true }, readiness: { ready: true, missing: [] } };
+  const router = (url, options = {}) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json({ error: { message: 'unavailable' } }, 503);
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [item] });
+    if (path.endsWith('/products/JP-B012345678') && options.method === 'PATCH') return json({ error: { message: 'conflict' } }, 409);
+    return json({});
+  };
+  const dom = page('#x_code=genre-disabled-conflict', true, router, { verifier: 'genre-disabled-conflict-v' });
+  await flush(); await selectFirstAccount(dom); await flush();
+  const form = dom.window.document.querySelector('#x-product-detail form');
+  assert.equal(form.elements.category.disabled, true);
+  form.elements.name.value = '手修正名'; form.elements.name.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  form.elements.sourceNote.value = '確認元'; form.elements.sourceNote.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  form.querySelector('button').click(); await flush();
+  assert.match(form.textContent, /入力は保持しています/);
+  assert.equal(form.elements.category.disabled, true, 'conflict restoration retains the select disabled state from before save');
+});
+
+test('product genre draft is scoped to its account when switching accounts', async () => {
+  const products = { A: workspaceProductFixture('p-A', 'A'), B: workspaceProductFixture('p-B', 'B') };
+  products.A.product.category = '食品'; products.B.product.category = '文具';
+  const router = url => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'A', label: 'A' }, { accountId: 'B', label: 'B' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
+    const accountId = new URL(path, 'https://x').searchParams.get('accountId');
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products: [products[accountId]] });
+    if (path.includes('/drafts?')) return json({ drafts: [] });
+    return json({});
+  };
+  const dom = page('#x_code=genre-account-scope', true, router, { verifier: 'genre-account-scope-v' });
+  await flush();
+  const accounts = dom.window.document.querySelectorAll('#x-accounts .x-row button');
+  accounts[0].click(); await flush();
+  let category = dom.window.document.querySelector('#x-product-detail [name="category"]');
+  category.value = 'キッチン'; category.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  accounts[1].click(); await flush();
+  assert.equal(dom.window.document.querySelector('#x-product-detail [name="category"]').value, '文具');
+  accounts[0].click(); await flush();
+  category = dom.window.document.querySelector('#x-product-detail [name="category"]');
+  assert.equal(category.value, 'キッチン');
 });
 
 test('product editor binds both revisions, sends only changed manual fields, and preserves input on conflict', async () => {
@@ -1235,7 +1452,8 @@ test('product editor binds both revisions, sends only changed manual fields, and
   const router = (url, options = {}) => {
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
-    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'A', label: 'A', market: 'JP' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
     if (path.includes('/settings')) return json({ settings: { accountId: 'A', revision: 0, profile: {}, templateRefs: [] } });
     if (path.includes('/tags')) return json({ tags: [] });
     if (path.includes('/products?')) return json({ products: [item] });
@@ -1248,6 +1466,7 @@ test('product editor binds both revisions, sends only changed manual fields, and
   for (const [name, value] of Object.entries({ name: '手修正名', features: '特徴A\n特徴B', operatorNote: '新メモ', sourceNote: '独自資料で確認' })) {
     const input = form.querySelector(`[name="${name}"]`); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   }
+  form.elements.category.value = '文具'; form.elements.category.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   form.querySelector('button').click(); await flush();
   const patch = requests.find(request => request.path.includes('/products/JP-B012345678') && request.options.method === 'PATCH');
   const body = JSON.parse(patch.options.body);
@@ -1255,8 +1474,10 @@ test('product editor binds both revisions, sends only changed manual fields, and
   assert.equal(body.expectedAccountRevision, 7);
   assert.deepEqual(body.fields.features, ['特徴A', '特徴B']);
   assert.equal(body.fields.name, '手修正名');
+  assert.equal(body.fields.category, '文具');
   assert.equal(body.sourceNote, '独自資料で確認');
   assert.equal(form.querySelector('[name="name"]').value, '手修正名');
+  assert.equal(form.elements.category.value, '文具', 'a conflict keeps the selected genre in the product-scoped editor draft');
   assert.match(form.textContent, /入力は保持しています/);
   assert.equal([...dom.window.document.querySelectorAll('#x-products button')].some(button => button.textContent === 'アーカイブ'), false);
 });
@@ -1433,6 +1654,7 @@ const workspaceProductFixture = (productId = 'p1', accountId = 'a1') => ({
   accountProduct: { accountId, productId, revision: 1, enabled: true, scheduleEnabled: false, operatorNote: '' },
   readiness: { ready: true, missing: [], requiresRecheck: false },
 });
+const productGenreFixture = () => ({ genres: ['日用品', 'ガジェット', 'キッチン', '旅行用品', '食品', '家電', '健康用品', '文具', 'ファッション'].map((categoryValue, index) => ({ genreId: `genre-${index}`, categoryValue, label: categoryValue })) });
 
 test('Skill catalog shows all adoption decisions and imports only through an admin action', async () => {
   const requests = []; let imported = false;
@@ -1874,7 +2096,8 @@ test('L5 product genre saves and approved account queue stays separate from cand
   const router = (url, options = {}) => {
     const path = String(url); requests.push({ path, options });
     if (path.endsWith('/exchange')) return json({ token: jwt() });
-    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/context')) return json({ workspace: { workspaceId: 'w1' }, accounts: [{ accountId: 'a1', label: 'A' }], member: { role: 'member' } });
+    if (path.endsWith('/product-genres')) return json(productGenreFixture());
     if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
     if (path.includes('/products/') && options.method === 'PATCH') { category = JSON.parse(options.body).fields.category; return json({ ok: true }); }
     if (path.includes('/products?')) {
@@ -1895,19 +2118,19 @@ test('L5 product genre saves and approved account queue stays separate from cand
   products[0].click(); await flush();
   const editor = dom.window.document.querySelector('#x-product-detail form');
   assert.equal(editor.elements.category.value, '家電');
-  editor.elements.category.value = 'キッチン用品'; editor.elements.category.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  editor.elements.category.value = 'キッチン'; editor.elements.category.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   editor.elements.sourceNote.value = '商品ページのカテゴリを確認'; editor.elements.sourceNote.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   editor.querySelector('button').click(); await flush(); await flush();
   const patchRequest = requests.find(item => item.path.endsWith('/api/x-affiliate/products/p1'));
   assert.ok(patchRequest);
-  assert.equal(JSON.parse(patchRequest.options.body).fields.category, 'キッチン用品');
+  assert.equal(JSON.parse(patchRequest.options.body).fields.category, 'キッチン');
   assert.equal(JSON.parse(patchRequest.options.body).sourceNote, '商品ページのカテゴリを確認');
-  assert.equal(dom.window.document.querySelector('#x-products .x-workspace-product').textContent.includes('ジャンル: キッチン用品'), true);
+  assert.equal(dom.window.document.querySelector('#x-products .x-workspace-product').textContent.includes('ジャンル: キッチン'), true);
 
   const draftsBox = dom.window.document.querySelector('#x-drafts');
   assert.match(draftsBox.textContent, /候補を確認（1件）/);
   assert.match(draftsBox.textContent, /投稿待ち（1件）/);
-  assert.match(draftsBox.textContent, /ジャンル: キッチン用品/);
+  assert.match(draftsBox.textContent, /ジャンル: キッチン/);
   assert.equal(draftsBox.querySelector('.x-draft textarea[name="body"]').value, '確認中の本文');
   assert.doesNotMatch(draftsBox.querySelector('#x-candidate-workspace').textContent, /採用済み\n本文/);
   [...draftsBox.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('投稿待ち')).click();

@@ -78,7 +78,7 @@
     { id: 'operations', label: '運用状況' },
     { id: 'account', label: 'アカウント設定' },
   ];
-  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, productLoadGeneration: new Map(), draftLoadGeneration: new Map(), linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), generationNotice: null, productCatalog: [], productCatalogByAccount: new Map(), workspaceSelections: new Map(), workspaceViews: new Map(), productEditDrafts: new Map(), draftEditDrafts: new Map(), generationFormState: new Map(), productFilters: new Map(), reviewFilters: new Map(), draftSnapshots: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
+  let state = { context: null, accountId: '', activePanel: 'products', generation: 0, loadGeneration: 0, productLoadGeneration: new Map(), productGenreLoadGeneration: new Map(), productGenreRequests: new Map(), productGenresByWorkspace: new Map(), productGenreErrors: new Set(), productGenreLoading: new Set(), draftLoadGeneration: new Map(), linkGeneration: 0, previewGeneration: 0, skillDrafts: new Map(), generationJobs: new Map(), draftJobs: new Map(), generationNotice: null, productCatalog: [], productCatalogByAccount: new Map(), workspaceSelections: new Map(), workspaceViews: new Map(), productEditDrafts: new Map(), draftEditDrafts: new Map(), generationFormState: new Map(), productFilters: new Map(), reviewFilters: new Map(), draftSnapshots: new Map(), settings: null, budget: null, notifications: null, importResult: null, skillPreview: null, link: null, linkStartPending: false, linkStatusPending: false, linkFinalizePending: false };
   let retryState = new WeakMap();
   let pendingWrites = new WeakSet();
   async function keyFor(form, payload) {
@@ -139,7 +139,7 @@
     state.importResult = null;
     state.skillPreview = null;
     state.productCatalog = [];
-    state.productCatalogByAccount.clear(); state.workspaceSelections.clear(); state.workspaceViews.clear(); state.productEditDrafts.clear(); state.draftEditDrafts.clear(); state.generationFormState.clear();
+    state.productCatalogByAccount.clear(); state.workspaceSelections.clear(); state.workspaceViews.clear(); state.productGenreRequests.clear(); state.productGenresByWorkspace.clear(); state.productGenreErrors.clear(); state.productGenreLoading.clear(); state.productGenreLoadGeneration.clear(); state.productEditDrafts.clear(); state.draftEditDrafts.clear(); state.generationFormState.clear();
     state.draftSnapshots.clear(); state.productLoadGeneration.clear(); state.draftLoadGeneration.clear();
     state.skillDrafts.clear();
     state.generationJobs.clear(); state.draftJobs.clear();
@@ -342,6 +342,12 @@
       if (!url) throw new Error(`${index + 2}行目: url または10桁の asin が必要です`);
       const fields = {};
       const name = csvField(row, ['name', '商品名']); if (name) fields.name = name;
+      const category = csvField(row, ['category', '商品ジャンル']);
+      if (category) {
+        const validCategories = new Set((state.productGenresByWorkspace.get(state.context?.workspace?.workspaceId) || []).map(genre => genre.categoryValue));
+        if (!validCategories.has(category)) throw new Error(`${index + 2}行目: 商品ジャンル「${category}」は登録済みの分類から選択してください`);
+        fields.category = category;
+      }
       const features = splitCsvList(csvField(row, ['features', 'feature', '特徴'])); if (features.length) fields.features = features;
       const facts = splitCsvList(csvField(row, ['facts', 'fact', '事実'])).map(item => {
         const separator = item.indexOf('|') >= 0 ? item.indexOf('|') : item.indexOf(':');
@@ -659,10 +665,27 @@
     const values = { ...initial, ...(saved.values || {}) };
     const missingLabels = { name: '商品名', category: '商品ジャンル', features: '特徴', facts: '確認済み事実', source: '確認元' };
     const missing = item.readiness?.missing || [];
+    const workspaceId = state.context?.workspace?.workspaceId || '';
+    const genres = state.productGenresByWorkspace.get(workspaceId) || [];
+    const genreLoading = state.productGenreLoading.has(workspaceId);
+    const genreError = state.productGenreErrors.has(workspaceId);
+    const categorySelect = el('select', { name: 'category', className: 'form-select' });
+    categorySelect.append(el('option', { value: '', text: genres.length ? 'ジャンルを選択' : genreLoading ? 'ジャンル一覧を読み込み中…' : 'ジャンル一覧を利用できません' }));
+    genres.forEach(genre => categorySelect.append(el('option', { value: genre.categoryValue, text: genre.label || genre.categoryValue })));
+    if (values.category && !genres.some(genre => genre.categoryValue === values.category)) {
+      categorySelect.append(el('option', { value: values.category, text: `${values.category}（現在の登録値・マスタ未登録）` }));
+    }
+    categorySelect.value = values.category;
+    categorySelect.disabled = !genres.length;
+    const categoryField = el('label', { className: 'x-field' }, [
+      el('span', { text: '商品ジャンル（投稿候補の分類）' }),
+      categorySelect,
+      el('small', { className: 'x-muted', text: genreError ? 'ジャンル一覧を取得できません。現在の値と他の入力は保持されます。再読み込み後に変更してください。' : '商品そのものの分類です。管理用タグとは別です。' }),
+    ]);
     const form = el('form', { className: 'x-form x-product-editor' }, [
       el('p', { className: 'x-muted', text: `ASIN ${product.asin || '不明'} · ${{available:'利用中',input_pending:'情報入力待ち',paused:'停止中',archived:'アーカイブ',invalid:'要確認'}[product.catalogStatus] || '状態確認中'} · 不足: ${missing.map(value => missingLabels[value] || value).join('、') || 'なし'}` }),
       field('商品名', 'text', 'name', values.name),
-      field('商品ジャンル（投稿候補の分類）', 'text', 'category', values.category, '例: キッチン用品、PC周辺機器'),
+      categoryField,
       field('確認済み特徴（1行1件）', 'textarea', 'features', values.features),
       field('タグ（カンマ区切り）', 'text', 'tags', values.tags),
       field('確認済み事実（種類 | 内容、1行1件）', 'textarea', 'facts', values.facts),
@@ -695,21 +718,25 @@
         if (JSON.stringify(facts.map(({ factId, ...fact }) => fact)) !== JSON.stringify((product.facts || []).map(({ factId, ...fact }) => fact))) fields.facts = facts;
         if (!Object.keys(fields).length) { endWrite(form); message(form, '変更はありません', ''); return; }
         if (Object.hasOwn(fields, 'category') && !String(draft.values.sourceNote || '').trim()) { endWrite(form); message(form, '商品ジャンルを変更する場合は、手修正の確認元・理由を入力してください。', 'error'); return; }
+        const controls = [...form.querySelectorAll('input,textarea,select,button')];
+        const disabledBeforeSave = controls.map(control => control.disabled);
         try {
-          form.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = true; });
+          controls.forEach(control => { control.disabled = true; });
           await api(`/api/x-affiliate/products/${encodeURIComponent(product.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: draft.productRevision ?? product.revision, expectedAccountRevision: draft.accountRevision ?? accountProduct.revision, fields, sourceNote: draft.values.sourceNote }) });
           endWrite(form); state.productEditDrafts.delete(key);
           if (isCurrentScope(accountId, generation)) await loadProducts(accountId, generation);
         } catch (error) {
-          endWrite(form); if (form.isConnected) { form.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = false; }); message(form, `${actionErrorMessage(error)}${error.code === 409 ? ' 入力は保持しています。' : ''}`, 'error'); }
+          endWrite(form); if (form.isConnected) { controls.forEach((control, index) => { control.disabled = disabledBeforeSave[index]; }); message(form, `${actionErrorMessage(error)}${error.code === 409 ? ' 入力は保持しています。' : ''}`, 'error'); }
         }
       }),
     ]);
-    form.addEventListener('input', event => {
+    const saveProductDraft = event => {
       if (!event.target.name) return;
       const current = state.productEditDrafts.get(key) || { values: { ...values }, dirty: true, productRevision: product.revision, accountRevision: accountProduct.revision };
       current.values[event.target.name] = event.target.type === 'checkbox' ? event.target.checked : event.target.value; current.dirty = true; state.productEditDrafts.set(key, current);
-    });
+    };
+    form.addEventListener('input', saveProductDraft);
+    form.addEventListener('change', event => { if (event.target.tagName === 'SELECT' || event.target.type === 'checkbox') saveProductDraft(event); });
     const infoDetails = el('details', { className: 'x-product-info-details' });
     infoDetails.append(el('summary', { text: missing.length ? `不足項目を補う（${missing.map(value => missingLabels[value] || value).join('、')}）` : '商品情報を確認・編集' }));
     infoDetails.open = missing.length > 0;
@@ -822,18 +849,32 @@
     const addDetails = el('details', { className: 'x-product-add-details' }, [el('summary', { text: 'URL・CSVから商品を追加' }), importForm]);
     const csvFile = el('input', { name: 'csvFile', className: 'form-input', type: 'file', accept: '.csv,text/csv' });
     const csvForm = el('form', { className: 'x-form x-product-csv-import' }, [
-      el('p', { className: 'x-muted', text: 'CSV列: url または asin, name, features, facts, source, tags, enabled, scheduleEnabled。featuresは「|」区切り、tagsは「|」またはカンマ区切り、factsは「種類 | 内容」を複数入力します。商品ごとのtagsは管理用ラベルです。Amazonアソシエイト追跡タグはアカウント設定で管理します。' }),
+      el('p', { className: 'x-muted', text: 'CSV列: url または asin, name, features, facts, source, tags, enabled, scheduleEnabled。category または 商品ジャンル列は任意です。featuresは「|」区切り、tagsは「|」またはカンマ区切り、factsは「種類 | 内容」を複数入力します。商品ごとのtagsは管理用ラベルです。Amazonアソシエイト追跡タグはアカウント設定で管理します。' }),
       el('label', { className: 'x-field' }, [el('span', { text: '商品CSV（UTF-8）' }), csvFile]),
       button('CSVを取り込む', async event => {
         event.preventDefault();
         if (!csvFile.files?.[0] || !csvForm.isConnected || !isCurrentScope(accountId, generation) || !beginWrite(csvForm)) return;
+        const isCurrentCsvForm = () => csvForm.isConnected && isCurrentScope(accountId, generation);
         try {
-          const rows = csvRows(await csvFile.files[0].text());
+          const csvText = await csvFile.files[0].text();
+          if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
+          const hasGenreValues = parseCsv(csvText).some(row => Boolean(csvField(row, ['category', '商品ジャンル'])));
+          const workspaceId = state.context?.workspace?.workspaceId;
+          if (hasGenreValues) {
+            await loadProductGenres(workspaceId, accountId, generation);
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
+            if (!workspaceId || !state.productGenresByWorkspace.has(workspaceId)) {
+              throw new Error('商品ジャンル一覧を読み込めませんでした。再読み込みしてからCSVを取り込んでください');
+            }
+          }
+          const rows = csvRows(csvText);
           if (rows.length > 200) throw new Error('CSVは一度に200行まで取り込めます');
           const imported = []; const failures = [];
           for (let offset = 0; offset < rows.length; offset += 20) {
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
             const chunk = rows.slice(offset, offset + 20);
             const result = await api('/api/x-affiliate/imports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, urls: chunk.map(row => row.url), clientRequestId: random() }) });
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
             (result.rows || []).forEach(item => {
               const row = chunk[item.row - 1];
               if (!row) return;
@@ -843,15 +884,19 @@
           }
           let catalog = []; let cursor = '';
           do {
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
             const query = new URLSearchParams({ accountId }); if (cursor) query.set('cursor', cursor);
             const page = await api(`/api/x-affiliate/products?${query}`); catalog.push(...(page.products || [])); cursor = page.nextCursor || '';
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
           } while (cursor);
           let patched = 0; const patchedIds = new Set();
           for (const item of imported) {
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
             if (patchedIds.has(item.productId)) { failures.push(`${item.row.rowNumber}行目: 同じ商品がCSV内で重複しています`); continue; }
             const current = catalog.find(candidate => candidate.product?.productId === item.productId);
             if (!current || !Object.keys(item.row.fields).length) continue;
             await api(`/api/x-affiliate/products/${encodeURIComponent(item.productId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, expectedRevision: current.product.revision, expectedAccountRevision: current.accountProduct?.revision, fields: item.row.fields, sourceNote: item.row.sourceNote }) });
+            if (!isCurrentCsvForm()) { endWrite(csvForm); return; }
             patchedIds.add(item.productId);
             patched += 1;
           }
@@ -2278,6 +2323,38 @@
     try { const result = await api(`/api/x-affiliate/scheduled-runs?accountId=${encodeURIComponent(accountId)}`); if (isCurrentScope(accountId, generation)) renderScheduledRuns(result, accountId, generation); }
     catch (error) { if (error.code !== 404 && isCurrentScope(accountId, generation)) message(document.getElementById('x-budget') || document.body, `定期生成結果を取得できませんでした: ${error.message}`, 'warn'); }
   }
+  async function loadProductGenres(workspaceId, accountId, generation) {
+    if (!workspaceId || state.productGenresByWorkspace.has(workspaceId)) return;
+    const rerenderEditor = () => {
+      if (!isCurrentScope(accountId, generation)) return;
+      const products = state.productCatalogByAccount.get(accountId) || [];
+      const selected = products.find(item => item.product?.productId === state.workspaceSelections.get(accountId));
+      if (selected) renderProductEditor(selected, accountId, generation);
+    };
+    const inFlight = state.productGenreRequests.get(workspaceId);
+    if (inFlight) { await inFlight; rerenderEditor(); return; }
+    const requestGeneration = (state.productGenreLoadGeneration.get(workspaceId) || 0) + 1;
+    state.productGenreLoadGeneration.set(workspaceId, requestGeneration);
+    state.productGenreLoading.add(workspaceId);
+    rerenderEditor();
+    const request = (async () => {
+      try {
+        const result = await api('/api/x-affiliate/product-genres');
+        if (state.productGenreLoadGeneration.get(workspaceId) !== requestGeneration || state.productGenreRequests.get(workspaceId) !== request) return;
+        if (!Array.isArray(result.genres) || !result.genres.length) throw new Error('商品ジャンル一覧が空です');
+        state.productGenresByWorkspace.set(workspaceId, result.genres);
+        state.productGenreErrors.delete(workspaceId);
+      } catch {
+        if (state.productGenreLoadGeneration.get(workspaceId) === requestGeneration) state.productGenreErrors.add(workspaceId);
+      } finally {
+        if (state.productGenreLoadGeneration.get(workspaceId) === requestGeneration) state.productGenreLoading.delete(workspaceId);
+        rerenderEditor();
+      }
+    })();
+    state.productGenreRequests.set(workspaceId, request);
+    try { await request; }
+    finally { if (state.productGenreRequests.get(workspaceId) === request) state.productGenreRequests.delete(workspaceId); }
+  }
   async function loadSettings() {
     const accountId = state.accountId;
     if (!accountId) return;
@@ -2296,7 +2373,7 @@
       if (!isCurrentScope(accountId, generation)) return;
       renderSettings(result, accountId, generation);
       enforceMemberUI();
-      await Promise.all([loadTags(accountId, generation), loadProducts(accountId, generation), loadSkills(accountId, generation), loadBudget(accountId, generation), loadNotifications(accountId, generation), loadScheduledRuns(accountId, generation), loadDrafts(accountId, generation)]);
+      await Promise.all([loadTags(accountId, generation), loadProducts(accountId, generation), loadProductGenres(state.context?.workspace?.workspaceId, accountId, generation), loadSkills(accountId, generation), loadBudget(accountId, generation), loadNotifications(accountId, generation), loadScheduledRuns(accountId, generation), loadDrafts(accountId, generation)]);
     } catch (x) {
       const b = document.getElementById('x-settings');
       if (b && isCurrentScope(accountId, generation)) message(b, x.message, 'error');
