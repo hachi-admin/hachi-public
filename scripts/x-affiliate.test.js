@@ -1521,6 +1521,41 @@ test('filter selection note clears when selection returns to a visible product',
   assert.equal(dom.window.document.querySelector('#x-products .x-filter-selection-note'), null, 'the existing-items redraw must not leave a stale out-of-filter note');
 });
 
+test('product review filter separates uncreated, waiting, reviewed, and archived drafts', async () => {
+  const products = ['new', 'waiting', 'approved', 'rejected', 'archived', 'mixed'].map(id => workspaceProductFixture(`p-${id}`, 'A'));
+  const drafts = [
+    ['waiting', 'needs_review'],
+    ['approved', 'approved'],
+    ['rejected', 'rejected'],
+    ['archived', 'archived'],
+    ['mixed', 'needs_review'],
+    ['mixed', 'approved'],
+  ].map(([product, state], index) => ({ draftId: `d${index}`, generationGroupId: `g${index}`, variantId: `v${index}`, productIds: [`p-${product}`], state, revision: 1, body: '本文', validation: { ok: true } }));
+  const router = (url) => {
+    const path = String(url);
+    if (path.endsWith('/exchange')) return json({ token: jwt() });
+    if (path.endsWith('/context')) return json({ accounts: [{ accountId: 'A', label: 'A' }], member: { role: 'member' } });
+    if (path.includes('/settings')) return json({ settings: { revision: 0, profile: {}, templateRefs: [] } });
+    if (path.includes('/products?')) return json({ products });
+    if (path.includes('/drafts?')) return json({ drafts });
+    return json({});
+  };
+  const dom = page('#x_code=product-review-filter', true, router, { verifier: 'product-review-filter-v' }); await flush(); await selectFirstAccount(dom);
+  const filter = dom.window.document.querySelector('#x-products .x-product-filter');
+  const apply = value => {
+    filter.querySelector('[name="review"]').value = value;
+    filter.querySelector('button').click();
+    return [...dom.window.document.querySelectorAll('#x-products .x-workspace-product strong')].map(item => item.textContent);
+  };
+  assert.deepEqual(apply('not_created'), ['商品 p-new']);
+  assert.deepEqual(apply('needs_review'), ['商品 p-waiting', '商品 p-mixed']);
+  assert.deepEqual(apply('reviewed'), ['商品 p-approved', '商品 p-rejected', '商品 p-mixed']);
+  assert.deepEqual(apply('approved'), ['商品 p-approved', '商品 p-mixed']);
+  assert.deepEqual(apply('rejected'), ['商品 p-rejected']);
+  assert.deepEqual(apply('archived'), ['商品 p-archived']);
+  assert.match(dom.window.document.querySelector('#x-products .x-workspace-product .x-product-review-progress').textContent, /候補未作成|レビュー待ち|採用済み|見送り|保管/);
+});
+
 test('validation failure after save never reviews and keeps the saved revision through product switching', async () => {
   const requests = []; const products = [workspaceProductFixture('p1', 'a1'), workspaceProductFixture('p2', 'a1')];
   const draft = { draftId: 'd1', generationGroupId: 'g1', variantId: 'v1', productIds: ['p1'], state: 'needs_review', revision: 1, body: '元本文', validation: { ok: true } };
