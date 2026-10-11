@@ -1,3 +1,4 @@
+/* global REGISTRY, DETAIL_DATA, TASK_STATS, COST_BY_DAY, taskTitle, openDetail */
 /* ── Hachi オフィス ─────────────────────────────────────────────────────────────
  * The agent roster as a pixel-art office building, on top of 運用 › エージェント.
  *
@@ -906,7 +907,7 @@
     paintBubbles(now, vis);
   }
   function loop() {
-    cancelAnimationFrame(raf);
+    window.cancelAnimationFrame(raf);
     const frame = (ts) => {
       if (!root || root.offsetParent === null || !visibleBox || document.hidden) { raf = 0; return; }
       if (ts - last > 110) {           // ~9fps: smooth enough for pixel walking, light on the battery

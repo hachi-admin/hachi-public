@@ -1823,8 +1823,8 @@ function _calFit() {
   const bar = document.querySelector('.mob-tab-bar');
   // A fixed bar has no offsetParent; whether it is shown is whether it has a box.
   const barBox = bar?.getClientRects().length ? bar.getBoundingClientRect() : null;
-  const barTop = barBox && barBox.height ? barBox.top : innerHeight;
-  const bottom = Math.min(innerHeight, barTop) - 10;
+  const barTop = barBox && barBox.height ? barBox.top : window.innerHeight;
+  const bottom = Math.min(window.innerHeight, barTop) - 10;
   v.style.maxHeight = 'none';
   v.style.height = `${Math.max(320, Math.round(bottom - top))}px`;  // as if the page were at its top
 }
@@ -3812,7 +3812,7 @@ function _pickStrip(selId, face) {
   box.querySelectorAll('.pick-tile').forEach((b) => b.addEventListener('click', () => {
     sel.value = b.dataset.v;
     box.querySelectorAll('.pick-tile').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   }));
 }
 // Japanese names wrap only at their own separators (・ ／ 括弧), never mid-word.
@@ -4909,7 +4909,7 @@ const _SCROLL_INDEX = [
     for (const [sel, name] of _SCROLL_INDEX) {
       const els = [...document.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
       if (els.length < 6) continue;
-      const mid = innerHeight * 0.35;
+      const mid = window.innerHeight * 0.35;
       let ci = 0;
       els.forEach((el, i) => { if (el.getBoundingClientRect().top <= mid) ci = i; });
       // One before, the item you are on, and the next few — each further from the current one smaller.
@@ -4924,11 +4924,11 @@ const _SCROLL_INDEX = [
     if (!tag) { tag = document.createElement('div'); tag.id = 'scroll-label'; tag.setAttribute('aria-hidden', 'true'); document.body.appendChild(tag); }
     tag.innerHTML = names.map(({ n, d }) => `<span class="d${d < 0 ? 'p' : d}">${esc(n)}</span>`).join('');
     // Follow the thumb: same fraction of the scroller's visible height as the scroll position.
-    const box = sc === document || !sc.getBoundingClientRect ? { top: 0, height: innerHeight } : sc.getBoundingClientRect();
+    const box = sc === document || !sc.getBoundingClientRect ? { top: 0, height: window.innerHeight } : sc.getBoundingClientRect();
     const el = sc === document ? document.scrollingElement : sc;
     const frac = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
     const y = box.top + 24 + frac * Math.max(0, box.height - 72);
-    tag.style.top = `${Math.min(innerHeight - 120, Math.max(80, y))}px`;
+    tag.style.top = `${Math.min(window.innerHeight - 120, Math.max(80, y))}px`;
     tag.classList.add('show');
     clearTimeout(hideT); hideT = setTimeout(() => tag.classList.remove('show'), 900);
   };
@@ -4940,7 +4940,7 @@ const _SCROLL_INDEX = [
       document.getElementById('scroll-label')?.classList.remove('show');
       return;
     }
-    cancelAnimationFrame(raf); raf = requestAnimationFrame(() => show(e.target));
+    window.cancelAnimationFrame(raf); raf = requestAnimationFrame(() => show(e.target));
   }, { passive: true, capture: true });
 })();
 
