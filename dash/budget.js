@@ -105,14 +105,58 @@ function _renderBudget(d) {
     </div>`;
 }
 
+/* ── マガジン別の費用対効果 ─────────────────────────────────
+   /api/spend/roi: what each magazine cost (Gemini, charged per article since 2026-11; earlier runs
+   are estimated at today's prices) against what note shows for it, with a rule-based verdict. */
+const _VERDICT_COLOR = { 'やめる候補': 'var(--red,#c0392b)', '見直し': 'var(--red,#c0392b)', '未インポート': 'var(--acc)',
+  '反応が薄い': 'var(--m)', 'データ不足': 'var(--m2)', '続ける': 'inherit' };
+
+function _renderRoi(r) {
+  const mags = r?.magazines ?? [];
+  if (!mags.length) return '<div style="font-size:11px;color:var(--m)">この期間の記事はありません</div>';
+  const rows = mags.map((m) => `
+    <div class="set-line" style="align-items:flex-start;gap:10px">
+      <span style="flex:1;min-width:0">
+        <b>${esc(m.name || '')}</b>${m.status && m.status !== 'active' ? ` <span style="color:var(--m2)">（${esc(m.status)}）</span>` : ''}<br>
+        <span style="font-size:10px;color:var(--m)">着手${m.attempts ?? 0}・公開${m.published ?? 0}・失敗${m.failed ?? 0}・スキップ${m.skipped ?? 0}
+          ／ note ${m.posts ?? 0}本・スキ${m.likes ?? 0}</span>
+      </span>
+      <span style="text-align:right;white-space:nowrap">
+        ${_yen(m.costJpy)}${m.costEstimated ? '<span style="font-size:10px;color:var(--m2)">（推定）</span>' : ''}<br>
+        <span style="font-size:11px;font-weight:600;color:${_VERDICT_COLOR[m.verdict] || 'inherit'}">${esc(m.verdict || '')}</span>
+      </span>
+    </div>
+    <div style="font-size:10px;color:var(--m2);margin:-2px 0 6px">${esc(m.why || '')}</div>`).join('');
+  const t = r?.totals ?? {};
+  const a = r?.account ?? {};
+  const follow = a.followersChange === null || a.followersChange === undefined ? ''
+    : `・フォロワー ${a.followersStart}→${a.followersEnd}（${a.followersChange >= 0 ? '+' : ''}${a.followersChange}）`;
+  return `
+    <div style="font-size:11px;color:var(--m);margin-bottom:8px;line-height:1.6">
+      直近${esc(String(r?.days ?? ''))}日: 費用 ${_yen(t.costJpy)}・note ${t.posts ?? 0}本・スキ ${t.likes ?? 0}
+      ${t.costPerLikeJpy ? `・スキ1つ ${_yen(t.costPerLikeJpy)}` : ''}${follow}<br>
+      <span style="color:var(--m2)">判定はルール: 見直し＝失敗・スキップが公開の2倍超 ／ 未インポート＝公開したのに note に半分未満 ／
+      やめる候補＝¥300以上かけて1本あたりスキ0.5未満。「推定」は記事ごとの費用記録がない期間を今の単価で見積もった値。</span>
+    </div>
+    <div class="qs-card" style="flex-direction:column;align-items:stretch;gap:2px;padding:12px">${rows}</div>`;
+}
+
 async function _loadBudget() {
   const el = document.getElementById('budget-body');
   if (!el) return;
   el.innerHTML = '<div style="font-size:11px;color:var(--m)">読み込み中…</div>';
   try {
-    el.innerHTML = _renderBudget(await _budgetFetch('/api/spend'));
+    el.innerHTML = _renderBudget(await _budgetFetch('/api/spend'))
+      + '<div class="section-hd">マガジン別の費用対効果（直近28日）</div><div id="budget-roi"><div style="font-size:11px;color:var(--m)">読み込み中…</div></div>';
   } catch (e) {
     el.innerHTML = `<div style="font-size:11px;color:var(--red,#c0392b)">読み込みに失敗しました: ${esc(e.message || String(e))}</div>`;
+    return;
+  }
+  const roiEl = document.getElementById('budget-roi');
+  try {
+    roiEl.innerHTML = _renderRoi(await _budgetFetch('/api/spend/roi?days=28'));
+  } catch (e) {
+    roiEl.innerHTML = `<div style="font-size:11px;color:var(--red,#c0392b)">読み込みに失敗しました: ${esc(e.message || String(e))}</div>`;
   }
 }
 
