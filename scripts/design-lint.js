@@ -11,10 +11,12 @@
  *   node scripts/design-lint.js            # report, exit 1 on error
  *   node scripts/design-lint.js --warn     # report, always exit 0
  */
+import { fileURLToPath } from 'node:url';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not .pathname: a checkout under a path with spaces arrives percent-encoded (%20).
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WARN_ONLY = process.argv.includes('--warn');
 
 const findings = [];

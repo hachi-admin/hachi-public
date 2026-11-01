@@ -1,1 +1,3 @@
 .DS_Store
+# Dev tooling only (eslint for CI); GitHub Pages serves nothing from here. CI runs npm ci.
+node_modules/
