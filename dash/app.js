@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '156';
+const DASH_BUILD = '157';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -391,10 +391,10 @@ document.addEventListener('keydown', (e) => {
    two names). */
 const DESTINATIONS = {
   today:     { label: '今日', pages: [ ['tasks','タスク'], ['calendar','カレンダー'], ['inbox','受信箱'] ] },
-  articles:  { label: '記事', pages: [ ['articles','マガジン'], ['hero-presets','文字スタイル'], ['image-prompts','画風'] ] },
+  articles:  { label: '記事', pages: [ ['articles','マガジン'], ['note-import','noteインポート'], ['hero-presets','文字スタイル'], ['image-prompts','画風'] ] },
   knowledge: { label: '知識', pages: [ ['knowledge','情報源'], ['wiki','Wiki'] ] },
   ops:       { label: '運用', pages: [ ['overview','エージェント'], ['channels','チャンネル'], ['analytics','分析'] ] },
-  system:    { label: '設定', pages: [ ['settings','設定'], ['docs','ドキュメント'] ] },
+  system:    { label: '設定', pages: [ ['settings','設定'], ['budget','月間予算'], ['docs','ドキュメント'] ] },
 };
 
 // Which page each destination was last left on, so returning to 運用 does not always dump you
@@ -471,6 +471,7 @@ function _renderDestSub(dest, pageId) {
 
 // Per-page lazy initialisation, unchanged in behaviour — just moved out of navTo so the
 // destination logic above stays readable.
+/* global _loadBudget, _loadNoteImport */ // dash/budget.js, loaded after this file
 function _initPage(pageId) {
   if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
@@ -479,6 +480,8 @@ function _initPage(pageId) {
   if (pageId === 'articles') _loadTopics();
   if (pageId === 'hero-presets') _loadHeroPresets();
   if (pageId === 'image-prompts') _loadImagePrompts();
+  if (pageId === 'budget') _loadBudget();            // dash/budget.js
+  if (pageId === 'note-import') _loadNoteImport();   // dash/budget.js
   // 概要 is the section the page opens on, so it has to be populated here too — setSettingsSection
   // only fires when a nav button is clicked.
   if (pageId === 'settings') { _renderSettingsOverview(); _loadContextSettings(); _loadAccessUsers(); _renderSettingsLocation(); }
