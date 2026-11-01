@@ -15,7 +15,7 @@
  */
 export default [
   {
-    files: ['dash/*.js', 'shared/*.js', 'quiz/*.js', 'vocab/*.js', 'scripts/*.js'],
+    files: ['dash/*.js', 'shared/*.js', 'quiz/*.js', 'vocab/*.js', 'sites/*.js', 'scripts/*.js'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'script',
@@ -28,7 +28,7 @@ export default [
         Response: 'readonly', Request: 'readonly', Headers: 'readonly', AbortSignal: 'readonly',
         atob: 'readonly', btoa: 'readonly', crypto: 'readonly', Image: 'readonly',
         MutationObserver: 'readonly', IntersectionObserver: 'readonly', CustomEvent: 'readonly',
-        FileReader: 'readonly',
+        FileReader: 'readonly', structuredClone: 'readonly',
         getComputedStyle: 'readonly', alert: 'readonly', confirm: 'readonly', prompt: 'readonly',
         mermaid: 'readonly', Chart: 'readonly', process: 'readonly', CSS: 'readonly',
         // Defined in shared/ui.js, which every page loads before its own script.

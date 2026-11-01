@@ -2,7 +2,7 @@
   "name": "hachi-public",
   "private": true,
   "scripts": {
-    "lint": "eslint dash/ shared/ scripts/",
+    "lint": "eslint dash/ shared/ sites/ scripts/",
     "smoke": "node scripts/smoke-render.js"
   },
   "devDependencies": {

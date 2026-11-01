@@ -1,0 +1,29 @@
+/* Hachi Sites — only what dashboard.css does not already provide. */
+.sites-main{max-width:1180px;margin:0 auto;padding:20px 16px 80px}
+.sites-main .muted{color:var(--m)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:minmax(320px,1fr) minmax(320px,1.1fr);gap:20px;align-items:start}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.panel{background:var(--card);border-radius:16px;box-shadow:var(--sh-sm);padding:16px}
+.list{display:grid;gap:10px}
+.item{background:var(--card);border-radius:14px;box-shadow:var(--sh-sm);padding:12px 14px;cursor:pointer;display:flex;gap:12px;align-items:center;justify-content:space-between}
+.item.active{box-shadow:var(--sh-press)}
+.item .t{font-weight:700}
+.chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;background:color-mix(in srgb,var(--m) 14%,transparent);color:var(--m)}
+.chip.review{background:color-mix(in srgb,var(--yel) 18%,transparent);color:var(--yel)}
+.chip.approved{background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc)}
+.chip.published{background:color-mix(in srgb,var(--grn) 16%,transparent);color:var(--grn)}
+.chip.unpublished{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.field{display:grid;gap:4px;margin-bottom:10px}
+.field label{font-size:11px;color:var(--m);font-weight:600}
+.field textarea{min-height:72px;resize:vertical}
+.field textarea.code{font-family:ui-monospace,Menlo,monospace;font-size:12px;min-height:140px}
+.sec-card{border-radius:12px;box-shadow:var(--sh-sm);padding:10px 12px;margin-bottom:8px;background:var(--card)}
+.sec-card summary{cursor:pointer;font-weight:700;display:flex;gap:8px;align-items:center}
+.sec-card .ctl{margin-left:auto;display:flex;gap:4px}
+.sec-card .ctl button{font-size:11px;padding:2px 8px}
+.list-item{border-left:3px solid color-mix(in srgb,var(--acc) 40%,transparent);padding-left:10px;margin:8px 0}
+.preview{width:100%;height:640px;border:0;border-radius:12px;background:#fff;box-shadow:var(--sh-sm)}
+.swatches{display:flex;gap:4px}
+.swatches span{width:16px;height:16px;border-radius:5px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.notes{white-space:pre-line;font-size:12px;color:var(--m);background:color-mix(in srgb,var(--yel) 10%,transparent);padding:8px 10px;border-radius:10px}
