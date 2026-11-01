@@ -1265,26 +1265,35 @@
     renderGenerationNotice(box, accountId);
     const approvedDrafts = [...new Map((data.drafts || []).filter(draft => draft.state === 'approved').map(draft => [draft.draftId, draft])).values()];
     const candidateCount = (data.drafts || []).filter(draft => draft.state === 'needs_review').length;
+    // Posted by hand on X and recorded here with 「投稿した」 (newest first).
+    const postedDrafts = [...new Map((data.drafts || []).filter(draft => draft.state === 'posted').map(draft => [draft.draftId, draft])).values()]
+      .sort((a, b) => String(b.postedAt ?? '').localeCompare(String(a.postedAt ?? '')));
     const activeWorkspaceView = state.workspaceViews.get(accountId) || 'candidates';
     const candidateWorkspace = el('section', { id: 'x-candidate-workspace', role: 'tabpanel', 'aria-label': '候補を確認' });
     const approvedWorkspace = el('section', { id: 'x-approved-workspace', role: 'tabpanel', 'aria-label': '投稿待ち' });
+    const postedWorkspace = el('section', { id: 'x-posted-workspace', role: 'tabpanel', 'aria-label': '投稿済み' });
     const setWorkspaceView = view => {
       state.workspaceViews.set(accountId, view);
       candidateWorkspace.hidden = view !== 'candidates';
       approvedWorkspace.hidden = view !== 'approved';
+      postedWorkspace.hidden = view !== 'posted';
       candidateTab.setAttribute('aria-selected', String(view === 'candidates'));
       approvedTab.setAttribute('aria-selected', String(view === 'approved'));
+      postedTab.setAttribute('aria-selected', String(view === 'posted'));
       candidateTab.classList.toggle('is-active', view === 'candidates');
       approvedTab.classList.toggle('is-active', view === 'approved');
+      postedTab.classList.toggle('is-active', view === 'posted');
     };
     const candidateTab = button(`候補を確認（${candidateCount}件）`, () => setWorkspaceView('candidates'));
     const approvedTab = button(`投稿待ち（${approvedDrafts.length}件）`, () => setWorkspaceView('approved'));
+    const postedTab = button(`投稿済み（${postedDrafts.length}件）`, () => setWorkspaceView('posted'));
     candidateTab.setAttribute('role', 'tab'); candidateTab.setAttribute('aria-controls', 'x-candidate-workspace');
     approvedTab.setAttribute('role', 'tab'); approvedTab.setAttribute('aria-controls', 'x-approved-workspace');
-    const workspaceTabs = el('div', { className: 'x-workspace-tabs', role: 'tablist', 'aria-label': '作業内容' }, [candidateTab, approvedTab]);
+    postedTab.setAttribute('role', 'tab'); postedTab.setAttribute('aria-controls', 'x-posted-workspace');
+    const workspaceTabs = el('div', { className: 'x-workspace-tabs', role: 'tablist', 'aria-label': '作業内容' }, [candidateTab, approvedTab, postedTab]);
     const approvedHeading = el('div', { className: 'x-approved-queue-heading' }, [
       el('strong', { text: `アカウント全体の投稿待ち · ${approvedDrafts.length}件` }),
-      el('p', { className: 'x-muted', text: '採用済みの本文を確認・コピーしてXの投稿作成画面へ渡せます。ここで閲覧・コピーしても採用状態は変わらず、投稿済みにはなりません。' }),
+      el('p', { className: 'x-muted', text: '採用済みの本文を確認・コピーしてXの投稿作成画面へ渡せます。Xに投稿したら「投稿した」を押すと投稿済みに移り、カレンダーにも載ります（投稿のURLは任意）。' }),
     ]);
     approvedWorkspace.append(approvedHeading);
     approvedDrafts.forEach(draft => {
@@ -1308,10 +1317,36 @@
         }),
         el('a', { className: 'act-btn x-compose-link', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(draft.body || '')}`, target: '_blank', rel: 'noopener noreferrer', text: 'Xの投稿作成画面を開く' }),
       ]));
+      const postUrl = el('input', { type: 'url', className: 'form-input x-post-url', placeholder: '投稿のURL（任意: https://x.com/…/status/…）', 'aria-label': '投稿のURL（任意）' });
+      card.append(el('div', { className: 'x-inline-form' }, [
+        postUrl,
+        button('投稿した', () => {
+          const url = postUrl.value.trim();
+          if (url && !/^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\//.test(url)) { message(card, 'URL は https://x.com/… の形で入れてください（空でも記録できます）', 'error'); return; }
+          reviewDraft(draft, 'post', null, card, accountId, generation, { postUrl: url || undefined });
+        }),
+      ]));
       approvedWorkspace.append(card);
     });
     if (!approvedDrafts.length) approvedWorkspace.append(el('p', { className: 'x-muted', text: '採用済みの投稿待ちはありません。候補を確認して採用すると、ここに表示されます。' }));
-    box.append(workspaceTabs, candidateWorkspace, approvedWorkspace);
+    postedWorkspace.append(el('div', { className: 'x-approved-queue-heading' }, [
+      el('strong', { text: `投稿済み · ${postedDrafts.length}件` }),
+      el('p', { className: 'x-muted', text: 'Xに投稿したと記録した下書きです。間違えて記録したときは取り消すと投稿待ちに戻ります。' }),
+    ]));
+    postedDrafts.forEach(draft => {
+      const when = draft.postedAt ? new Date(draft.postedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明';
+      const card = el('article', { className: 'x-product-review-post x-approved-post' }, [
+        el('div', { className: 'x-product-review-detail-head' }, [el('strong', { text: `${draft.variantId || '候補'} · 投稿済み ${when}` }), el('span', { className: 'x-muted', text: `draft ${draft.draftId}` })]),
+        el('div', { className: 'x-product-review-post-body', text: draft.body || '' }),
+      ]);
+      card.append(el('div', { className: 'x-inline-form' }, [
+        ...(draft.postUrl ? [el('a', { className: 'act-btn', href: draft.postUrl, target: '_blank', rel: 'noopener noreferrer', text: '投稿を開く' })] : []),
+        button('投稿済みを取り消す', () => reviewDraft(draft, 'unpost', null, card, accountId, generation)),
+      ]));
+      postedWorkspace.append(card);
+    });
+    if (!postedDrafts.length) postedWorkspace.append(el('p', { className: 'x-muted', text: 'まだ投稿済みの記録はありません。投稿待ちで「投稿した」を押すと、ここに移ります。' }));
+    box.append(workspaceTabs, candidateWorkspace, approvedWorkspace, postedWorkspace);
     setWorkspaceView(activeWorkspaceView);
     const productPicker = el('select', { name: 'productPicker', className: 'x-generation-product-picker-source', multiple: 'multiple', hidden: 'true', 'aria-hidden': 'true', tabindex: '-1' });
     const productOptions = el('div', { className: 'x-generation-product-options', role: 'group', 'aria-label': '投稿生成に使う商品' });
@@ -1768,12 +1803,12 @@
     if (!(data.drafts || []).length && !state.productCatalog.length) candidateWorkspace.append(el('p', { className: 'x-muted', text: '商品と候補文はまだありません' }));
     restoreFocusedControl(box, savedFocus);
   }
-  async function reviewDraft(draft, action, reason, root, accountId, generation) {
+  async function reviewDraft(draft, action, reason, root, accountId, generation, extra = {}) {
     if (!isCurrentScope(accountId, generation) || !beginWrite(root)) return false;
     const priorDisabled = [...root.querySelectorAll('button,input,textarea,select')].map(control => [control, control.disabled]);
     priorDisabled.forEach(([control]) => { control.disabled = true; });
     try {
-      const payload = { expectedRevision: draft.revision, action, entrypoint: 'public' }; if (reason) payload.reason = reason;
+      const payload = { expectedRevision: draft.revision, action, entrypoint: 'public' }; if (reason) payload.reason = reason; if (extra.postUrl) payload.postUrl = extra.postUrl;
       const idempotencyKey = await keyFor(root, { operation: 'draft-review', draftId: draft.draftId, ...payload });
       if (!root.isConnected || !isCurrentScope(accountId, generation)) return false;
       await api(`/api/x-affiliate/drafts/${encodeURIComponent(draft.draftId)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, idempotencyKey }) });
