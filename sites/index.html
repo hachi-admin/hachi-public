@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hachi Sites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Righteous&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/neu.css?v=1">
+<link rel="stylesheet" href="../dash/dashboard.css?v=158">
+<link rel="stylesheet" href="sites.css?v=1">
+</head>
+<body>
+<!-- Hachi Sites — make web pages from design and section types, approve, publish to Netlify.
+     Same login as Dash (GitHub, allowlisted): the token lives in localStorage 'dash-jwt' on this origin.
+     Backend: hachi-core /api/sites/* (docs/architecture/SITES_DESIGN.ja.md). -->
+<header>
+  <a href="../" class="logo" style="text-decoration:none">⬡ Hachi<span class="logo-dash">Sites</span></a>
+  <nav class="nav-pills" role="tablist" id="tabs">
+    <button class="nav-pill active" data-tab="pages" role="tab">ページ</button>
+    <button class="nav-pill" data-tab="designs" role="tab">デザインの型</button>
+    <button class="nav-pill" data-tab="blocks" role="tab">セクションの型</button>
+    <button class="nav-pill" data-tab="refs" role="tab">参考サイト</button>
+    <button class="nav-pill" data-tab="publish" role="tab">公開設定</button>
+  </nav>
+  <button class="hbtn" id="theme-btn" onclick="toggleTheme()" title="表示テーマ" aria-label="表示テーマ">◐</button>
+</header>
+
+<main class="sites-main">
+  <div id="auth-note" class="muted" style="display:none"></div>
+  <section class="tab" id="tab-pages"></section>
+  <section class="tab" id="tab-designs" hidden></section>
+  <section class="tab" id="tab-blocks" hidden></section>
+  <section class="tab" id="tab-refs" hidden></section>
+  <section class="tab" id="tab-publish" hidden></section>
+</main>
+
+<script src="../shared/ui.js?v=1"></script>
+<script src="sites.js?v=1"></script>
+</body>
+</html>
