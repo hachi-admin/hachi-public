@@ -12,8 +12,9 @@
    files as note accepts. Backend: /api/note-imports (GET …/unpublished, POST, …/:id/mark-imported,
    …/:id/file).
 
-   Loaded after app.js; uses its apiUrl, _authHeaders, _handleUnauthorized, showToast,
-   calDownloadBundle and shared/ui.js esc.
+   Loaded before app.js (app.js opens the page in the URL hash while it loads, so these must already
+   exist); it uses app.js's apiUrl, _authHeaders, _handleUnauthorized, showToast and calDownloadBundle,
+   and shared/ui.js esc, only when called.
    ═══════════════════════════════════════════════════════════ */
 
 const _yen = (n) => `¥${Math.round(Number(n) || 0).toLocaleString('ja-JP')}`;
@@ -111,13 +112,15 @@ function _renderBudget(d) {
 const _VERDICT_COLOR = { 'やめる候補': 'var(--red,#c0392b)', '見直し': 'var(--red,#c0392b)', '未インポート': 'var(--acc)',
   '反応が薄い': 'var(--m)', 'データ不足': 'var(--m2)', '続ける': 'inherit' };
 
+const _STATUS_JA = { paused: '停止中', blocked: '停止中', suggested: '提案中' };
+
 function _renderRoi(r) {
   const mags = r?.magazines ?? [];
   if (!mags.length) return '<div style="font-size:11px;color:var(--m)">この期間の記事はありません</div>';
   const rows = mags.map((m) => `
     <div class="set-line" style="align-items:flex-start;gap:10px">
       <span style="flex:1;min-width:0">
-        <b>${esc(m.name || '')}</b>${m.status && m.status !== 'active' ? ` <span style="color:var(--m2)">（${esc(m.status)}）</span>` : ''}<br>
+        <b>${esc(m.name || '')}</b>${m.status && m.status !== 'active' ? ` <span style="color:var(--m2)">（${esc(_STATUS_JA[m.status] || m.status)}）</span>` : ''}<br>
         <span style="font-size:10px;color:var(--m)">着手${m.attempts ?? 0}・公開${m.published ?? 0}・失敗${m.failed ?? 0}・スキップ${m.skipped ?? 0}
           ／ note ${m.posts ?? 0}本・スキ${m.likes ?? 0}</span>
       </span>

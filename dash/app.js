@@ -471,7 +471,7 @@ function _renderDestSub(dest, pageId) {
 
 // Per-page lazy initialisation, unchanged in behaviour — just moved out of navTo so the
 // destination logic above stays readable.
-/* global _loadBudget, _loadNoteImport */ // dash/budget.js, loaded after this file
+/* global _loadBudget, _loadNoteImport */ // dash/budget.js, loaded before this file
 function _initPage(pageId) {
   if (pageId === 'analytics') { _initCharts(); _loadAnalytics(); }
   if (pageId === 'docs') _initDocsIfNeeded();
