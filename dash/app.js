@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '159';
+const DASH_BUILD = '160';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1719,7 +1719,11 @@ function _calEvents(d) {
   if (x) {
     const nowIso = new Date().toISOString();
     for (const p of x.planned || []) {
-      add({ type: 'x', icon: 'x_plan', at: p.at < nowIso ? nowIso : p.at, k: 'job', name: `X ${p.account}`, tag: 'X', lines: ['下書きを1件つくる（毎日の自動生成）'], x: { kind: 'plan', ...p }, date: d.date });
+      // Past 9:00 and not run yet: it runs on the next heartbeat, so say that rather than show a time
+      // that only follows the clock.
+      const late = p.at <= nowIso;
+      add({ type: 'x', icon: 'x_plan', at: late ? nowIso : p.at, k: 'job', name: `X ${p.account}`, tag: 'X',
+        lines: [late ? '下書きを1件つくる（このあと実行）' : '下書きを1件つくる（毎日の自動生成）'], x: { kind: 'plan', ...p }, date: d.date });
     }
     for (const p of x.posted || []) {
       add({ type: 'x', icon: 'x_post', at: p.at, k: 'job', name: `X ${p.account}`, tag: 'X', lines: ['投稿しました'], x: { kind: 'post', ...p }, date: d.date });
