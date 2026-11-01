@@ -1,5 +1,5 @@
 /* Bumped with every change to a cached asset — see scripts/check-asset-version.js. */
-const DASH_BUILD = '158';
+const DASH_BUILD = '159';
 
 /* ═══════════════════════════════════════════════════════════
    app.js — hachi Dashboard (static GitHub Pages edition)
@@ -1712,6 +1712,23 @@ function _calEvents(d) {
     if (j.status !== 'scheduled' || !j.at) continue;
     add({ type: 'job', at: j.at, k: _calNotableJob(j) ? 'job' : 'bg', name: _calJobName(j), tag: 'ジョブ', lines: _CAL_DESC[j.type] ? [_CAL_DESC[j.type]] : [], job: j, date: d.date });
   }
+  /* X (when the X tool is on, /api/calendar sends day.x): the daily generation planned at 09:00 JST
+     per account, each draft posted by hand (recorded with 「投稿した」), and the day's made/approved.
+     All shown on the grid (k 'job'), not folded with the background jobs: X is half the operation. */
+  const x = d.x;
+  if (x) {
+    const nowIso = new Date().toISOString();
+    for (const p of x.planned || []) {
+      add({ type: 'x', icon: 'x_plan', at: p.at < nowIso ? nowIso : p.at, k: 'job', name: `X ${p.account}`, tag: 'X', lines: ['下書きを1件つくる（毎日の自動生成）'], x: { kind: 'plan', ...p }, date: d.date });
+    }
+    for (const p of x.posted || []) {
+      add({ type: 'x', icon: 'x_post', at: p.at, k: 'job', name: `X ${p.account}`, tag: 'X', lines: ['投稿しました'], x: { kind: 'post', ...p }, date: d.date });
+    }
+    if (x.made || x.approved) {
+      add({ type: 'x', icon: 'x_sum', at: new Date(`${d.date}T23:59:00+09:00`).toISOString(), k: 'job', name: 'X の下書き',
+        tag: 'X', lines: [`作成 ${x.made}件${x.madeScheduled ? `（自動 ${x.madeScheduled}）` : ''}・承認 ${x.approved}件`], x: { kind: 'sum', ...x }, date: d.date });
+    }
+  }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
@@ -1723,6 +1740,7 @@ const _CAL_ICON = {
   topic_scout: '🧭', note_study: '📊', note_stats: '📈', advisor_review: '🧑‍🏫', design_audit: '🎨', efficiency_audit: '💰',
   infer_location: '📍', visionary_review: '🔭', channel_audit: '🗂️', news_digest: '📰', scout: '🔍', fact_check_news: '✅',
   deep_context: '📚', import_scout: '🌏', wiki_lint: '🧹', log_monitor: '🚨',
+  x_plan: '𝕏', x_post: '𝕏', x_sum: '𝕏',
 };
 // note's own app icon (assets.st-note.com, unaltered), used to mark what becomes a note article.
 const _CAL_NOTE_MARK = '<img class="cal-note" alt="note" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACTElEQVR42u2YsWoyQRSFz53ZRbAJGBRMFRv7tMkrpEyRN/ERxEryHOksA2K9nb0IVhGs06y7M+evZtD8KyRjom6YC5dlcS/L5865c+4ISaLGoVDziAARIAJEgAgQAWodSUgRSVhrg14oIj5/IuRcXshaC5LQWp/uC5CEiGCz2WC1WkFEUJYljDEoyxJFUcAYA2MMrLUwxoAklFLQWqPRaKDVauH29hbX19ceRKkjVjK/EUVRkCTH4zEBBGe73ebj4yPf3t5IksYYhkYQwMvLC0WEaZpSRKiU2kuttb+6dL99hhmNRkdBqCO+nE9rrRe1E2eVSHefSZIESikMBgNMp1MopWCMOW8bdeu+Kq21vvuQRFmWUEpBRDAcDg9C/0obrWqNJNHv99HpdCAi0FpDRGCtxXa7xWazwXK53KtzIs+yDOv1Gt1u9/uiDtUAACZJQgDUWhMAJ5PJwdo8z/n6+spms0kRoYgQgNfFbDYjSZZleRoNVEVRFLDW+qtLkkjTFE9PT3h+ft7r/27ZrNdrr62zaUBEoJT6L3f3i/v7+8raj4+Py/ZCbjO7urqq/KfzPK+Hmfvcadx9qKM5OcChDlMbgNrPA4dseKg9PznAoaUS6kjjEooAfwUgdEZOQl+mtYbWutLXfLV2d4cOFXEQQJ7n3uc7W+zM3FcMX1VtyDDz7VMJN9QvFgvM53Norf2gYq3Fw8MDbm5u/HNVte/v78iyzM8Qrvbu7g69Xq+y9iKPVS7yYMtZ59+q/ZNfIO4DESACRIAIEAEiwDnjH/GR2N7OVcY5AAAAAElFTkSuQmCC">';
@@ -1886,11 +1904,23 @@ function _calSheet(html) {
 }
 const _calSheetHd = (k, title, sub, label) => `<div class="cal-sheet-k k-${k}">${label || _CAL_KIND_JA[k]}</div><div class="cal-sheet-hd">${esc(title)}</div>${sub ? `<div class="cal-item-meta">${esc(sub)}</div>` : ''}`;
 
+// The X side of a day: what it is, and where to act on it (the X BOT screen).
+function _calXSheet(e) {
+  const x = e.x || {};
+  const body = x.kind === 'plan'
+    ? `<p class="cal-job-note">${esc(x.account)} の下書きを1件、自動でつくります（9時以降の最初のハートビート）。承認待ちが10件を超えている日は作りません。作られた下書きは X BOT の「候補を確認」に入ります。</p>`
+    : x.kind === 'post'
+      ? `<div class="cal-kv"><span>アカウント</span><b>${esc(x.account)}</b><span>投稿</span><b>${_calHm(x.at)}</b>${x.postUrl ? `<span>URL</span><b><a href="${esc(x.postUrl)}" target="_blank" rel="noopener">投稿を開く</a></b>` : ''}</div>`
+      : `<div class="cal-kv"><span>作成</span><b>${x.made || 0}件${x.madeScheduled ? `（自動 ${x.madeScheduled}件）` : ''}</b><span>承認</span><b>${x.approved || 0}件</b></div>`;
+  _calSheet(`${_calSheetHd('bg', e.name, `${_calLabel(e.date)} ${_calHm(e.at)}`, 'X')}${body}`);
+}
+
 function calOpenEvent(i) {
   const e = _calEv[i];
   if (!e) return;
   if (e.type === 'plan') return calMagazineSheet(e.plan.categoryId);
   if (e.type === 'job') return calEditJob(e.job.type);
+  if (e.type === 'x') return _calXSheet(e);
   if (e.type === 'appr') {
     const sent = e.cards.some((c) => c.released);
     const open = e.items.some((it) => it.state === 'wait');
